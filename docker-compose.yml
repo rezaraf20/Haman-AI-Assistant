@@ -1,0 +1,104 @@
+version: '3.9'
+
+services:
+
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: hamman_nginx
+    ports: ["80:80"]
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    volumes_from:
+      - laravel
+    depends_on: [laravel]
+    networks: [hamman_net]
+    restart: unless-stopped
+
+  laravel:
+    build:
+      context: ./laravel-backend
+      dockerfile: Dockerfile
+    container_name: hamman_laravel
+    env_file: ./laravel-backend/.env
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis:    {condition: service_healthy}
+    networks: [hamman_net]
+    restart: unless-stopped
+
+  horizon:
+    build:
+      context: ./laravel-backend
+      dockerfile: Dockerfile
+    container_name: hamman_horizon
+    command: php artisan horizon
+    env_file: ./laravel-backend/.env
+    depends_on: [laravel, redis]
+    networks: [hamman_net]
+    restart: unless-stopped
+
+  scheduler:
+    build:
+      context: ./laravel-backend
+      dockerfile: Dockerfile
+    container_name: hamman_scheduler
+    command: sh -c "while true; do php artisan schedule:run >> /dev/null 2>&1; sleep 60; done"
+    env_file: ./laravel-backend/.env
+    depends_on: [laravel]
+    networks: [hamman_net]
+    restart: unless-stopped
+
+  python_ai:
+    build:
+      context: ./python-ai-service
+      dockerfile: Dockerfile
+    container_name: hamman_python_ai
+    env_file: ./python-ai-service/.env
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis:    {condition: service_healthy}
+    networks: [hamman_net]
+    restart: unless-stopped
+
+  postgres:
+    build:
+      context: ./postgres
+      dockerfile: Dockerfile
+    container_name: hamman_postgres
+    environment:
+      POSTGRES_DB: hamman_saas
+      POSTGRES_USER: hamman_user
+      POSTGRES_PASSWORD: HammanSecret2025
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports: ["5432:5432"]
+    networks: [hamman_net]
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U hamman_user -d hamman_saas"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: hamman_redis
+    command: redis-server --requirepass RedisHamman2025 --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes: [redis_data:/data]
+    ports: ["6379:6379"]
+    networks: [hamman_net]
+    healthcheck:
+      test: ["CMD","redis-cli","-a","RedisHamman2025","ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+networks:
+  hamman_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
