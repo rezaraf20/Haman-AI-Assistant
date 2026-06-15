@@ -1,0 +1,10 @@
+-- Patch: Change vector dimension from 1536 (OpenAI) to 768 (Gemini text-embedding-004)
+-- Apply this to database/migrations/2025_01_01_000007_create_tenant_schema_function.php
+-- BEFORE running migrations (or before creating any tenant).
+--
+-- Inside that file, find this line:
+--     embedding vector(1536),
+-- and change it to:
+--     embedding vector(768),
+--
+-- This is the ONLY change needed in the migration file for Gemini support.
