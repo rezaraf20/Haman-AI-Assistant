@@ -2,13 +2,36 @@
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 class Hamman_Faq_Sync {
+    // See Hamman_Page_Sync::MAX_BATCH_BYTES — batches sized by byte length, not
+    // item count, to stay under the host's ~128KB WAF request-body limit.
+    const MAX_BATCH_BYTES = 80000;
+
     public function __construct( private Hamman_Api_Client $api ) {}
 
     public function sync_all( string $cid ): array {
         $faqs = $this->extract_faqs();
         if (empty($faqs)) return ['synced'=>0];
-        $r = $this->api->sync_faqs($cid, $faqs);
-        return is_wp_error($r) ? ['error'=>$r->get_error_message()] : ['synced'=>count($faqs)];
+        $synced = 0; $errors = []; $batch = []; $batchBytes = 0;
+        foreach ($faqs as $faq) {
+            $itemSize = strlen(wp_json_encode($faq));
+            if (!empty($batch) && ($batchBytes + $itemSize) > self::MAX_BATCH_BYTES) {
+                $this->flush_batch($cid, $batch, $synced, $errors);
+                $batch = []; $batchBytes = 0;
+            }
+            $batch[]     = $faq;
+            $batchBytes += $itemSize;
+        }
+        $this->flush_batch($cid, $batch, $synced, $errors);
+        $result = ['synced'=>$synced];
+        if (!empty($errors)) $result['errors'] = array_values(array_unique($errors));
+        return $result;
+    }
+
+    private function flush_batch( string $cid, array $batch, int &$synced, array &$errors ): void {
+        if (empty($batch)) return;
+        $r = $this->api->sync_faqs($cid, $batch);
+        if (is_wp_error($r)) { $errors[] = $r->get_error_message(); }
+        else { $synced += count($batch); }
     }
 
     private function extract_faqs(): array {
