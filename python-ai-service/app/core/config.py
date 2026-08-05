@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     GEMINI_CHAT_MODEL: str = "gemini-2.5-flash"
     GEMINI_EMBEDDING_MODEL: str = "models/gemini-embedding-001"
     GEMINI_EMBEDDING_DIMS: int = 3072
+    GROQ_API_KEY: str = ""
+    XAI_API_KEY: str = ""
+    XAI_CHAT_MODEL: str = "grok-2-latest"
     LOG_LEVEL: str = "info"
     MAX_TOKENS_RESPONSE: int = 800
     DEFAULT_TOP_K: int = 8
