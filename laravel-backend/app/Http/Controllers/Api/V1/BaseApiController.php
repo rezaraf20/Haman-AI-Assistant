@@ -10,4 +10,7 @@ abstract class BaseApiController extends Controller {
     protected function unauthorized(string $m='Unauthenticated'): JsonResponse { return response()->json(['error'=>$m],401); }
     protected function forbidden(string $m='Forbidden'): JsonResponse          { return response()->json(['error'=>$m],403); }
     protected function notFound(string $m='Not found'): JsonResponse           { return response()->json(['error'=>$m],404); }
+    protected function tooManyRequests(string $m='Too many requests', int $retryAfter=0): JsonResponse {
+        return response()->json(['error'=>$m,'retry_after_seconds'=>$retryAfter],429);
+    }
 }

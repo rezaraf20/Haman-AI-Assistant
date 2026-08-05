@@ -1,8 +1,8 @@
 FROM php:8.3-fpm-alpine
 
-RUN apk add --no-cache git curl libpq-dev libzip-dev zip unzip linux-headers $PHPIZE_DEPS
+RUN apk add --no-cache git curl libpq-dev libzip-dev zip unzip linux-headers icu-dev $PHPIZE_DEPS
 
-RUN docker-php-ext-install pdo pdo_pgsql pgsql zip bcmath opcache pcntl
+RUN docker-php-ext-install pdo pdo_pgsql pgsql zip bcmath opcache pcntl intl
 RUN pecl install redis && docker-php-ext-enable redis
 
 RUN { \
@@ -12,12 +12,23 @@ RUN { \
     echo "post_max_size=15M"; \
 } > /usr/local/etc/php/conf.d/custom.ini
 
-COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-# Create fresh Laravel project
-RUN composer create-project laravel/laravel . --prefer-dist --no-interaction --quiet
+# Composer's advisory-blocking policy currently flags essentially every release
+# of laravel/framework (5.x through 13.x) as affected by *some* historical
+# advisory, which makes it impossible to install anything — not specific to
+# this app's actual exposure. Report advisories via `composer audit` instead of
+# gating installs on them. Must be set globally (-g): no project composer.json
+# exists yet at this point, and create-project itself is what gets blocked.
+RUN composer config -g policy.advisories.block false
+
+# Create fresh Laravel project — pinned to the 11.x line this app's code targets
+# (bootstrap/app.php's fluent config, etc.); an unpinned create-project silently
+# tracks whatever Laravel major is newest at build time, which has drifted this
+# image to Laravel 13 in the past and broken package resolution.
+RUN composer create-project laravel/laravel:^11.0 . --prefer-dist --no-interaction --quiet
 
 # Install required packages
 RUN composer require \
@@ -25,6 +36,7 @@ RUN composer require \
     laravel/horizon:^5.0 \
     predis/predis:^2.0 \
     guzzlehttp/guzzle:^7.0 \
+    filament/filament:^3.0 \
     --no-interaction --quiet
 
 # Remove default Laravel migrations that conflict with ours
@@ -35,6 +47,7 @@ RUN rm -f database/migrations/0001_01_01_000000_create_users_table.php \
 # Copy our custom files
 COPY app/ app/
 COPY bootstrap/app.php bootstrap/app.php
+COPY bootstrap/providers.php bootstrap/providers.php
 COPY config/ config/
 COPY database/ database/
 COPY routes/ routes/
@@ -44,8 +57,13 @@ COPY docker-entrypoint.sh /docker-entrypoint.sh
 # Publish Sanctum
 RUN php artisan vendor:publish --provider="Laravel\Sanctum\SanctumServiceProvider" --force --quiet
 
-# Remove any auto-generated Sanctum migration (we have our own)
-RUN rm -f database/migrations/2025_*_create_personal_access_tokens_table.php || true
+# Publish Filament's admin panel assets (CSS/JS) into public/ — no live volume
+# mount for this image, so these must be baked in at build time.
+RUN php artisan filament:assets
+
+# Remove any auto-generated Sanctum migration (we have our own, kept by name below)
+RUN find database/migrations -name '*_create_personal_access_tokens_table.php' \
+    ! -name '2025_01_01_000006_create_personal_access_tokens_table.php' -delete || true
 
 # Permissions
 RUN mkdir -p storage/logs storage/framework/{cache,sessions,views} bootstrap/cache

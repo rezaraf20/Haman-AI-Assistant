@@ -16,7 +16,9 @@ class EmbedDocumentJob implements ShouldQueue {
         public readonly string $documentId,
         public readonly string $chatbotId,
         public readonly string $schemaName
-    ) {}
+    ) {
+        $this->onQueue('embeddings');
+    }
 
     public function handle(AiGatewayService $ai): void {
         DB::statement("SET search_path TO {$this->schemaName}, public");

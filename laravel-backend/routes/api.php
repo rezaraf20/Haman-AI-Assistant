@@ -36,6 +36,7 @@ Route::prefix('v1')->group(function () {
         });
         Route::get('chatbots',       [ChatbotController::class, 'index']);
         Route::get('chatbots/{id}',  [ChatbotController::class, 'show']);
+        Route::put('chatbots/{id}/widget-settings', [ChatbotController::class, 'updateWidgetSettings']);
     });
 
     // ── Dashboard (Sanctum) ────────────────────────────

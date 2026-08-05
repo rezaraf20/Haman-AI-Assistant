@@ -17,7 +17,10 @@ class ChatbotController extends BaseApiController {
         $chatbot = Chatbot::create(array_merge($d,['status'=>'active','embedding_model'=>'models/text-embedding-004','llm_model'=>'gemini-1.5-flash','temperature'=>0.3,'retrieval_top_k'=>8,'retrieval_threshold'=>0.60,'memory_window'=>6,'is_active'=>true]));
         // Register in public schema index
         DB::statement("SET search_path TO public");
-        DB::table('chatbot_index')->upsert(['chatbot_id'=>$chatbot->id,'tenant_id'=>$tenant->id,'schema_name'=>$tenant->schema_name,'is_active'=>true],['chatbot_id'],['schema_name','is_active']);
+        DB::table('chatbot_index')->upsert(
+            ['chatbot_id'=>$chatbot->id,'tenant_id'=>$tenant->id,'schema_name'=>$tenant->schema_name,'is_active'=>true,'name'=>$chatbot->name],
+            ['chatbot_id'],['schema_name','is_active','name']
+        );
         DB::statement("SET search_path TO {$tenant->schema_name}, public");
         return $this->created($chatbot);
     }
@@ -33,6 +36,42 @@ class ChatbotController extends BaseApiController {
         return $this->ok($chatbot->fresh());
     }
 
+    public function updateWidgetSettings(Request $req, string $id): JsonResponse {
+        $chatbot = Chatbot::findOrFail($id);
+        $d = $req->validate([
+            'auto_reply_enabled'        => 'sometimes|boolean',
+            'ai_name'                   => 'sometimes|nullable|string|max:100',
+            'system_instruction'        => 'sometimes|nullable|string|max:10000',
+            'chat_title'                => 'sometimes|nullable|string|max:150',
+            'welcome_text'              => 'sometimes|nullable|string|max:2000',
+            'input_placeholder'         => 'sometimes|nullable|string|max:150',
+            'rate_limit_max_messages'   => 'sometimes|nullable|integer|min:1|max:100000',
+            'rate_limit_block_minutes'  => 'sometimes|nullable|integer|min:1|max:10080',
+            'quick_questions'           => 'sometimes|array|max:200',
+            'quick_questions.*.question'=> 'required_with:quick_questions|string|max:300',
+            'quick_questions.*.answer'  => 'required_with:quick_questions|string|max:3000',
+        ]);
+
+        $widgetConfig = array_merge($chatbot->widget_config ?? [], array_filter([
+            'ai_name'                  => $d['ai_name'] ?? null,
+            'chat_title'                => $d['chat_title'] ?? null,
+            'input_placeholder'         => $d['input_placeholder'] ?? null,
+            'rate_limit_max_messages'   => $d['rate_limit_max_messages'] ?? null,
+            'rate_limit_block_minutes'  => $d['rate_limit_block_minutes'] ?? null,
+        ], fn($v) => $v !== null));
+        if (array_key_exists('quick_questions', $d)) {
+            $widgetConfig['quick_questions'] = $d['quick_questions'];
+        }
+
+        $update = ['widget_config' => $widgetConfig];
+        if (array_key_exists('auto_reply_enabled', $d)) $update['is_active'] = $d['auto_reply_enabled'];
+        if (array_key_exists('system_instruction', $d)) $update['system_prompt'] = $d['system_instruction'];
+        if (array_key_exists('welcome_text', $d))        $update['welcome_message'] = $d['welcome_text'];
+
+        $chatbot->update($update);
+        return $this->ok($chatbot->fresh());
+    }
+
     public function destroy(string $id): JsonResponse {
         $chatbot = Chatbot::findOrFail($id);
         $chatbot->update(['is_active'=>false,'status'=>'inactive']);
@@ -44,7 +83,13 @@ class ChatbotController extends BaseApiController {
     public function addDomain(Request $req, string $id): JsonResponse {
         $d      = $req->validate(['domain'=>'required|string|max:255']);
         $domain = strtolower(trim(parse_url($d['domain'],PHP_URL_HOST)??$d['domain']));
-        return $this->created(ChatbotDomain::firstOrCreate(['chatbot_id'=>$id,'domain'=>$domain],['is_active'=>true,'created_at'=>now()]));
+        $result = ChatbotDomain::firstOrCreate(['chatbot_id'=>$id,'domain'=>$domain],['is_active'=>true,'created_at'=>now()]);
+        // Best-effort: keep the admin panel's display column in sync. Only set it if
+        // this chatbot doesn't already have a primary_domain (first domain added wins).
+        // Nothing later in this request depends on the tenant schema still being active.
+        DB::statement("SET search_path TO public");
+        DB::table('chatbot_index')->where('chatbot_id',$id)->whereNull('primary_domain')->update(['primary_domain'=>$domain]);
+        return $this->created($result);
     }
 
     public function removeDomain(string $id, string $domain): JsonResponse {

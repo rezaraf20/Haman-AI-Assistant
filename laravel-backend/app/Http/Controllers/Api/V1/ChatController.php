@@ -5,6 +5,7 @@ use App\Services\ChatService;
 use App\Models\Tenant\{Chatbot, Conversation};
 use Illuminate\Http\{Request, JsonResponse};
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\RateLimiter;
 
 class ChatController extends BaseApiController
 {
@@ -59,6 +60,7 @@ class ChatController extends BaseApiController
                 'session_id'      => $existing->session_id,
                 'welcome_message' => $chatbot->welcome_message,
                 'language'        => $chatbot->language,
+                'widget_config'   => $chatbot->widget_config,
             ]);
         }
 
@@ -79,6 +81,7 @@ class ChatController extends BaseApiController
             'session_id'      => $conv->session_id,
             'welcome_message' => $chatbot->welcome_message,
             'language'        => $chatbot->language,
+            'widget_config'   => $chatbot->widget_config,
         ]);
     }
 
@@ -95,6 +98,17 @@ class ChatController extends BaseApiController
 
         $index = $this->setSchemaFromChatbot($conv->chatbot_id);
         if (!$index) return $this->notFound('Chatbot not found');
+
+        $chatbot   = Chatbot::findOrFail($conv->chatbot_id);
+        $maxMsgs   = $chatbot->widget_config['rate_limit_max_messages'] ?? null;
+        $blockMins = $chatbot->widget_config['rate_limit_block_minutes'] ?? null;
+        if ($maxMsgs && $blockMins) {
+            $key = 'hamman-chat:' . $conv->chatbot_id . ':' . $req->ip();
+            if (RateLimiter::tooManyAttempts($key, (int) $maxMsgs)) {
+                return $this->tooManyRequests('تعداد پیام‌های مجاز شما به پایان رسیده. لطفاً چند دقیقه دیگر دوباره امتحان کنید.', RateLimiter::availableIn($key));
+            }
+            RateLimiter::hit($key, (int) $blockMins * 60);
+        }
 
         $r   = $this->svc->sendMessage($conv, $d['message']);
         $msg = $r['message'];

@@ -1,7 +1,6 @@
 <?php namespace App\Http\Controllers\Api\V1;
 use App\Models\ApiKey;
 use Illuminate\Http\{Request,JsonResponse};
-use Illuminate\Support\Str;
 
 class TenantController extends BaseApiController {
     public function show(Request $req): JsonResponse {
@@ -21,9 +20,8 @@ class TenantController extends BaseApiController {
         return $this->ok(ApiKey::where('tenant_id',$req->user()->tenant_id)->where('is_active',true)->get(['id','name','key_prefix','scopes','last_used_at','created_at']));
     }
     public function createApiKey(Request $req): JsonResponse {
-        $d   = $req->validate(['name'=>'required|string|max:255']);
-        $raw = 'hfp_'.Str::random(32);
-        ApiKey::create(['id'=>Str::uuid()->toString(),'tenant_id'=>$req->user()->tenant_id,'created_by'=>$req->user()->id,'name'=>$d['name'],'key_prefix'=>substr($raw,0,12),'key_hash'=>password_hash($raw,PASSWORD_BCRYPT,['cost'=>12]),'scopes'=>['read','write','sync','chat']]);
+        $d = $req->validate(['name'=>'required|string|max:255']);
+        [, $raw] = ApiKey::generate($req->user()->tenant_id, null, $d['name'], $req->user()->id);
         return $this->created(['key'=>$raw,'note'=>'Store this key — shown once only']);
     }
     public function revokeApiKey(Request $req, string $id): JsonResponse {
