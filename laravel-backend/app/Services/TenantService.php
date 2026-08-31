@@ -60,6 +60,58 @@ class TenantService
         });
     }
 
+    /**
+     * Customer-portal self-signup via phone+SMS-OTP (see SmsService /
+     * app/Livewire/OtpLogin.php) — no email/password at all. Deliberately
+     * doesn't auto-create a "WordPress Plugin" API key like register() does:
+     * keys are now always bound to a specific chatbot, created through the
+     * portal's "Buy New Chatbot" flow, not handed out unbound at signup.
+     */
+    public function registerViaPhone(array $data): array
+    {
+        return DB::transaction(function () use ($data) {
+            $plan   = Plan::where('slug', 'free')->firstOrFail();
+            $uuid   = Str::uuid()->toString();
+            $schema = 'tenant_' . str_replace('-', '', $uuid);
+            $name   = trim($data['first_name'] . ' ' . $data['last_name']);
+
+            $tenant = Tenant::create([
+                'id'            => $uuid,
+                'slug'          => Str::slug($name ?: $data['phone']) . '-' . substr($uuid, 0, 6),
+                'name'          => $name,
+                'email'         => $data['email'],
+                'phone'         => $data['phone'],
+                'plan_id'       => $plan->id,
+                'schema_name'   => $schema,
+                'status'        => 'trial',
+                'trial_ends_at' => now()->addDays(14),
+                'settings'      => ['webhook_secret' => Str::random(32)],
+            ]);
+
+            $this->createSchema($schema);
+
+            $user = User::create([
+                'id'                => Str::uuid()->toString(),
+                'tenant_id'         => $tenant->id,
+                'email'             => $data['email'],
+                'phone'             => $data['phone'],
+                'first_name'        => $data['first_name'],
+                'last_name'         => $data['last_name'],
+                'national_id'       => $data['national_id'],
+                'address'           => $data['address'],
+                // Never used to log in (auth is phone+OTP only) — set to an
+                // unguessable random value rather than leaving it empty.
+                'password'          => Hash::make(Str::random(40)),
+                'password_hash'     => Hash::make(Str::random(40)),
+                'name'              => $name,
+                'role'              => 'owner',
+                'email_verified_at' => now(),
+            ]);
+
+            return ['tenant' => $tenant, 'user' => $user];
+        });
+    }
+
     public function createSchema(string $schemaName): void
     {
         DB::statement("CREATE SCHEMA IF NOT EXISTS {$schemaName}");
@@ -290,6 +342,15 @@ class TenantService
 
     public function incrementUsage(Tenant $tenant, int $tokens, int $msgs = 1): void
     {
+        // Plan quota already used up by a prior message this month? This
+        // message is running on purchased bonus_tokens (BuyTokens page) —
+        // draw it down accordingly. Uses the pre-increment usage snapshot on
+        // $tenant, which ChatService loads fresh right before this call.
+        $planLimit = $tenant->plan->max_tokens_monthly ?? PHP_INT_MAX;
+        if ($tenant->usage_tokens_current >= $planLimit && $tenant->bonus_tokens > 0) {
+            Tenant::where('id', $tenant->id)->decrement('bonus_tokens', min($tokens, $tenant->bonus_tokens));
+        }
+
         Tenant::where('id', $tenant->id)->increment('usage_tokens_current', $tokens);
         Tenant::where('id', $tenant->id)->increment('usage_messages_current', $msgs);
         Tenant::where('id', $tenant->id)->update(['last_active_at' => now()]);

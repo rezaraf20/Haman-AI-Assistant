@@ -18,4 +18,8 @@ return [
         'default_threshold' => 0.60,
         'memory_window'     => 6,
     ],
+    'zarinpal' => [
+        'merchant_id' => env('ZARINPAL_MERCHANT_ID'),
+        'sandbox'     => env('ZARINPAL_SANDBOX', true),
+    ],
 ];
