@@ -21,11 +21,26 @@ return Application::configure(basePath: dirname(__DIR__))
             'tenant.quota'   => \App\Http\Middleware\CheckTenantQuota::class,
             'webhook.verify' => \App\Http\Middleware\VerifyWebhookSignature::class,
         ]);
+<<<<<<< HEAD
         // The Filament admin panel (routes under /admin) needs guests redirected to its own
         // login page; every other (API) route keeps the plain JSON 401 the app has always used.
         $middleware->redirectGuestsTo(fn(Request $req) => $req->is('admin*')
             ? '/admin/login'
             : response()->json(['error' => 'Unauthenticated'], 401));
+=======
+<<<<<<< Updated upstream
+        $middleware->redirectGuestsTo(fn() => response()->json(['error' => 'Unauthenticated'], 401));
+=======
+        // The Filament admin panel (routes under /admin) needs guests redirected to its own
+        // login page; the customer portal (/portal) redirects to the phone+OTP login flow
+        // instead of Filament's own (unused there, see CustomerPanelProvider); every other
+        // (API) route keeps the plain JSON 401 the app has always used.
+        $middleware->redirectGuestsTo(fn(Request $req) => match (true) {
+            $req->is('admin*')   => '/admin/login',
+            $req->is('portal*')  => '/portal/login',
+            default               => response()->json(['error' => 'Unauthenticated'], 401),
+        });
+>>>>>>> origin/develop
         // Stack is Apache (host, DirectAdmin) -> nginx container -> php-fpm, all on the same
         // private docker network. Trust that internal hop so $request->ip() resolves the real
         // visitor IP from X-Forwarded-For (Apache always appends the true peer IP as the
@@ -35,6 +50,10 @@ return Application::configure(basePath: dirname(__DIR__))
             headers: Request::HEADER_X_FORWARDED_FOR | Request::HEADER_X_FORWARDED_HOST
                 | Request::HEADER_X_FORWARDED_PORT | Request::HEADER_X_FORWARDED_PROTO,
         );
+<<<<<<< HEAD
+=======
+>>>>>>> Stashed changes
+>>>>>>> origin/develop
     })
     ->withExceptions(function (Exceptions $exceptions) {
         $exceptions->render(function (\Throwable $e, $request) {

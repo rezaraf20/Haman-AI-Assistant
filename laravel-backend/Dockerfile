@@ -51,6 +51,7 @@ COPY bootstrap/providers.php bootstrap/providers.php
 COPY config/ config/
 COPY database/ database/
 COPY routes/ routes/
+COPY resources/ resources/
 COPY .env .env
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 
@@ -70,6 +71,14 @@ RUN mkdir -p storage/logs storage/framework/{cache,sessions,views} bootstrap/cac
 RUN chown -R www-data:www-data /var/www/html
 RUN chmod -R 775 storage bootstrap/cache
 RUN chmod +x /docker-entrypoint.sh
+
+# /shared-assets is the mount point for the laravel_public_assets volume nginx
+# reads Filament's css/js from (see docker-compose.yml). A brand-new named
+# volume is created with root:root ownership by Docker, but Docker also seeds
+# it from whatever already exists at that path in the image on first mount —
+# pre-creating it here as www-data (the user the entrypoint runs as, below)
+# means that first mount comes up writable instead of failing on `mkdir`.
+RUN mkdir -p /shared-assets && chown www-data:www-data /shared-assets
 
 USER www-data
 EXPOSE 9000

@@ -13,7 +13,11 @@ class ChatbotIndexEntry extends Model {
     protected $table = 'chatbot_index';
     protected $primaryKey = 'chatbot_id';
     public $timestamps = false;
+<<<<<<< HEAD
     protected $fillable = ['chatbot_id','tenant_id','schema_name','is_active','name','primary_domain','expires_at'];
+=======
+    protected $fillable = ['chatbot_id','tenant_id','schema_name','is_active','name','primary_domain','expires_at','monthly_price_toman'];
+>>>>>>> origin/develop
     protected $casts = ['is_active'=>'boolean','expires_at'=>'datetime','created_at'=>'datetime'];
     public function tenant() { return $this->belongsTo(Tenant::class, 'tenant_id'); }
     public function isOverdue(): bool { return $this->expires_at && $this->expires_at->isPast(); }
