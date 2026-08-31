@@ -4,17 +4,16 @@ import requests as _requests
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+import google.generativeai as genai
 from app.core.config import settings
-<<<<<<< HEAD
-=======
 <<<<<<< Updated upstream
 from app.services.embedding_service import get_embeddings
 =======
 from app.services import llm_provider_service
 >>>>>>> Stashed changes
->>>>>>> origin/develop
 
 logger = logging.getLogger(__name__)
+genai.configure(api_key=settings.GEMINI_API_KEY)
 
 GEMINI_V1_EMBED_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-embedding-001:embedContent"
 
@@ -41,7 +40,6 @@ GROUNDING_RULES = (
 )
 DEFAULT_SYSTEM = GROUNDING_RULES
 
-
 def retrieve_chunks(db: Session, chatbot_id: str, query_embedding: List[float], top_k: int = 8, threshold: float = 0.60) -> List[dict]:
     try:
         emb_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
@@ -60,7 +58,6 @@ def retrieve_chunks(db: Session, chatbot_id: str, query_embedding: List[float], 
         logger.error(f"Vector search error: {e}")
         return []
 
-
 def _embed_query(query: str) -> List[float]:
     resp = _requests.post(
         f"{GEMINI_V1_EMBED_URL}?key={settings.GEMINI_API_KEY}",
@@ -74,56 +71,6 @@ def _embed_query(query: str) -> List[float]:
     resp.raise_for_status()
     return resp.json()["embedding"]["values"]
 
-<<<<<<< HEAD
-
-def _groq_chat(prompt: str, max_tokens: int, temperature: float) -> str:
-    resp = _requests.post(
-        "https://api.groq.com/openai/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {settings.GROQ_API_KEY}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": "llama-3.1-8b-instant",
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-        },
-        timeout=30,
-    )
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
-
-
-def _xai_chat(prompt: str, max_tokens: int, temperature: float) -> str:
-    resp = _requests.post(
-        "https://api.x.ai/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {settings.XAI_API_KEY}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": settings.XAI_CHAT_MODEL,
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-        },
-        timeout=30,
-    )
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
-
-
-def _chat_completion(prompt: str, max_tokens: int, temperature: float) -> tuple[str, str]:
-    """Try Groq first; fall back to xAI (e.g. on Groq rate limits) if configured."""
-    try:
-        return _groq_chat(prompt, max_tokens, temperature), "groq/llama-3.1-8b-instant"
-    except Exception as e:
-        if not settings.XAI_API_KEY:
-            raise
-        logger.warning(f"Groq LLM error, falling back to xAI: {e}")
-        return _xai_chat(prompt, max_tokens, temperature), f"xai/{settings.XAI_CHAT_MODEL}"
-=======
 <<<<<<< Updated upstream
 async def run_rag_pipeline(db: Session, chatbot_id: str, query: str, history: List[dict],
 =======
@@ -191,21 +138,18 @@ def _chat_completion(db: Session, prompt: str, max_tokens: int, temperature: flo
                 time.sleep(1)
 
     raise last_error
->>>>>>> origin/develop
 
 
 async def run_rag_pipeline(
     db: Session, chatbot_id: str, query: str, history: List[dict],
-<<<<<<< HEAD
-=======
 >>>>>>> Stashed changes
->>>>>>> origin/develop
     system_prompt: Optional[str], fallback_resp: Optional[str], llm_model: str,
-    top_k: int, threshold: float, temperature: float, max_tokens: int, language: str
-) -> dict:
+    top_k: int, threshold: float, temperature: float, max_tokens: int, language: str) -> dict:
 
     start = time.time()
+    model = genai.GenerativeModel(settings.GEMINI_CHAT_MODEL)
 
+    # Embed query using v1 REST API
     try:
         query_embedding = _embed_query(query)
     except Exception as e:
@@ -214,10 +158,6 @@ async def run_rag_pipeline(
             "response": fallback_resp or "Sorry, I cannot process your request right now.",
             "chunk_ids": [], "scores": [], "sources": [],
             "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0,
-<<<<<<< HEAD
-            "model": "groq/llama-3.1-8b-instant",
-            "latency_ms": int((time.time() - start) * 1000),
-=======
 <<<<<<< Updated upstream
             "model": settings.GEMINI_CHAT_MODEL,
             "latency_ms": int((time.time()-start)*1000),
@@ -225,10 +165,10 @@ async def run_rag_pipeline(
             "model": "n/a",
             "latency_ms": int((time.time() - start) * 1000),
 >>>>>>> Stashed changes
->>>>>>> origin/develop
             "is_fallback": True, "finish_reason": "error",
         }
 
+    # Retrieve
     chunks = retrieve_chunks(db, chatbot_id, query_embedding, top_k, threshold)
     is_fallback = len(chunks) == 0
 
@@ -236,10 +176,6 @@ async def run_rag_pipeline(
         return {
             "response": fallback_resp, "chunk_ids": [], "scores": [], "sources": [],
             "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0,
-<<<<<<< HEAD
-            "model": "groq/llama-3.1-8b-instant",
-            "latency_ms": int((time.time() - start) * 1000),
-=======
 <<<<<<< Updated upstream
             "model": settings.GEMINI_CHAT_MODEL,
             "latency_ms": int((time.time()-start)*1000),
@@ -247,23 +183,20 @@ async def run_rag_pipeline(
             "model": "n/a",
             "latency_ms": int((time.time() - start) * 1000),
 >>>>>>> Stashed changes
->>>>>>> origin/develop
             "is_fallback": True, "finish_reason": "fallback",
         }
 
+    # Build context
     context_parts = []
     for i, chunk in enumerate(chunks, 1):
-        meta = chunk.get("metadata", {})
+        meta  = chunk.get("metadata", {})
         title = meta.get("title", "")
         header = f"[Source {i}]" + (f" {title}" if title else "")
         context_parts.append(f"{header}\n{chunk['content']}")
     context = "\n\n---\n\n".join(context_parts)
 
-<<<<<<< HEAD
-=======
 <<<<<<< Updated upstream
     # Build prompt
->>>>>>> origin/develop
     sys_p = system_prompt or DEFAULT_SYSTEM
 =======
     # The grounding rules must always apply, regardless of any per-chatbot custom
@@ -289,11 +222,6 @@ async def run_rag_pipeline(
 
     full_prompt = f"{sys_p}\n\n{hist_text}User: {query}\nAssistant:"
 
-<<<<<<< HEAD
-    model_used = "groq/llama-3.1-8b-instant"
-    try:
-        answer, model_used = _chat_completion(full_prompt, max_tokens, temperature)
-=======
 <<<<<<< Updated upstream
     try:
         resp = model.generate_content(
@@ -314,10 +242,10 @@ async def run_rag_pipeline(
     try:
         answer, model_used, usage = _chat_completion(db, full_prompt, max_tokens, temperature)
 >>>>>>> Stashed changes
->>>>>>> origin/develop
     except Exception as e:
-        logger.error(f"LLM error (all providers failed): {e}")
+        logger.error(f"Gemini LLM error: {e}")
         answer = fallback_resp or "Sorry, I could not generate a response."
+        p_toks = c_toks = t_toks = 0
         is_fallback = True
 
     sources = []
@@ -325,8 +253,8 @@ async def run_rag_pipeline(
         m = c.get("metadata", {})
         src = {}
         if m.get("title"): src["title"] = m["title"]
-        if m.get("url"): src["url"] = m["url"]
-        if m.get("type"): src["type"] = m["type"]
+        if m.get("url"):   src["url"]   = m["url"]
+        if m.get("type"):  src["type"]  = m["type"]
         if src: sources.append(src)
 
     return {
@@ -334,11 +262,6 @@ async def run_rag_pipeline(
         "chunk_ids": [c["id"] for c in chunks],
         "scores": [round(c["similarity"], 4) for c in chunks],
         "sources": sources,
-<<<<<<< HEAD
-        "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0,
-        "model": model_used,
-        "latency_ms": int((time.time() - start) * 1000),
-=======
 <<<<<<< Updated upstream
         "prompt_tokens": p_toks,
         "completion_tokens": c_toks,
@@ -352,7 +275,6 @@ async def run_rag_pipeline(
         "model": model_used,
         "latency_ms": int((time.time() - start) * 1000),
 >>>>>>> Stashed changes
->>>>>>> origin/develop
         "is_fallback": is_fallback,
         "finish_reason": "stop",
     }
