@@ -1,0 +1,28 @@
+# Secrets — real credentials live in these per-service .env files on the
+# server; never in git. Deployment reads them via docker-compose's env_file:.
+.env
+.env.*
+!.env.example
+
+# Laravel — installed fresh at image build time (Dockerfile runs `composer
+# create-project` + `composer require`), and these are runtime-generated.
+laravel-backend/vendor/
+laravel-backend/storage/logs/*.log
+laravel-backend/storage/framework/cache/*
+laravel-backend/storage/framework/sessions/*
+laravel-backend/storage/framework/views/*
+!laravel-backend/storage/framework/*/.gitkeep
+laravel-backend/bootstrap/cache/*.php
+
+# Python
+python-ai-service/**/__pycache__/
+python-ai-service/**/*.pyc
+python-ai-service/.venv/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+---
+# Claude Code local tool settings — not app source
+.claude/
