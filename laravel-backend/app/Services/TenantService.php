@@ -137,6 +137,12 @@ class TenantService
                 } catch (\Throwable $e) {}
             }
         }
+        // Not a timestamp column like everything above, so it can't share that
+        // loop — the computed cost of the message's LLM call (see
+        // LlmProviderProfile's per-1M-token prices and ChatService::sendMessage()).
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.messages ADD COLUMN IF NOT EXISTS cost_toman DECIMAL(14,4) NOT NULL DEFAULT 0");
+        } catch (\Throwable $e) {}
     }
 
     private function createTenantTables(string $s): void
@@ -308,6 +314,7 @@ class TenantService
                 prompt_tokens INTEGER DEFAULT 0,
                 completion_tokens INTEGER DEFAULT 0,
                 total_tokens INTEGER DEFAULT 0,
+                cost_toman DECIMAL(14,4) NOT NULL DEFAULT 0,
                 model_used VARCHAR(100),
                 latency_ms INTEGER,
                 is_fallback BOOLEAN DEFAULT false,

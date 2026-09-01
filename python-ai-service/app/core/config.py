@@ -3,6 +3,11 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     APP_ENV: str = "production"
     INTERNAL_SECRET: str = "change-me"
+    # Laravel's raw APP_KEY bytes (base64), used only to decrypt
+    # llm_provider_profiles.api_key — see app/Support/LlmKeyCrypto.php on the
+    # Laravel side for the encryption format. Must be kept equal to the
+    # laravel-backend .env's APP_KEY whenever that's rotated.
+    HAMMAN_ENCRYPTION_KEY: str = ""
     DATABASE_URL: str = "postgresql://hamman_user:secret@postgres:5432/hamman_saas"
     REDIS_URL: str = "redis://:secret@redis:6379/0"
     GEMINI_API_KEY: str = ""

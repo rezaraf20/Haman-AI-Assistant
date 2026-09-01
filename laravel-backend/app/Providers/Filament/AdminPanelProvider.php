@@ -13,10 +13,7 @@ use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
-<<<<<<< HEAD
-=======
 use App\Http\Middleware\SetPersianLocale;
->>>>>>> origin/develop
 
 class AdminPanelProvider extends PanelProvider {
     public function panel(Panel $panel): Panel {
@@ -24,12 +21,6 @@ class AdminPanelProvider extends PanelProvider {
             ->default()
             ->id('admin')
             ->path('admin')
-<<<<<<< HEAD
-            ->login()
-            ->colors(['primary' => '#1B3A6B'])
-            ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
-            ->middleware([
-=======
             ->brandName('Haman AI')
             ->login()
             ->colors(['primary' => '#1B3A6B'])
@@ -42,7 +33,6 @@ class AdminPanelProvider extends PanelProvider {
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
             ->middleware([
                 SetPersianLocale::class,
->>>>>>> origin/develop
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,

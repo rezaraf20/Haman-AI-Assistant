@@ -2,23 +2,15 @@
 namespace App\Filament\Resources\ApiKeyResource\Pages;
 
 use App\Filament\Resources\ApiKeyResource;
-<<<<<<< HEAD
-use Filament\Actions\CreateAction;
-=======
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Forms\Components\Actions\Action as FieldAction;
 use Filament\Forms\Components\TextInput;
->>>>>>> origin/develop
 use Filament\Resources\Pages\ListRecords;
 
 class ListApiKeys extends ListRecords {
     protected static string $resource = ApiKeyResource::class;
 
-<<<<<<< HEAD
-    protected function getHeaderActions(): array {
-        return [CreateAction::make()];
-=======
     public ?string $newPlaintextKey = null;
 
     // CreateApiKey stashes the plaintext key in the session (see there for why
@@ -72,6 +64,5 @@ class ListApiKeys extends ListRecords {
                         ]),
                 ]),
         ];
->>>>>>> origin/develop
     }
 }

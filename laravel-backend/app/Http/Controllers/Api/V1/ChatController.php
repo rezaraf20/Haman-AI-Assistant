@@ -24,17 +24,6 @@ class ChatController extends BaseApiController
         return $index;
     }
 
-    private function findConversation(string $convId, string $sessionId): ?Conversation
-    {
-        $schemas = DB::select("SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'tenant_%'");
-        foreach ($schemas as $s) {
-            DB::statement("SET search_path TO {$s->schema_name}, public");
-            $conv = Conversation::where('id', $convId)->where('session_id', $sessionId)->first();
-            if ($conv) return $conv;
-        }
-        return null;
-    }
-
     public function createSession(Request $req): JsonResponse
     {
         $d = $req->validate([
@@ -88,16 +77,24 @@ class ChatController extends BaseApiController
     public function sendMessage(Request $req): JsonResponse
     {
         $d = $req->validate([
+            'chatbot_id'      => 'required|uuid',
             'conversation_id' => 'required|uuid',
             'message'         => 'required|string|min:1|max:2000',
             'session_id'      => 'required|string|max:128',
         ]);
 
-        $conv = $this->findConversation($d['conversation_id'], $d['session_id']);
-        if (!$conv) return $this->notFound('Conversation not found');
-
-        $index = $this->setSchemaFromChatbot($conv->chatbot_id);
+        // chatbot_id now comes straight from the client (the widget already
+        // has it from createSession) instead of being guessed by scanning
+        // every tenant_% schema for a matching conversation row — that scan
+        // was an unbounded per-message query fan-out across every tenant.
+        $index = $this->setSchemaFromChatbot($d['chatbot_id']);
         if (!$index) return $this->notFound('Chatbot not found');
+
+        $conv = Conversation::where('id', $d['conversation_id'])
+            ->where('session_id', $d['session_id'])
+            ->where('chatbot_id', $d['chatbot_id'])
+            ->first();
+        if (!$conv) return $this->notFound('Conversation not found');
 
         $chatbot   = Chatbot::findOrFail($conv->chatbot_id);
         $maxMsgs   = $chatbot->widget_config['rate_limit_max_messages'] ?? null;

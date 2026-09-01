@@ -3,8 +3,6 @@
 // registers its own routes onto the 'web' middleware group programmatically — this file's job
 // is only to make bootstrap/app.php's withRouting(web: ...) activate the standard session/CSRF
 // middleware stack that Filament (and any future browser-facing page) needs.
-<<<<<<< HEAD
-=======
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\PaymentController;
@@ -22,4 +20,3 @@ Route::get('/portal/login', fn () => auth()->check()
     ? redirect('/portal')
     : view('auth.otp-login-page')
 )->name('portal.login');
->>>>>>> origin/develop

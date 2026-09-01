@@ -4,16 +4,10 @@ import requests as _requests
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-import google.generativeai as genai
 from app.core.config import settings
-<<<<<<< Updated upstream
-from app.services.embedding_service import get_embeddings
-=======
 from app.services import llm_provider_service
->>>>>>> Stashed changes
 
 logger = logging.getLogger(__name__)
-genai.configure(api_key=settings.GEMINI_API_KEY)
 
 GEMINI_V1_EMBED_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-embedding-001:embedContent"
 
@@ -40,6 +34,7 @@ GROUNDING_RULES = (
 )
 DEFAULT_SYSTEM = GROUNDING_RULES
 
+
 def retrieve_chunks(db: Session, chatbot_id: str, query_embedding: List[float], top_k: int = 8, threshold: float = 0.60) -> List[dict]:
     try:
         emb_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
@@ -58,6 +53,7 @@ def retrieve_chunks(db: Session, chatbot_id: str, query_embedding: List[float], 
         logger.error(f"Vector search error: {e}")
         return []
 
+
 def _embed_query(query: str) -> List[float]:
     resp = _requests.post(
         f"{GEMINI_V1_EMBED_URL}?key={settings.GEMINI_API_KEY}",
@@ -71,9 +67,6 @@ def _embed_query(query: str) -> List[float]:
     resp.raise_for_status()
     return resp.json()["embedding"]["values"]
 
-<<<<<<< Updated upstream
-async def run_rag_pipeline(db: Session, chatbot_id: str, query: str, history: List[dict],
-=======
 
 def _openai_compatible_chat(profile: dict, prompt: str, max_tokens: int, temperature: float) -> tuple[str, dict]:
     """groq / xai / openai_compatible all share this same request/response shape
@@ -98,14 +91,26 @@ def _openai_compatible_chat(profile: dict, prompt: str, max_tokens: int, tempera
     return body["choices"][0]["message"]["content"], body.get("usage", {})
 
 
-def _chat_completion(db: Session, prompt: str, max_tokens: int, temperature: float) -> tuple[str, str, dict]:
+def _compute_cost_toman(profile: dict, usage: dict) -> float:
+    """Admin-entered Toman price per 1M tokens (see LlmProviderProfileResource)
+    applied to what this specific call actually used. Both price fields
+    default to 0, so an unpriced profile just costs 0 rather than erroring."""
+    prompt_tokens = usage.get("prompt_tokens", 0) or 0
+    completion_tokens = usage.get("completion_tokens", 0) or 0
+    input_price = float(profile.get("input_price_per_1m_toman") or 0)
+    output_price = float(profile.get("output_price_per_1m_toman") or 0)
+    return (prompt_tokens / 1_000_000 * input_price) + (completion_tokens / 1_000_000 * output_price)
+
+
+def _chat_completion(db: Session, prompt: str, max_tokens: int, temperature: float) -> tuple[str, str, dict, float]:
     """Try each active provider profile in priority order (admin-configured via
     Filament), falling through to the next on any failure — a rate-limited or
     down provider no longer takes the whole product down.
 
-    Returns (answer, model_label, usage) — usage is the provider's OpenAI-
-    compatible {prompt_tokens, completion_tokens, total_tokens} dict, empty if
-    it didn't include one.
+    Returns (answer, model_label, usage, cost_toman) — usage is the provider's
+    OpenAI-compatible {prompt_tokens, completion_tokens, total_tokens} dict,
+    empty if it didn't include one; cost_toman is computed from the profile's
+    admin-entered per-1M-token prices.
     """
     profiles = llm_provider_service.get_active_profiles(db)
     if not profiles:
@@ -125,7 +130,8 @@ def _chat_completion(db: Session, prompt: str, max_tokens: int, temperature: flo
             try:
                 answer, usage = _openai_compatible_chat(profile, prompt, max_tokens, temperature)
                 llm_provider_service.record_outcome(db, profile['name'], success=True)
-                return answer, f"{profile['provider']}/{profile['model_name']}", usage
+                cost_toman = _compute_cost_toman(profile, usage)
+                return answer, f"{profile['provider']}/{profile['model_name']}", usage, cost_toman
             except Exception as e:
                 last_error = e
                 status = getattr(getattr(e, 'response', None), 'status_code', None)
@@ -142,14 +148,12 @@ def _chat_completion(db: Session, prompt: str, max_tokens: int, temperature: flo
 
 async def run_rag_pipeline(
     db: Session, chatbot_id: str, query: str, history: List[dict],
->>>>>>> Stashed changes
     system_prompt: Optional[str], fallback_resp: Optional[str], llm_model: str,
-    top_k: int, threshold: float, temperature: float, max_tokens: int, language: str) -> dict:
+    top_k: int, threshold: float, temperature: float, max_tokens: int, language: str
+) -> dict:
 
     start = time.time()
-    model = genai.GenerativeModel(settings.GEMINI_CHAT_MODEL)
 
-    # Embed query using v1 REST API
     try:
         query_embedding = _embed_query(query)
     except Exception as e:
@@ -157,48 +161,32 @@ async def run_rag_pipeline(
         return {
             "response": fallback_resp or "Sorry, I cannot process your request right now.",
             "chunk_ids": [], "scores": [], "sources": [],
-            "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0,
-<<<<<<< Updated upstream
-            "model": settings.GEMINI_CHAT_MODEL,
-            "latency_ms": int((time.time()-start)*1000),
-=======
+            "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost_toman": 0,
             "model": "n/a",
             "latency_ms": int((time.time() - start) * 1000),
->>>>>>> Stashed changes
             "is_fallback": True, "finish_reason": "error",
         }
 
-    # Retrieve
     chunks = retrieve_chunks(db, chatbot_id, query_embedding, top_k, threshold)
     is_fallback = len(chunks) == 0
 
     if is_fallback and fallback_resp:
         return {
             "response": fallback_resp, "chunk_ids": [], "scores": [], "sources": [],
-            "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0,
-<<<<<<< Updated upstream
-            "model": settings.GEMINI_CHAT_MODEL,
-            "latency_ms": int((time.time()-start)*1000),
-=======
+            "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost_toman": 0,
             "model": "n/a",
             "latency_ms": int((time.time() - start) * 1000),
->>>>>>> Stashed changes
             "is_fallback": True, "finish_reason": "fallback",
         }
 
-    # Build context
     context_parts = []
     for i, chunk in enumerate(chunks, 1):
-        meta  = chunk.get("metadata", {})
+        meta = chunk.get("metadata", {})
         title = meta.get("title", "")
         header = f"[Source {i}]" + (f" {title}" if title else "")
         context_parts.append(f"{header}\n{chunk['content']}")
     context = "\n\n---\n\n".join(context_parts)
 
-<<<<<<< Updated upstream
-    # Build prompt
-    sys_p = system_prompt or DEFAULT_SYSTEM
-=======
     # The grounding rules must always apply, regardless of any per-chatbot custom
     # prompt — previously a custom system_prompt fully *replaced* DEFAULT_SYSTEM
     # instead of adding to it, silently dropping the "don't invent facts" rule and
@@ -206,7 +194,6 @@ async def run_rag_pipeline(
     sys_p = GROUNDING_RULES
     if system_prompt:
         sys_p += f"\n\n{system_prompt}"
->>>>>>> Stashed changes
     if context:
         sys_p += f"\n\n=== CONTEXT ===\n{context}\n=== END CONTEXT ==="
 
@@ -222,30 +209,14 @@ async def run_rag_pipeline(
 
     full_prompt = f"{sys_p}\n\n{hist_text}User: {query}\nAssistant:"
 
-<<<<<<< Updated upstream
-    try:
-        resp = model.generate_content(
-            full_prompt,
-            generation_config=genai.types.GenerationConfig(
-                temperature=temperature,
-                max_output_tokens=max_tokens,
-            ),
-        )
-        answer = resp.text or ""
-        usage  = getattr(resp, "usage_metadata", None)
-        p_toks = getattr(usage, "prompt_token_count", 0) if usage else 0
-        c_toks = getattr(usage, "candidates_token_count", 0) if usage else 0
-        t_toks = p_toks + c_toks
-=======
     model_used = "n/a"
     usage = {}
+    cost_toman = 0
     try:
-        answer, model_used, usage = _chat_completion(db, full_prompt, max_tokens, temperature)
->>>>>>> Stashed changes
+        answer, model_used, usage, cost_toman = _chat_completion(db, full_prompt, max_tokens, temperature)
     except Exception as e:
-        logger.error(f"Gemini LLM error: {e}")
+        logger.error(f"LLM error (all providers failed): {e}")
         answer = fallback_resp or "Sorry, I could not generate a response."
-        p_toks = c_toks = t_toks = 0
         is_fallback = True
 
     sources = []
@@ -253,8 +224,8 @@ async def run_rag_pipeline(
         m = c.get("metadata", {})
         src = {}
         if m.get("title"): src["title"] = m["title"]
-        if m.get("url"):   src["url"]   = m["url"]
-        if m.get("type"):  src["type"]  = m["type"]
+        if m.get("url"): src["url"] = m["url"]
+        if m.get("type"): src["type"] = m["type"]
         if src: sources.append(src)
 
     return {
@@ -262,19 +233,12 @@ async def run_rag_pipeline(
         "chunk_ids": [c["id"] for c in chunks],
         "scores": [round(c["similarity"], 4) for c in chunks],
         "sources": sources,
-<<<<<<< Updated upstream
-        "prompt_tokens": p_toks,
-        "completion_tokens": c_toks,
-        "total_tokens": t_toks,
-        "model": settings.GEMINI_CHAT_MODEL,
-        "latency_ms": int((time.time()-start)*1000),
-=======
         "prompt_tokens": usage.get("prompt_tokens", 0),
         "completion_tokens": usage.get("completion_tokens", 0),
         "total_tokens": usage.get("total_tokens", 0),
+        "cost_toman": cost_toman,
         "model": model_used,
         "latency_ms": int((time.time() - start) * 1000),
->>>>>>> Stashed changes
         "is_fallback": is_fallback,
         "finish_reason": "stop",
     }

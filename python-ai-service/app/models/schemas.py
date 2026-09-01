@@ -24,6 +24,7 @@ class ChatResponse(BaseModel):
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
+    cost_toman: float = 0
     model: str = ""
     latency_ms: int = 0
     is_fallback: bool = False

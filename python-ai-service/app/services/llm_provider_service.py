@@ -1,9 +1,11 @@
 import json
+import base64
 import logging
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 import redis as redis_lib
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -14,15 +16,37 @@ CACHE_TTL_SECONDS = 45
 _redis = redis_lib.from_url(settings.REDIS_URL, socket_timeout=2, decode_responses=True)
 
 
+def _decrypt_api_key(value: str) -> str:
+    """Mirrors app/Support/LlmKeyCrypto.php's AES-256-GCM envelope
+    (nonce:ciphertext+tag, both base64). Falls back to the raw value on any
+    failure — malformed input, missing key, pre-migration plaintext rows —
+    the same fallback posture as the PHP side, so neither language's read
+    path hard-fails while the other half of a rollout is still in flight."""
+    if not value or ":" not in value or not settings.HAMMAN_ENCRYPTION_KEY:
+        return value
+    try:
+        nonce_b64, data_b64 = value.split(":", 1)
+        nonce = base64.b64decode(nonce_b64)
+        data = base64.b64decode(data_b64)
+        key = base64.b64decode(settings.HAMMAN_ENCRYPTION_KEY)
+        return AESGCM(key).decrypt(nonce, data, None).decode("utf-8")
+    except Exception:
+        return value
+
+
 def _fetch_from_db(db: Session) -> List[dict]:
     rows = db.execute(text("""
         SELECT name, provider, base_url, model_name, api_key, priority,
-               max_tokens_response, timeout_seconds
+               max_tokens_response, timeout_seconds,
+               input_price_per_1m_toman, output_price_per_1m_toman
         FROM public.llm_provider_profiles
         WHERE is_active = true
         ORDER BY priority ASC
     """)).mappings().fetchall()
-    return [dict(r) for r in rows]
+    profiles = [dict(r) for r in rows]
+    for p in profiles:
+        p["api_key"] = _decrypt_api_key(p["api_key"])
+    return profiles
 
 
 def get_active_profiles(db: Session) -> List[dict]:

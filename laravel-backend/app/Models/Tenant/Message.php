@@ -16,6 +16,7 @@ class Message extends Model
         'prompt_tokens'       => 'integer',
         'completion_tokens'   => 'integer',
         'total_tokens'        => 'integer',
+        'cost_toman'          => 'float',
         'latency_ms'          => 'integer',
     ];
 

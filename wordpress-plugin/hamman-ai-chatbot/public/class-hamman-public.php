@@ -49,7 +49,7 @@ function init(){
 function send(){
   var t=inp.value.trim();if(!t||!convId)return;
   inp.value='';addMsg(t,'user');sendBtn.disabled=true;
-  fetch(H.apiUrl+'/chat/message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({conversation_id:convId,message:t,session_id:H.sessionId})})
+  fetch(H.apiUrl+'/chat/message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chatbot_id:H.chatbotId,conversation_id:convId,message:t,session_id:H.sessionId})})
   .then(function(r){ return r.json().then(function(data){ return {ok:r.ok,data:data}; }); })
   .then(function(res){
     sendBtn.disabled=false;

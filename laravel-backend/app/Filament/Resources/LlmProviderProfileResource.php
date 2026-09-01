@@ -46,6 +46,11 @@ class LlmProviderProfileResource extends Resource {
                 ->required(fn (string $context) => $context === 'create')
                 ->dehydrated(fn ($state) => filled($state))
                 ->helperText('خالی گذاشتن در ویرایش = کلید فعلی حفظ می‌شه.'),
+            TextInput::make('input_price_per_1m_toman')->label('قیمت هر ۱ میلیون توکن ورودی (تومان)')
+                ->numeric()->default(0)->required()
+                ->helperText('برای محاسبه‌ی هزینه‌ی واقعی هر پیام — قیمتی که ارائه‌دهنده از شما می‌گیره رو به تومان تبدیل کنید.'),
+            TextInput::make('output_price_per_1m_toman')->label('قیمت هر ۱ میلیون توکن خروجی (تومان)')
+                ->numeric()->default(0)->required(),
             TextInput::make('priority')->label('اولویت')->numeric()->default(0)->required()
                 ->helperText('عدد کمتر یعنی زودتر امتحان می‌شه.'),
             Toggle::make('is_active')->label('فعال')->default(true),
@@ -64,6 +69,10 @@ class LlmProviderProfileResource extends Resource {
                 TextColumn::make('api_key')
                     ->label('کلید API')
                     ->formatStateUsing(fn (?string $state) => $state ? str_repeat('•', 8) . substr($state, -4) : '—'),
+                TextColumn::make('input_price_per_1m_toman')->label('قیمت ورودی/۱M')
+                    ->formatStateUsing(fn ($state) => number_format($state) . ' ت')->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('output_price_per_1m_toman')->label('قیمت خروجی/۱M')
+                    ->formatStateUsing(fn ($state) => number_format($state) . ' ت')->toggleable(isToggledHiddenByDefault: true),
                 IconColumn::make('is_active')->boolean()->label('فعال'),
                 TextColumn::make('consecutive_failures')->label('شکست‌ها')
                     ->color(fn (int $state) => $state > 0 ? 'danger' : 'gray'),

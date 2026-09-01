@@ -2,17 +2,12 @@
 namespace App\Filament\Resources\TenantResource\Pages;
 
 use App\Filament\Resources\TenantResource;
-<<<<<<< HEAD
-=======
 use App\Models\Tenant;
 use Filament\Actions\CreateAction;
->>>>>>> origin/develop
 use Filament\Resources\Pages\ListRecords;
 
 class ListTenants extends ListRecords {
     protected static string $resource = TenantResource::class;
-<<<<<<< HEAD
-=======
 
     // Opening this list is what "seeing" new customers means for the
     // navigation badge (see TenantResource::getNavigationBadge()) — simpler
@@ -32,5 +27,4 @@ class ListTenants extends ListRecords {
             CreateAction::make(),
         ];
     }
->>>>>>> origin/develop
 }

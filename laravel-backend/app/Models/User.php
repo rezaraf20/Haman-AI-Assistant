@@ -17,11 +17,6 @@ class User extends Authenticatable implements FilamentUser {
     public function tenant() { return $this->belongsTo(Tenant::class); }
     public function isOwner(): bool { return $this->role === 'owner'; }
     public function isLocked(): bool { return $this->locked_until && $this->locked_until->isFuture(); }
-<<<<<<< HEAD
-    public function canAccessPanel(Panel $panel): bool { return $this->isOwner(); }
-=======
-<<<<<<< Updated upstream
-=======
     public function canAccessPanel(Panel $panel): bool {
         return match ($panel->getId()) {
             'admin'    => $this->isOwner(),
@@ -32,6 +27,4 @@ class User extends Authenticatable implements FilamentUser {
             default    => false,
         };
     }
->>>>>>> Stashed changes
->>>>>>> origin/develop
 }

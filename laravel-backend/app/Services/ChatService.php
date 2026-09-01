@@ -26,9 +26,19 @@ class ChatService {
                 $result = ['response'=>$chatbot->fallback_response??'Sorry, I could not process your request.','chunk_ids'=>[],'scores'=>[],'sources'=>[],'prompt_tokens'=>0,'completion_tokens'=>0,'total_tokens'=>0,'model'=>$chatbot->llm_model,'latency_ms'=>0,'is_fallback'=>true,'finish_reason'=>'error'];
             }
         }
-        $assMsg = Message::create(['conversation_id'=>$conv->id,'chatbot_id'=>$conv->chatbot_id,'role'=>'assistant','content'=>$result['response'],'retrieved_chunk_ids'=>$result['chunk_ids']??[],'retrieval_scores'=>$result['scores']??[],'prompt_tokens'=>$result['prompt_tokens']??0,'completion_tokens'=>$result['completion_tokens']??0,'total_tokens'=>$result['total_tokens']??0,'model_used'=>$result['model']??$chatbot->llm_model,'latency_ms'=>$result['latency_ms']??null,'is_fallback'=>$result['is_fallback']??false,'created_at'=>now()]);
+        $assMsg = Message::create(['conversation_id'=>$conv->id,'chatbot_id'=>$conv->chatbot_id,'role'=>'assistant','content'=>$result['response'],'retrieved_chunk_ids'=>$result['chunk_ids']??[],'retrieval_scores'=>$result['scores']??[],'prompt_tokens'=>$result['prompt_tokens']??0,'completion_tokens'=>$result['completion_tokens']??0,'total_tokens'=>$result['total_tokens']??0,'cost_toman'=>$result['cost_toman']??0,'model_used'=>$result['model']??$chatbot->llm_model,'latency_ms'=>$result['latency_ms']??null,'is_fallback'=>$result['is_fallback']??false,'created_at'=>now()]);
         $tokens = $result['total_tokens']??0;
-        dispatch(fn()=>$this->tenantSvc->incrementUsage($tenant,$tokens))->afterResponse();
+        // Synchronous, not dispatch(fn()=>...)->afterResponse(): a raw Closure
+        // job doesn't get SerializesModels' rehydration treatment the way a
+        // real Job class does (see EmbedDocumentJob), so serializing this
+        // closure serializes $tenant's live Eloquent state as-is — fragile,
+        // and previously caused a real failure. Deferring it also meant usage
+        // could still be unrecorded well after the response went out (process
+        // recycled, request aborted) and widened the window where concurrent
+        // requests all read a stale usage_tokens_current before any of their
+        // increments landed. Doing it inline still isn't a hard lock around
+        // the quota check, but it collapses that window to just this request.
+        $this->tenantSvc->incrementUsage($tenant,$tokens);
         return ['message'=>$assMsg,'result'=>$result];
     }
 }

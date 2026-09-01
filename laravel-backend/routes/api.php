@@ -17,12 +17,16 @@ Route::prefix('v1')->group(function () {
         Route::post('login',    [AuthController::class, 'login']);
     });
 
-    // ── Chat Widget (Public) ───────────────────────────
+    // ── Chat Widget (Public, but domain- and rate-limited) ─
     Route::prefix('chat')->group(function () {
-        Route::post('session',              [ChatController::class, 'createSession']);
-        Route::post('message',             [ChatController::class, 'sendMessage']);
-        Route::get('history/{sessionId}',  [ChatController::class, 'history']);
-        Route::post('feedback',            [ChatController::class, 'submitFeedback']);
+        Route::post('session', [ChatController::class, 'createSession'])
+            ->middleware(['chatbot.domain', 'throttle:chat-session']);
+        Route::post('message', [ChatController::class, 'sendMessage'])
+            ->middleware(['chatbot.domain', 'throttle:chat-message']);
+        Route::get('history/{sessionId}', [ChatController::class, 'history'])
+            ->middleware(['chatbot.domain', 'throttle:chat-message']);
+        Route::post('feedback', [ChatController::class, 'submitFeedback'])
+            ->middleware('throttle:chat-message');
     });
 
     // ── Plugin API (API Key) ───────────────────────────
