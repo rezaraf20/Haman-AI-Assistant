@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="./vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+>
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>app</directory>
+        </include>
+    </source>
+    <php>
+        <env name="APP_ENV" value="testing"/>
+        <!-- CI-only dummy key, 32 bytes, not used to protect anything real. -->
+        <env name="APP_KEY" value="base64:aGFtbWFuLWNpLXRlc3Qta2V5LTMyLWJ5dGVzLWxvbmc="/>
+        <env name="APP_DEBUG" value="false"/>
+        <env name="BCRYPT_ROUNDS" value="4"/>
+        <env name="CACHE_STORE" value="array"/>
+        <env name="DB_CONNECTION" value="pgsql"/>
+        <env name="DB_HOST" value="127.0.0.1"/>
+        <env name="DB_PORT" value="5432"/>
+        <env name="DB_DATABASE" value="hamman_test"/>
+        <env name="DB_USERNAME" value="hamman_test"/>
+        <env name="DB_PASSWORD" value="hamman_test"/>
+        <env name="MAIL_MAILER" value="array"/>
+        <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="SESSION_DRIVER" value="array"/>
+        <!-- Telescope is a declared dev dependency but its own migrations
+             are never published in this app (no telescope_entries table
+             anywhere) — leaving it enabled in tests makes it try to log to
+             a table that doesn't exist and mask the real failure underneath. -->
+        <env name="TELESCOPE_ENABLED" value="false"/>
+        <!-- Never actually called — tests mock the AI Gateway HTTP call via
+             Http::fake() — but AiGatewayService::$secret is a non-nullable
+             string property, so config('hamman.ai_service.secret') must
+             resolve to *something* for the service to even construct. -->
+        <env name="AI_SERVICE_SECRET" value="test-secret"/>
+    </php>
+</phpunit>

@@ -26,3 +26,8 @@ python-ai-service/.venv/
 ---
 # Claude Code local tool settings — not app source
 .claude/
+---
+# Stray local scratch files — not part of the app; the first one
+# contains what looks like a live API key, never commit it
+New Text Document.txt
+VECTOR_DIM_PATCH.txt
