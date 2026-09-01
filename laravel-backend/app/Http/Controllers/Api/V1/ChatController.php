@@ -11,9 +11,13 @@ class ChatController extends BaseApiController
 {
     public function __construct(private ChatService $svc) {}
 
-    private function setSchemaFromChatbot(string $chatbotId): ?object
+    // $preResolved lets callers reuse the chatbot_index row
+    // ValidateChatbotDomain already looked up and stashed on the request
+    // (see $request->attributes->get('chatbot_index')) instead of querying
+    // it again here.
+    private function setSchemaFromChatbot(string $chatbotId, ?object $preResolved = null): ?object
     {
-        $index = DB::table('chatbot_index')
+        $index = $preResolved ?? DB::table('chatbot_index')
             ->where('chatbot_id', $chatbotId)
             ->where('is_active', true)
             ->first();
@@ -34,7 +38,7 @@ class ChatController extends BaseApiController
             'language'   => 'nullable|string|max:10',
         ]);
 
-        $index = $this->setSchemaFromChatbot($d['chatbot_id']);
+        $index = $this->setSchemaFromChatbot($d['chatbot_id'], $req->attributes->get('chatbot_index'));
         if (!$index) return $this->notFound('Chatbot not found');
 
         $chatbot = Chatbot::where('id', $d['chatbot_id'])->where('is_active', true)->first();
@@ -76,23 +80,36 @@ class ChatController extends BaseApiController
 
     public function sendMessage(Request $req): JsonResponse
     {
+        // TODO(remove after legacy plugin migration): chatbot_id is nullable
+        // here — not required|uuid — only because the pre-1.2.0 WordPress
+        // plugin's /chat/message call never sent it, only conversation_id.
+        // ValidateChatbotDomain resolves it from conversation_id in that case
+        // (see the 'legacy plugin request' warning it logs) and stashes the
+        // result on $request->attributes. Once that warning stops appearing
+        // in the logs for a full billing cycle, every site is on >=1.2.0:
+        // flip this back to 'required|uuid' and delete the fallback branch
+        // in ValidateChatbotDomain.
         $d = $req->validate([
-            'chatbot_id'      => 'required|uuid',
+            'chatbot_id'      => 'nullable|uuid',
             'conversation_id' => 'required|uuid',
             'message'         => 'required|string|min:1|max:2000',
             'session_id'      => 'required|string|max:128',
         ]);
 
-        // chatbot_id now comes straight from the client (the widget already
-        // has it from createSession) instead of being guessed by scanning
-        // every tenant_% schema for a matching conversation row — that scan
-        // was an unbounded per-message query fan-out across every tenant.
-        $index = $this->setSchemaFromChatbot($d['chatbot_id']);
+        $preResolved = $req->attributes->get('chatbot_index');
+        $chatbotId = $d['chatbot_id'] ?? ($preResolved->chatbot_id ?? null);
+        if (!$chatbotId) return $this->notFound('Chatbot not found');
+
+        // chatbot_id (now resolved one way or another) lets us set the right
+        // schema directly instead of scanning every tenant_% schema for a
+        // matching conversation row — that scan was an unbounded per-message
+        // query fan-out across every tenant.
+        $index = $this->setSchemaFromChatbot($chatbotId, $preResolved);
         if (!$index) return $this->notFound('Chatbot not found');
 
         $conv = Conversation::where('id', $d['conversation_id'])
             ->where('session_id', $d['session_id'])
-            ->where('chatbot_id', $d['chatbot_id'])
+            ->where('chatbot_id', $chatbotId)
             ->first();
         if (!$conv) return $this->notFound('Conversation not found');
 

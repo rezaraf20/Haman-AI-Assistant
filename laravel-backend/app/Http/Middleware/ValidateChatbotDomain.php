@@ -2,6 +2,8 @@
 namespace App\Http\Middleware;
 use Closure; use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use App\Support\DomainNormalizer;
 
 // Validates against chatbot_index.primary_domain (public schema), not the
 // tenant-schema chatbot_domains table the original version of this file used
@@ -21,16 +23,38 @@ use Illuminate\Support\Facades\DB;
 // Real (browser fetch) widget requests always carry an Origin header — a
 // browser refuses to let JS override or omit it on a cross-origin POST — so
 // failing closed when it's missing costs nothing for legitimate traffic
-// while blocking direct, non-browser API calls that spoof the header. Same
-// posture for a missing chatbot_id: 422, not "skip the check."
+// while blocking direct, non-browser API calls that spoof the header.
 class ValidateChatbotDomain {
     public function handle(Request $request, Closure $next): mixed {
         $chatbotId = $request->input('chatbot_id');
+
+        // TODO(remove after legacy plugin migration): the pre-1.2.0
+        // WordPress plugin's /chat/message call never sent chatbot_id, only
+        // conversation_id — this branch resolves it the old (slow) way, by
+        // scanning every tenant_% schema, purely to keep those sites working
+        // until they update. Acceptable cost at 5 tenants; not at 50. Once
+        // the 'legacy plugin request' warning below stops appearing in the
+        // log for a full billing cycle, delete this branch and make
+        // chatbot_id required again in ChatController::sendMessage.
         if (!$chatbotId) {
-            return response()->json(['error' => 'chatbot_id is required'], 422);
+            $conversationId = $request->input('conversation_id');
+            if ($conversationId) {
+                $chatbotId = $this->resolveChatbotIdFromConversation($conversationId);
+            }
+            if (!$chatbotId) {
+                return response()->json(['error' => 'chatbot_id is required'], 422);
+            }
+            Log::warning('legacy plugin request', [
+                'chatbot_id' => $chatbotId,
+                'origin'     => $request->header('Origin'),
+            ]);
         }
 
-        $origin = parse_url($request->header('Origin', ''), PHP_URL_HOST);
+        // Origin is already just a host (no scheme/path/port) courtesy of
+        // PHP_URL_HOST, but still needs the same www./case/trailing-slash
+        // normalization as the stored value — normalize() is idempotent on
+        // an already-bare host, so this is safe either way.
+        $origin = DomainNormalizer::normalize(parse_url($request->header('Origin', ''), PHP_URL_HOST) ?: '');
         if (!$origin) {
             return response()->json(['error' => 'Origin header is required'], 403);
         }
@@ -40,11 +64,26 @@ class ValidateChatbotDomain {
             return response()->json(['error' => 'Chatbot not found'], 404);
         }
 
-        if ($index->primary_domain && $index->primary_domain !== $origin) {
+        $storedDomain = DomainNormalizer::normalize($index->primary_domain);
+        if ($storedDomain && $storedDomain !== $origin) {
             return response()->json(['error' => 'Domain not authorized'], 403);
         }
 
         $request->attributes->set('chatbot_index', $index);
         return $next($request);
+    }
+
+    private function resolveChatbotIdFromConversation(string $conversationId): ?string {
+        $schemas = DB::select("SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'tenant_%'");
+        foreach ($schemas as $s) {
+            DB::statement("SET search_path TO {$s->schema_name}, public");
+            $conv = DB::table('conversations')->where('id', $conversationId)->first();
+            if ($conv) {
+                DB::statement("SET search_path TO public");
+                return $conv->chatbot_id;
+            }
+        }
+        DB::statement("SET search_path TO public");
+        return null;
     }
 }

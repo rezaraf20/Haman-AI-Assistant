@@ -5,6 +5,13 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration {
     public function up(): void {
+        // 2025_01_01_000000_create_base_tables.php already creates this same
+        // table (guarded the same way) — on production that ran first and
+        // this migration's up() never actually executes again, so it's been
+        // silently redundant rather than broken. It only surfaced as a real
+        // SQLSTATE[42P07] duplicate-table error when running migrate:fresh
+        // from an empty database for the first time, in CI.
+        if (Schema::hasTable('personal_access_tokens')) return;
         Schema::create('personal_access_tokens', function (Blueprint $t) {
             $t->id();
             $t->morphs('tokenable');
