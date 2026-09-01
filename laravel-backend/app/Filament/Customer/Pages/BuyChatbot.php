@@ -14,6 +14,7 @@ use Filament\Forms\Components\{TextInput, Select};
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Support\DomainNormalizer;
 
 class BuyChatbot extends Page implements HasForms {
     use InteractsWithForms;
@@ -45,7 +46,8 @@ class BuyChatbot extends Page implements HasForms {
                 ->label('دامنه سایت')
                 ->required()
                 ->maxLength(255)
-                ->helperText('این دامنه بعداً فقط توسط پشتیبانی قابل تغییره — لطفاً درست وارد کنید.'),
+                ->dehydrateStateUsing(fn ($state) => DomainNormalizer::normalize($state))
+                ->helperText('این دامنه بعداً فقط توسط پشتیبانی قابل تغییره — لطفاً درست وارد کنید. مثال: shop.com'),
         ])->statePath('data');
     }
 

@@ -2,6 +2,7 @@
 use App\Models\Tenant\{Chatbot, ChatbotDomain, Document, Product};
 use Illuminate\Http\{Request, JsonResponse};
 use Illuminate\Support\Facades\DB;
+use App\Support\DomainNormalizer;
 
 class ChatbotController extends BaseApiController {
 
@@ -82,7 +83,8 @@ class ChatbotController extends BaseApiController {
 
     public function addDomain(Request $req, string $id): JsonResponse {
         $d      = $req->validate(['domain'=>'required|string|max:255']);
-        $domain = strtolower(trim(parse_url($d['domain'],PHP_URL_HOST)??$d['domain']));
+        $domain = DomainNormalizer::normalize($d['domain']);
+        if (!$domain) return $this->badRequest('Invalid domain');
         $result = ChatbotDomain::firstOrCreate(['chatbot_id'=>$id,'domain'=>$domain],['is_active'=>true,'created_at'=>now()]);
         // Best-effort: keep the admin panel's display column in sync. Only set it if
         // this chatbot doesn't already have a primary_domain (first domain added wins).

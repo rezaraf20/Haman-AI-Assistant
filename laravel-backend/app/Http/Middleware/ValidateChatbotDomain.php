@@ -3,6 +3,7 @@ namespace App\Http\Middleware;
 use Closure; use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Support\DomainNormalizer;
 
 // Validates against chatbot_index.primary_domain (public schema), not the
 // tenant-schema chatbot_domains table the original version of this file used
@@ -49,7 +50,11 @@ class ValidateChatbotDomain {
             ]);
         }
 
-        $origin = parse_url($request->header('Origin', ''), PHP_URL_HOST);
+        // Origin is already just a host (no scheme/path/port) courtesy of
+        // PHP_URL_HOST, but still needs the same www./case/trailing-slash
+        // normalization as the stored value — normalize() is idempotent on
+        // an already-bare host, so this is safe either way.
+        $origin = DomainNormalizer::normalize(parse_url($request->header('Origin', ''), PHP_URL_HOST) ?: '');
         if (!$origin) {
             return response()->json(['error' => 'Origin header is required'], 403);
         }
@@ -59,7 +64,8 @@ class ValidateChatbotDomain {
             return response()->json(['error' => 'Chatbot not found'], 404);
         }
 
-        if ($index->primary_domain && $index->primary_domain !== $origin) {
+        $storedDomain = DomainNormalizer::normalize($index->primary_domain);
+        if ($storedDomain && $storedDomain !== $origin) {
             return response()->json(['error' => 'Domain not authorized'], 403);
         }
 

@@ -15,6 +15,7 @@ use Filament\Notifications\Notification;
 use App\Models\ApiKey;
 use Illuminate\Support\Facades\DB;
 use App\Support\Jalali;
+use App\Support\DomainNormalizer;
 use App\Filament\Resources\ChatbotResource\Pages;
 
 class ChatbotResource extends Resource {
@@ -47,7 +48,9 @@ class ChatbotResource extends Resource {
                 ->required()
                 ->visibleOn('create'),
             TextInput::make('name')->label('نام')->required()->maxLength(255),
-            TextInput::make('primary_domain')->label('دامنه')->maxLength(255)->helperText('فقط نمایشی — تنظیمات پلاگین وردپرس رو تغییر نمی‌ده.'),
+            TextInput::make('primary_domain')->label('دامنه')->maxLength(255)
+                ->dehydrateStateUsing(fn ($state) => DomainNormalizer::normalize($state))
+                ->helperText('دامنه‌ی مجاز ویجت — اگر خالی باشد هیچ محدودیتی اعمال نمی‌شود.'),
             DateTimePicker::make('expires_at')->label('تاریخ تمدید / انقضا')
                 ->helperText('اگه خالی بذاری، این چت‌بات هیچ‌وقت خودکار معلق نمی‌شه. جاب روزانه‌ی chatbots:expire-overdue بعد از گذشتن این تاریخ معلقش می‌کنه.'),
             TextInput::make('monthly_price_toman')
