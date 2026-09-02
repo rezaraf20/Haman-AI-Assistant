@@ -52,6 +52,10 @@ COPY config/ config/
 COPY database/ database/
 COPY routes/ routes/
 COPY resources/ resources/
+# lang/ (fa/en translation files) — nothing under __() resolves without this;
+# omitted here for a while after it was first added, which is exactly the
+# kind of thing that's obvious once broken and invisible until then.
+COPY lang/ lang/
 COPY .env .env
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 

@@ -14,6 +14,8 @@ use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use App\Http\Middleware\SetLocale;
+use Filament\View\PanelsRenderHook;
+use Illuminate\Support\HtmlString;
 
 class AdminPanelProvider extends PanelProvider {
     public function panel(Panel $panel): Panel {
@@ -24,12 +26,18 @@ class AdminPanelProvider extends PanelProvider {
             ->brandName('Haman AI')
             ->login()
             ->colors(['primary' => '#1B3A6B'])
-            // Closure, not a plain string: panel() runs during service-provider
-            // boot, before the request pipeline (and SetLocale within it) has
-            // run — a plain string here would freeze at whatever
-            // config('app.locale') resolves to, never the per-request value.
-            // Filament defers closures like this to actual render time.
-            ->font(fn () => app()->getLocale() === 'fa' ? 'Vazirmatn' : 'Inter')
+            // Not ->font(): that method's $family parameter is a plain
+            // `string`, not `string|Closure` — Filament needs the name eagerly,
+            // at boot, to register the font asset, which is before SetLocale
+            // has run (panel() executes during service-provider boot, ahead of
+            // the request pipeline). A render hook's closure runs per-request
+            // instead, which is what locale-dependent output actually needs.
+            ->renderHook(
+                PanelsRenderHook::HEAD_END,
+                fn () => new HtmlString(app()->getLocale() === 'fa'
+                    ? '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=vazirmatn:400,500,600,700"><style>body,.fi-body{font-family:"Vazirmatn",sans-serif}</style>'
+                    : '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=inter:400,500,600,700"><style>body,.fi-body{font-family:"Inter",sans-serif}</style>'),
+            )
             // Same fix as CustomerPanelProvider: discoverPages() alone never
             // registers Filament's built-in Dashboard, so /admin's root was
             // silently redirecting straight to the first nav resource instead

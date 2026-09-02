@@ -14,6 +14,8 @@ use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use App\Http\Middleware\SetLocale;
+use Filament\View\PanelsRenderHook;
+use Illuminate\Support\HtmlString;
 
 // Second Filament panel, entirely separate from AdminPanelProvider — tenant
 // customers log in here and only ever see their own tenant's data. Resources/
@@ -34,9 +36,15 @@ class CustomerPanelProvider extends PanelProvider {
             // like its own login would — bootstrap/app.php's redirectGuestsTo
             // sends unauthenticated /portal* visitors to that route instead.
             ->colors(['primary' => '#1B3A6B'])
-            // See AdminPanelProvider — same reasoning for why this must be a
-            // closure, not a plain string.
-            ->font(fn () => app()->getLocale() === 'fa' ? 'Vazirmatn' : 'Inter')
+            // See AdminPanelProvider for why this is a render hook and not
+            // ->font() (whose $family parameter is a plain, eagerly-evaluated
+            // string, not string|Closure).
+            ->renderHook(
+                PanelsRenderHook::HEAD_END,
+                fn () => new HtmlString(app()->getLocale() === 'fa'
+                    ? '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=vazirmatn:400,500,600,700"><style>body,.fi-body{font-family:"Vazirmatn",sans-serif}</style>'
+                    : '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=inter:400,500,600,700"><style>body,.fi-body{font-family:"Inter",sans-serif}</style>'),
+            )
             // discoverPages() only picks up files under Filament/Customer/Pages
             // — it does NOT auto-register Filament's own built-in Dashboard
             // page (that only happens when a panel's pages are left at their
