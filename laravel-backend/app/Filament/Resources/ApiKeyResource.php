@@ -19,9 +19,10 @@ class ApiKeyResource extends Resource {
     protected static ?string $model = ApiKey::class;
     protected static ?string $navigationIcon = 'heroicon-o-key';
     protected static ?int $navigationSort = 3;
-    protected static ?string $navigationLabel = 'کلیدهای API';
-    protected static ?string $modelLabel = 'کلید API';
-    protected static ?string $pluralModelLabel = 'کلیدهای API';
+
+    public static function getNavigationLabel(): string { return __('panel.api_keys_nav'); }
+    public static function getModelLabel(): string { return __('panel.api_key_singular'); }
+    public static function getPluralModelLabel(): string { return __('panel.api_keys_nav'); }
 
     // See TenantResource — no per-model Policy is registered, and Filament's
     // action visibility otherwise silently hides Create/Edit/Delete without one.
@@ -31,20 +32,20 @@ class ApiKeyResource extends Resource {
     public static function form(Form $form): Form {
         return $form->schema([
             Select::make('tenant_id')
-                ->label('مشتری')
+                ->label(__('panel.tenant'))
                 ->options(fn () => Tenant::pluck('name', 'id'))
                 ->searchable()
                 ->required()
                 ->live()
                 ->afterStateUpdated(fn ($set) => $set('chatbot_id', null)),
             Select::make('chatbot_id')
-                ->label('چت‌بات / دامنه')
+                ->label(__('panel.chatbot_domain_select'))
                 ->options(fn ($get) => $get('tenant_id')
                     ? ChatbotIndexEntry::where('tenant_id', $get('tenant_id'))
                         ->get()
-                        ->mapWithKeys(fn ($c) => [$c->chatbot_id => ($c->name ?? '(بدون نام)') . ' — ' . ($c->primary_domain ?? 'بدون دامنه')])
+                        ->mapWithKeys(fn ($c) => [$c->chatbot_id => ($c->name ?? __('panel.chatbot_no_name')) . ' — ' . ($c->primary_domain ?? __('panel.no_domain'))])
                     : [])
-                ->helperText('این کلید فقط برای سینک/وبهوک همین یک چت‌بات کار می‌کنه.')
+                ->helperText(__('panel.api_key_chatbot_help'))
                 ->required()
                 ->disabled(fn ($get) => !$get('tenant_id'))
                 // Filament excludes disabled() fields from the submitted form
@@ -52,17 +53,17 @@ class ApiKeyResource extends Resource {
                 // silently saved as null even when a chatbot was visibly
                 // selected, and every key ended up unbound to any chatbot.
                 ->dehydrated(),
-            TextInput::make('name')->label('نام')->required()->maxLength(255)->placeholder('مثلاً «کلید تولید hamantech.ir»'),
-            DateTimePicker::make('expires_at')->label('انقضا')->helperText('برای کلید بدون انقضا خالی بگذارید.'),
+            TextInput::make('name')->label(__('common.name'))->required()->maxLength(255)->placeholder(__('panel.api_key_name_placeholder')),
+            DateTimePicker::make('expires_at')->label(__('panel.expires_at'))->helperText(__('panel.expires_at_help')),
         ]);
     }
 
     public static function table(Table $table): Table {
         return $table
             ->columns([
-                TextColumn::make('name')->label('نام')->searchable(),
-                TextColumn::make('tenant.name')->label('مشتری')->searchable(),
-                TextColumn::make('chatbotIndexEntry.primary_domain')->label('دامنه')->default('—'),
+                TextColumn::make('name')->label(__('common.name'))->searchable(),
+                TextColumn::make('tenant.name')->label(__('panel.tenant'))->searchable(),
+                TextColumn::make('chatbotIndexEntry.primary_domain')->label(__('common.domain'))->default('—'),
                 // Full key, directly in the table — not just key_prefix. Admin
                 // access is unrestricted by design here: getStateUsing (not a
                 // real DB column) decrypts key_encrypted per row, same source
@@ -70,16 +71,16 @@ class ApiKeyResource extends Resource {
                 // masked prefix only for pre-encryption legacy rows that have
                 // no reversible copy at all.
                 TextColumn::make('full_key')
-                    ->label('کلید کامل')
-                    ->getStateUsing(fn (ApiKey $record) => $record->revealKey() ?? $record->key_prefix . '… (کلید قدیمی)')
+                    ->label(__('panel.full_key'))
+                    ->getStateUsing(fn (ApiKey $record) => $record->revealKey() ?? $record->key_prefix . __('panel.legacy_key_suffix'))
                     ->fontFamily('mono')
                     ->copyable()
-                    ->copyMessage('کپی شد')
+                    ->copyMessage(__('common.copied'))
                     ->limit(28),
-                IconColumn::make('is_active')->boolean()->label('فعال'),
-                TextColumn::make('expires_at')->label('انقضا')->formatStateUsing(fn ($state) => Jalali::dateTime($state))->placeholder('نامحدود')
+                IconColumn::make('is_active')->boolean()->label(__('common.active')),
+                TextColumn::make('expires_at')->label(__('panel.expires_at'))->formatStateUsing(fn ($state) => Jalali::dateTime($state))->placeholder(__('common.unlimited'))
                     ->color(fn ($record) => $record->expires_at && $record->expires_at->isPast() ? 'danger' : null),
-                TextColumn::make('last_used_at')->label('آخرین استفاده')->formatStateUsing(fn ($state) => Jalali::dateTime($state))->placeholder('هیچ‌وقت')->toggleable(),
+                TextColumn::make('last_used_at')->label(__('panel.last_used_at'))->formatStateUsing(fn ($state) => Jalali::dateTime($state))->placeholder(__('common.never'))->toggleable(),
             ])
             ->actions([
                 // Persistent reveal — earlier the full key was only ever shown
@@ -88,41 +89,41 @@ class ApiKeyResource extends Resource {
                 // able to pull it back up any time, since a customer losing
                 // their copy shouldn't mean re-issuing the key.
                 Action::make('showKey')
-                    ->label('نمایش کلید')
+                    ->label(__('panel.show_key'))
                     ->icon('heroicon-o-eye')
                     ->color('gray')
-                    ->modalHeading('کلید API کامل')
+                    ->modalHeading(__('panel.full_api_key_heading'))
                     ->modalDescription(fn (ApiKey $record) => $record->revealKey()
-                        ? 'این کلید را در جای امنی نگه دارید — هرکس آن را ببیند می‌تواند به‌جای این مشتری درخواست بفرستد.'
-                        : 'این کلید قبل از فعال‌شدن قابلیت نمایش مجدد ساخته شده و دیگر در دسترس نیست — برای این چت‌بات یک کلید جدید بسازید.')
+                        ? __('panel.key_reveal_warning')
+                        : __('panel.key_reveal_unavailable'))
                     ->modalSubmitAction(false)
-                    ->modalCancelActionLabel('بستن')
+                    ->modalCancelActionLabel(__('common.close'))
                     ->form(fn (ApiKey $record) => $record->revealKey() ? [
                         TextInput::make('key')
-                            ->label('کلید API')
+                            ->label(__('panel.api_key'))
                             ->default(fn () => $record->revealKey())
                             ->readOnly()
                             ->extraInputAttributes(['class' => 'font-mono text-sm', 'id' => "hamman-key-{$record->id}"])
                             ->suffixActions([
                                 FieldAction::make('copy')
                                     ->icon('heroicon-m-clipboard')
-                                    ->label('کپی')
+                                    ->label(__('common.copy'))
                                     ->alpineClickHandler(
                                         "navigator.clipboard.writeText(document.getElementById('hamman-key-{$record->id}').value)"
                                     ),
                             ]),
                     ] : []),
                 Action::make('revoke')
-                    ->label('لغو')
+                    ->label(__('panel.revoke'))
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
                     ->visible(fn (ApiKey $record) => $record->is_active)
                     ->requiresConfirmation()
                     ->action(function (ApiKey $record) {
                         $record->update(['is_active' => false]);
-                        Notification::make()->title('کلید لغو شد')->success()->send();
+                        Notification::make()->title(__('panel.key_revoked'))->success()->send();
                     }),
-                DeleteAction::make()->label('حذف'),
+                DeleteAction::make()->label(__('common.delete')),
             ])
             ->bulkActions([
                 \Filament\Tables\Actions\DeleteBulkAction::make(),

@@ -13,7 +13,7 @@ use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
-use App\Http\Middleware\SetPersianLocale;
+use App\Http\Middleware\SetLocale;
 
 class AdminPanelProvider extends PanelProvider {
     public function panel(Panel $panel): Panel {
@@ -24,6 +24,12 @@ class AdminPanelProvider extends PanelProvider {
             ->brandName('Haman AI')
             ->login()
             ->colors(['primary' => '#1B3A6B'])
+            // Closure, not a plain string: panel() runs during service-provider
+            // boot, before the request pipeline (and SetLocale within it) has
+            // run — a plain string here would freeze at whatever
+            // config('app.locale') resolves to, never the per-request value.
+            // Filament defers closures like this to actual render time.
+            ->font(fn () => app()->getLocale() === 'fa' ? 'Vazirmatn' : 'Inter')
             // Same fix as CustomerPanelProvider: discoverPages() alone never
             // registers Filament's built-in Dashboard, so /admin's root was
             // silently redirecting straight to the first nav resource instead
@@ -32,7 +38,7 @@ class AdminPanelProvider extends PanelProvider {
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
             ->middleware([
-                SetPersianLocale::class,
+                SetLocale::class,
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,

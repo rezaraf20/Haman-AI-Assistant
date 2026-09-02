@@ -18,9 +18,10 @@ class Settings extends Page implements HasForms {
 
     protected static string $view = 'filament.pages.settings';
     protected static ?string $navigationIcon = 'heroicon-o-cog-6-tooth';
-    protected static ?string $navigationLabel = 'تنظیمات';
-    protected static ?string $title = 'تنظیمات پلتفرم';
     protected static ?int $navigationSort = 9;
+
+    public static function getNavigationLabel(): string { return __('panel.settings_nav'); }
+    public function getTitle(): string { return __('panel.settings_title'); }
 
     public ?array $data = [];
 
@@ -30,35 +31,35 @@ class Settings extends Page implements HasForms {
 
     public function form(Form $form): Form {
         return $form->schema([
-            Section::make('زرین‌پال')
-                ->description('درگاه پرداخت شارژ کیف پول. این اطلاعات رو از پنل زرین‌پال (zarinpal.com) بردار.')
+            Section::make(__('panel.zarinpal_section'))
+                ->description(__('panel.zarinpal_section_desc'))
                 ->schema([
                     TextInput::make('zarinpal_merchant_id')
-                        ->label('کد پذیرنده (Merchant ID)')
+                        ->label(__('panel.merchant_id'))
                         ->maxLength(255),
                     Toggle::make('zarinpal_sandbox')
-                        ->label('حالت آزمایشی (Sandbox)')
-                        ->helperText('روشن = فقط پرداخت تستی، پول واقعی جابه‌جا نمی‌شه. وقتی کد پذیرنده‌ی واقعی گرفتی و آماده‌ی پرداخت واقعی بودی، خاموشش کن.'),
+                        ->label(__('panel.sandbox_mode'))
+                        ->helperText(__('panel.sandbox_mode_help')),
                 ]),
-            Section::make('ملی‌پیامک (پیامک)')
-                ->description('برای ارسال کد تائید ورود/ثبت‌نام مشتریان استفاده می‌شه — از API آدرس rest.payamak-panel.com (نام‌کاربری+رمزعبور)، نه سیستم کلید کنسول.')
+            Section::make(__('panel.melipayamak_section'))
+                ->description(__('panel.melipayamak_section_desc'))
                 ->schema([
                     TextInput::make('melipayamak_username')
-                        ->label('نام کاربری'),
+                        ->label(__('common.username')),
                     TextInput::make('melipayamak_password')
-                        ->label('رمز عبور')
+                        ->label(__('common.password'))
                         ->password()->revealable(),
                     TextInput::make('melipayamak_sender')
-                        ->label('شماره ارسال‌کننده'),
+                        ->label(__('panel.sender_number')),
                     Toggle::make('melipayamak_use_pattern')
-                        ->label('ارسال کد تائید با پترن')
+                        ->label(__('panel.send_otp_pattern'))
                         ->live()
-                        ->helperText('بسیاری از اپراتورهای ایرانی پیامک ساده‌ی کد تائید رو تبلیغاتی تشخیص می‌دن و فیلتر می‌کنن — یک پترن از پیش‌تائیدشده از پنل ملی‌پیامک این مشکل رو حل می‌کنه. وقتی پترن گرفتی، این گزینه رو روشن کن.'),
+                        ->helperText(__('panel.send_otp_pattern_help')),
                     TextInput::make('melipayamak_pattern_id')
-                        ->label('شناسه پترن (Body ID)')
+                        ->label(__('panel.pattern_id'))
                         ->numeric()
                         ->visible(fn ($get) => $get('melipayamak_use_pattern'))
-                        ->helperText('شناسه‌ی عددی پترن ثبت‌شده در پنل ملی‌پیامک — قالبش باید دقیقاً یک متغیر داشته باشه که با کد تائید پر می‌شه.'),
+                        ->helperText(__('panel.pattern_id_help')),
                 ]),
         ])->statePath('data');
     }
@@ -66,6 +67,6 @@ class Settings extends Page implements HasForms {
     public function save(): void {
         $state = $this->form->getState();
         PlatformSetting::current()->update($state);
-        Notification::make()->title('تنظیمات ذخیره شد')->success()->send();
+        Notification::make()->title(__('common.settings_saved'))->success()->send();
     }
 }

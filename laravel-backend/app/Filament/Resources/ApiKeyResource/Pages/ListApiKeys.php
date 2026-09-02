@@ -38,10 +38,13 @@ class ListApiKeys extends ListRecords {
             CreateAction::make(),
             Action::make('showNewKey')
                 ->hidden()
-                ->modalHeading('کلید API ساخته شد — همین حالا کپی کن')
-                ->modalDescription('این تنها باری‌ه که کلید کامل نمایش داده می‌شه. بعداً قابل بازیابی نیست — فقط می‌شه لغوش کرد و کلید جدید ساخت.')
+                ->modalHeading(__('panel.new_key_created_heading'))
+                // Text used to say this was the only time the key would ever
+                // be shown — no longer true since ApiKeyResource's 'showKey'
+                // action added persistent reveal; corrected while translating.
+                ->modalDescription(__('panel.new_key_created_description'))
                 ->modalSubmitAction(false)
-                ->modalCancelActionLabel('بستن — کپی کردم')
+                ->modalCancelActionLabel(__('panel.close_copied'))
                 ->closeModalByClickingAway(false)
                 ->form([
                     // TextInput::copyable() doesn't exist in this Filament version
@@ -50,14 +53,14 @@ class ListApiKeys extends ListRecords {
                     // Alpine click handler that reads the field by a fixed DOM id
                     // rather than relying on Filament's internal Alpine scoping.
                     TextInput::make('key')
-                        ->label('کلید API')
+                        ->label(__('panel.api_key'))
                         ->default(fn () => $this->newPlaintextKey)
                         ->readOnly()
                         ->extraInputAttributes(['class' => 'font-mono text-sm', 'id' => 'hamman-new-api-key'])
                         ->suffixActions([
                             FieldAction::make('copy')
                                 ->icon('heroicon-m-clipboard')
-                                ->label('کپی')
+                                ->label(__('common.copy'))
                                 ->alpineClickHandler(
                                     "navigator.clipboard.writeText(document.getElementById('hamman-new-api-key').value)"
                                 ),

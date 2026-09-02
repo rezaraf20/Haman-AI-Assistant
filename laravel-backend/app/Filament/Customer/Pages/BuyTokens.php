@@ -11,6 +11,7 @@ use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Actions\Action;
 use Filament\Notifications\Notification;
+use App\Support\Money;
 
 // bonus_tokens purchased here only kick in once the tenant's plan quota for
 // the month is exhausted (see Tenant::isTokenQuotaExceeded() and
@@ -20,8 +21,9 @@ class BuyTokens extends Page implements HasTable {
 
     protected static string $view = 'filament.customer.pages.buy-tokens';
     protected static ?string $navigationIcon = 'heroicon-o-bolt';
-    protected static ?string $navigationLabel = 'خرید توکن';
-    protected static ?string $title = 'خرید توکن اضافه';
+
+    public static function getNavigationLabel(): string { return __('plan.buy_tokens_nav'); }
+    public function getTitle(): string { return __('plan.buy_tokens_title'); }
 
     public function getWalletBalance(): int {
         return (int) (auth()->user()->tenant->wallet_balance_toman ?? 0);
@@ -35,20 +37,23 @@ class BuyTokens extends Page implements HasTable {
         return $table
             ->query(fn () => TokenPackage::query()->active())
             ->columns([
-                TextColumn::make('name')->label('نام بسته'),
-                TextColumn::make('chatbot_type')->label('نوع چت‌بات')->badge()->placeholder('همه انواع'),
-                TextColumn::make('token_amount')->label('تعداد توکن')
+                TextColumn::make('name')->label(__('plan.package_name')),
+                TextColumn::make('chatbot_type')->label(__('chatbot.type'))->badge()->placeholder(__('plan.all_chatbot_types')),
+                TextColumn::make('token_amount')->label(__('plan.token_amount'))
                     ->formatStateUsing(fn (int $state) => number_format($state)),
-                TextColumn::make('price_toman')->label('قیمت')
-                    ->formatStateUsing(fn (int $state) => number_format($state) . ' تومان'),
+                TextColumn::make('price_toman')->label(__('plan.price'))
+                    ->formatStateUsing(fn (int $state) => Money::toman($state)),
             ])
             ->actions([
                 Action::make('buy')
-                    ->label('خرید')
+                    ->label(__('plan.buy_action'))
                     ->icon('heroicon-o-shopping-cart')
                     ->color('success')
                     ->requiresConfirmation()
-                    ->modalDescription(fn (TokenPackage $record) => "مبلغ " . number_format($record->price_toman) . " تومان از کیف پول شما کسر می‌شود و " . number_format($record->token_amount) . " توکن به موجودی شما اضافه می‌شود.")
+                    ->modalDescription(fn (TokenPackage $record) => __('plan.buy_confirm_description', [
+                        'price' => number_format($record->price_toman),
+                        'amount' => number_format($record->token_amount),
+                    ]))
                     ->action(fn (TokenPackage $record) => $this->buy($record)),
             ])
             ->defaultSort('price_toman');
@@ -59,8 +64,8 @@ class BuyTokens extends Page implements HasTable {
 
         if ($tenant->wallet_balance_toman < $package->price_toman) {
             Notification::make()
-                ->title('موجودی کیف پول کافی نیست')
-                ->body('لطفاً ابتدا کیف پول خود را شارژ کنید.')
+                ->title(__('wallet.insufficient_balance'))
+                ->body(__('wallet.topup_first'))
                 ->danger()
                 ->send();
             return;
@@ -68,11 +73,11 @@ class BuyTokens extends Page implements HasTable {
 
         app(WalletService::class)->applyCompletedTransaction(
             $tenant, 'plan_charge', -$package->price_toman,
-            ['description' => "خرید توکن: {$package->name} ({$package->token_amount} توکن)"],
+            ['description' => __('plan.token_purchase_description', ['name' => $package->name, 'amount' => $package->token_amount])],
         );
 
         $tenant->increment('bonus_tokens', $package->token_amount);
 
-        Notification::make()->title('توکن با موفقیت خریداری شد')->success()->send();
+        Notification::make()->title(__('plan.token_purchased_success'))->success()->send();
     }
 }

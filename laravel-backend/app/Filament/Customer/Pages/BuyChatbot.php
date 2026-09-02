@@ -15,14 +15,16 @@ use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use App\Support\DomainNormalizer;
+use App\Support\Money;
 
 class BuyChatbot extends Page implements HasForms {
     use InteractsWithForms;
 
     protected static string $view = 'filament.customer.pages.buy-chatbot';
     protected static ?string $navigationIcon = 'heroicon-o-plus-circle';
-    protected static ?string $navigationLabel = 'خرید چت‌بات جدید';
-    protected static ?string $title = 'خرید چت‌بات جدید';
+
+    public static function getNavigationLabel(): string { return __('chatbot.buy_new_nav'); }
+    public function getTitle(): string { return __('chatbot.buy_new_nav'); }
 
     public ?array $data = [];
     public ?string $newApiKey = null;
@@ -35,19 +37,19 @@ class BuyChatbot extends Page implements HasForms {
     public function form(Form $form): Form {
         return $form->schema([
             Select::make('type')
-                ->label('نوع چت‌بات')
+                ->label(__('chatbot.type_select'))
                 ->options(fn () => ChatbotTypePrice::active()->get()->mapWithKeys(
-                    fn ($p) => [$p->type => $p->name . ' — ' . number_format($p->price_toman) . ' تومان']
+                    fn ($p) => [$p->type => $p->name . ' — ' . Money::toman($p->price_toman)]
                 ))
                 ->required()
                 ->live(),
-            TextInput::make('name')->label('نام چت‌بات')->required()->maxLength(255),
+            TextInput::make('name')->label(__('chatbot.name_field'))->required()->maxLength(255),
             TextInput::make('primary_domain')
-                ->label('دامنه سایت')
+                ->label(__('chatbot.site_domain'))
                 ->required()
                 ->maxLength(255)
                 ->dehydrateStateUsing(fn ($state) => DomainNormalizer::normalize($state))
-                ->helperText('این دامنه بعداً فقط توسط پشتیبانی قابل تغییره — لطفاً درست وارد کنید. مثال: shop.com'),
+                ->helperText(__('chatbot.domain_locked_help')),
         ])->statePath('data');
     }
 
@@ -66,7 +68,7 @@ class BuyChatbot extends Page implements HasForms {
         $priceRow = ChatbotTypePrice::where('type', $state['type'])->active()->first();
 
         if (!$priceRow) {
-            Notification::make()->title('این نوع چت‌بات در حال حاضر قابل خرید نیست')->danger()->send();
+            Notification::make()->title(__('chatbot.type_unavailable'))->danger()->send();
             return;
         }
 
@@ -75,8 +77,8 @@ class BuyChatbot extends Page implements HasForms {
 
         if ($tenant->wallet_balance_toman < $price) {
             Notification::make()
-                ->title('موجودی کیف پول کافی نیست')
-                ->body('لطفاً ابتدا کیف پول خود را شارژ کنید.')
+                ->title(__('wallet.insufficient_balance'))
+                ->body(__('wallet.topup_first'))
                 ->danger()
                 ->send();
             return;
@@ -88,7 +90,7 @@ class BuyChatbot extends Page implements HasForms {
         // the payment record.
         app(WalletService::class)->applyCompletedTransaction(
             $tenant, 'plan_charge', -$price,
-            ['description' => "خرید چت‌بات جدید: {$state['name']} ({$priceRow->name})"],
+            ['description' => __('chatbot.purchase_description', ['name' => $state['name'], 'type' => $priceRow->name])],
         );
 
         DB::statement("SET search_path TO {$tenant->schema_name}, public");
@@ -123,7 +125,7 @@ class BuyChatbot extends Page implements HasForms {
         [, $plaintext] = ApiKey::generate(
             tenantId: $tenant->id,
             chatbotId: $chatbot->id,
-            name: "{$state['name']} — WordPress plugin",
+            name: __('chatbot.wp_plugin_key_name', ['name' => $state['name']]),
             createdBy: auth()->id(),
         );
 
@@ -131,6 +133,6 @@ class BuyChatbot extends Page implements HasForms {
         $this->newChatbotName = $state['name'];
         $this->form->fill();
 
-        Notification::make()->title('چت‌بات با موفقیت خریداری شد')->success()->send();
+        Notification::make()->title(__('chatbot.purchased_success'))->success()->send();
     }
 }

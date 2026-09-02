@@ -6,8 +6,9 @@ use Filament\Pages\Page;
 class Usage extends Page {
     protected static string $view = 'filament.customer.pages.usage';
     protected static ?string $navigationIcon = 'heroicon-o-chart-bar';
-    protected static ?string $navigationLabel = 'میزان مصرف';
-    protected static ?string $title = 'میزان مصرف';
+
+    public static function getNavigationLabel(): string { return __('chatbot.usage_nav'); }
+    public function getTitle(): string { return __('chatbot.usage_nav'); }
 
     // Same shape as TenantController::usage() (routes/api.php's Sanctum
     // dashboard API) — not calling that endpoint itself since this Livewire

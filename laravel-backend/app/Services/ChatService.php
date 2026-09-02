@@ -1,6 +1,7 @@
 <?php
 namespace App\Services;
 use App\Models\Tenant\{Conversation, Message, Chatbot};
+use App\Support\WidgetDefaults;
 
 class ChatService {
     public function __construct(private AiGatewayService $ai, private TenantService $tenantSvc) {}
@@ -18,12 +19,12 @@ class ChatService {
         if ($tenant->isTokenQuotaExceeded()) {
             // Skip the AI Gateway call entirely — no cost incurred once a
             // tenant is over their plan's monthly token allowance.
-            $result = ['response'=>$chatbot->fallback_response??'Sorry, your account has reached its monthly usage limit. Please contact support to upgrade your plan.','chunk_ids'=>[],'scores'=>[],'sources'=>[],'prompt_tokens'=>0,'completion_tokens'=>0,'total_tokens'=>0,'model'=>$chatbot->llm_model,'latency_ms'=>0,'is_fallback'=>true,'finish_reason'=>'quota_exceeded'];
+            $result = ['response'=>$chatbot->fallback_response??WidgetDefaults::forLanguage($chatbot->language)['quota_exceeded_response'],'chunk_ids'=>[],'scores'=>[],'sources'=>[],'prompt_tokens'=>0,'completion_tokens'=>0,'total_tokens'=>0,'model'=>$chatbot->llm_model,'latency_ms'=>0,'is_fallback'=>true,'finish_reason'=>'quota_exceeded'];
         } else {
             try {
                 $result = $this->ai->chat(['chatbot_id'=>$conv->chatbot_id,'session_id'=>$conv->session_id,'query'=>$msg,'history'=>$history,'schema_name'=>$tenant->schema_name,'top_k'=>$chatbot->retrieval_top_k,'threshold'=>$chatbot->retrieval_threshold,'temperature'=>$chatbot->temperature,'max_tokens'=>$chatbot->max_tokens_response,'llm_model'=>$chatbot->llm_model,'language'=>$chatbot->response_language??'auto','system_prompt'=>$chatbot->system_prompt,'fallback_response'=>$chatbot->fallback_response]);
             } catch (\Throwable $e) {
-                $result = ['response'=>$chatbot->fallback_response??'Sorry, I could not process your request.','chunk_ids'=>[],'scores'=>[],'sources'=>[],'prompt_tokens'=>0,'completion_tokens'=>0,'total_tokens'=>0,'model'=>$chatbot->llm_model,'latency_ms'=>0,'is_fallback'=>true,'finish_reason'=>'error'];
+                $result = ['response'=>$chatbot->fallback_response??WidgetDefaults::forLanguage($chatbot->language)['processing_error_response'],'chunk_ids'=>[],'scores'=>[],'sources'=>[],'prompt_tokens'=>0,'completion_tokens'=>0,'total_tokens'=>0,'model'=>$chatbot->llm_model,'latency_ms'=>0,'is_fallback'=>true,'finish_reason'=>'error'];
             }
         }
         $assMsg = Message::create(['conversation_id'=>$conv->id,'chatbot_id'=>$conv->chatbot_id,'role'=>'assistant','content'=>$result['response'],'retrieved_chunk_ids'=>$result['chunk_ids']??[],'retrieval_scores'=>$result['scores']??[],'prompt_tokens'=>$result['prompt_tokens']??0,'completion_tokens'=>$result['completion_tokens']??0,'total_tokens'=>$result['total_tokens']??0,'cost_toman'=>$result['cost_toman']??0,'model_used'=>$result['model']??$chatbot->llm_model,'latency_ms'=>$result['latency_ms']??null,'is_fallback'=>$result['is_fallback']??false,'created_at'=>now()]);

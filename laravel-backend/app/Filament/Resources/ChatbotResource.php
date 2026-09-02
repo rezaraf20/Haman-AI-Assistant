@@ -15,6 +15,7 @@ use Filament\Notifications\Notification;
 use App\Models\ApiKey;
 use Illuminate\Support\Facades\DB;
 use App\Support\Jalali;
+use App\Support\Money;
 use App\Support\DomainNormalizer;
 use App\Filament\Resources\ChatbotResource\Pages;
 
@@ -22,9 +23,10 @@ class ChatbotResource extends Resource {
     protected static ?string $model = ChatbotIndexEntry::class;
     protected static ?string $navigationIcon = 'heroicon-o-chat-bubble-left-right';
     protected static ?int $navigationSort = 2;
-    protected static ?string $navigationLabel = 'چت‌بات‌ها';
-    protected static ?string $modelLabel = 'چت‌بات';
-    protected static ?string $pluralModelLabel = 'چت‌بات‌ها';
+
+    public static function getNavigationLabel(): string { return __('chatbot.nav'); }
+    public static function getModelLabel(): string { return __('chatbot.singular'); }
+    public static function getPluralModelLabel(): string { return __('chatbot.nav'); }
 
     // See TenantResource — no per-model Policy is registered, and Filament's
     // action visibility otherwise silently hides Create/Edit/Delete without one.
@@ -35,84 +37,84 @@ class ChatbotResource extends Resource {
     public static function form(Form $form): Form {
         return $form->schema([
             Select::make('tenant_id')
-                ->label('مشتری')
+                ->label(__('panel.tenant'))
                 ->options(fn () => Tenant::orderBy('name')->pluck('name', 'id'))
                 ->searchable()->required()
                 ->visibleOn('create'),
             Select::make('type')
-                ->label('نوع')
+                ->label(__('chatbot.type'))
                 ->options(array_combine(
                     array_map(fn ($c) => $c->value, ChatbotType::cases()),
                     array_map(fn ($c) => ucfirst($c->value), ChatbotType::cases()),
                 ))
                 ->required()
                 ->visibleOn('create'),
-            TextInput::make('name')->label('نام')->required()->maxLength(255),
-            TextInput::make('primary_domain')->label('دامنه')->maxLength(255)
+            TextInput::make('name')->label(__('common.name'))->required()->maxLength(255),
+            TextInput::make('primary_domain')->label(__('common.domain'))->maxLength(255)
                 ->dehydrateStateUsing(fn ($state) => DomainNormalizer::normalize($state))
-                ->helperText('دامنه‌ی مجاز ویجت — اگر خالی باشد هیچ محدودیتی اعمال نمی‌شود.'),
-            DateTimePicker::make('expires_at')->label('تاریخ تمدید / انقضا')
-                ->helperText('اگه خالی بذاری، این چت‌بات هیچ‌وقت خودکار معلق نمی‌شه. جاب روزانه‌ی chatbots:expire-overdue بعد از گذشتن این تاریخ معلقش می‌کنه.'),
+                ->helperText(__('chatbot.primary_domain_help')),
+            DateTimePicker::make('expires_at')->label(__('chatbot.renewal_expiry'))
+                ->helperText(__('chatbot.renewal_expiry_help')),
             TextInput::make('monthly_price_toman')
-                ->label('هزینه‌ی تمدید ماهانه (تومان)')
+                ->label(__('chatbot.monthly_price'))
                 ->numeric()
                 ->default(0)
                 ->required()
-                ->helperText('مبلغی که مشتری از کیف پول خودش، توی پرتال خودش، برای تمدید ماهانه‌ی همین یک چت‌بات پرداخت می‌کنه.'),
+                ->helperText(__('chatbot.monthly_price_help')),
         ]);
     }
 
     public static function table(Table $table): Table {
         return $table
             ->columns([
-                TextColumn::make('name')->label('نام')->searchable()->sortable()->default('(بدون نام)'),
-                TextColumn::make('primary_domain')->label('دامنه')->searchable(),
-                TextColumn::make('tenant.name')->label('مشتری')->searchable(),
-                IconColumn::make('is_active')->boolean()->label('فعال'),
+                TextColumn::make('name')->label(__('common.name'))->searchable()->sortable()->default(__('panel.chatbot_no_name')),
+                TextColumn::make('primary_domain')->label(__('common.domain'))->searchable(),
+                TextColumn::make('tenant.name')->label(__('panel.tenant'))->searchable(),
+                IconColumn::make('is_active')->boolean()->label(__('common.active')),
                 TextColumn::make('expires_at')
-                    ->label('انقضا')
+                    ->label(__('chatbot.expires'))
                     ->formatStateUsing(fn ($state) => Jalali::dateTime($state))
                     ->sortable()
                     ->color(fn ($record) => $record->expires_at && $record->expires_at->isPast() ? 'danger' : null)
-                    ->placeholder('نامحدود'),
-                TextColumn::make('monthly_price_toman')->label('هزینه/ماه')
-                    ->formatStateUsing(fn (int $state) => $state > 0 ? number_format($state) . ' ت' : '—'),
+                    ->placeholder(__('common.unlimited')),
+                TextColumn::make('monthly_price_toman')->label(__('chatbot.price_per_month'))
+                    ->formatStateUsing(fn (int $state) => $state > 0 ? Money::toman($state) : '—'),
             ])
             ->filters([
-                TernaryFilter::make('is_active')->label('فعال'),
+                TernaryFilter::make('is_active')->label(__('common.active')),
                 Filter::make('overdue')
-                    ->label('منقضی‌شده (هنوز فعاله)')
+                    ->label(__('chatbot.overdue_filter'))
                     ->query(fn ($query) => $query->where('is_active', true)->whereNotNull('expires_at')->where('expires_at', '<', now())),
             ])
             ->actions([
                 Action::make('suspend')
-                    ->label('معلق کردن')
+                    ->label(__('chatbot.suspend'))
                     ->icon('heroicon-o-no-symbol')
                     ->color('danger')
                     ->visible(fn (ChatbotIndexEntry $record) => $record->is_active)
                     ->requiresConfirmation()
-                    ->modalDescription('این کار بلافاصله ویجت چت عمومی و سینک پلاگین وردپرس این چت‌بات رو مسدود می‌کنه.')
+                    ->modalDescription(__('chatbot.suspend_description'))
                     ->action(function (ChatbotIndexEntry $record) {
                         $record->update(['is_active' => false]);
-                        Notification::make()->title("{$record->name} معلق شد")->success()->send();
+                        Notification::make()->title(__('chatbot.suspended_notice', ['name' => $record->name]))->success()->send();
                     }),
                 Action::make('reactivate')
-                    ->label('فعال‌سازی مجدد')
+                    ->label(__('chatbot.reactivate'))
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
                     ->visible(fn (ChatbotIndexEntry $record) => !$record->is_active)
                     ->action(function (ChatbotIndexEntry $record) {
                         $record->update(['is_active' => true]);
-                        Notification::make()->title("{$record->name} دوباره فعال شد")->success()->send();
+                        Notification::make()->title(__('chatbot.reactivated_notice', ['name' => $record->name]))->success()->send();
                     }),
-                Action::make('edit')->label('ویرایش')->url(fn (ChatbotIndexEntry $record) => static::getUrl('edit', ['record' => $record])),
+                Action::make('edit')->label(__('common.edit'))->url(fn (ChatbotIndexEntry $record) => static::getUrl('edit', ['record' => $record])),
                 Action::make('delete')
-                    ->label('حذف')
+                    ->label(__('common.delete'))
                     ->icon('heroicon-o-trash')
                     ->color('danger')
                     ->requiresConfirmation()
-                    ->modalHeading(fn (ChatbotIndexEntry $record) => "حذف {$record->name}؟")
-                    ->modalDescription('این چت‌بات و هر کلید API متصل بهش رو برای همیشه پاک می‌کنه. اسناد/مکالمات/پیام‌هاش توی دیتابیس تننت باقی می‌مونن (فقط خود ردیف چت‌بات حذف می‌شه) ولی دیگه در دسترس نیست. غیرقابل بازگشته.')
+                    ->modalHeading(fn (ChatbotIndexEntry $record) => __('chatbot.delete_heading', ['name' => $record->name]))
+                    ->modalDescription(__('chatbot.delete_description'))
                     ->action(function (ChatbotIndexEntry $record) {
                         $chatbotId = $record->chatbot_id;
                         $schema    = $record->schema_name;
@@ -125,7 +127,7 @@ class ChatbotResource extends Resource {
 
                         $record->delete();
 
-                        Notification::make()->title('چت‌بات حذف شد')->success()->send();
+                        Notification::make()->title(__('chatbot.deleted_notice'))->success()->send();
                     }),
             ])
             ->bulkActions([
