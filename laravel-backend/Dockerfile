@@ -63,6 +63,13 @@ COPY lang/ lang/
 # which is exactly why this went unnoticed for a while.
 COPY tests/ tests/
 COPY phpunit.xml phpunit.xml
+# create-project generates its own tests/Feature/ExampleTest.php before the
+# COPY above runs; COPY overlays our tests/ tree onto it but doesn't delete
+# files absent from our source, so the stock scaffold test survives and
+# fails (it asserts "/" returns 200, but this app has no public welcome
+# route — it's API/panel-only). Same removal pattern as the default
+# migrations below.
+RUN rm -f tests/Feature/ExampleTest.php
 COPY .env .env
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 
