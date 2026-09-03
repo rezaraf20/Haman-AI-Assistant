@@ -160,18 +160,27 @@
     });
 
     // ── Messages ───────────────────────────────────────────────────────
+    // Bot bubbles wrap their rendered text in a nested .hm-msg-text span,
+    // separate from the copy button — updateBotBubble() (used while a
+    // streamed reply is still arriving) only ever touches that span's
+    // innerHTML, so it never wipes out the copy button the way replacing
+    // the whole bubble's innerHTML would.
     function addMsg(text, role, opts) {
         opts = opts || {};
         var d = document.createElement('div');
         d.className = 'hm-msg ' + (role === 'user' ? 'user' : 'bot');
         if (role === 'bot') {
-            d.innerHTML = mdToHtml(text);
+            var textSpan = document.createElement('span');
+            textSpan.className = 'hm-msg-text';
+            textSpan.innerHTML = mdToHtml(text);
+            d.appendChild(textSpan);
+            d.dataset.rawText = text;
             var copyBtn = document.createElement('button');
             copyBtn.type = 'button';
             copyBtn.className = 'hm-msg-copy';
             copyBtn.setAttribute('aria-label', CFG.i18n.copyLabel);
             copyBtn.innerHTML = '⧉';
-            copyBtn.addEventListener('click', function () { copyMessage(text, copyBtn); });
+            copyBtn.addEventListener('click', function () { copyMessage(d.dataset.rawText, copyBtn); });
             d.appendChild(copyBtn);
         } else {
             d.textContent = text;
@@ -183,6 +192,13 @@
             unreadDot.classList.add('hm-visible');
         }
         return d;
+    }
+
+    function updateBotBubble(bubbleEl, fullText) {
+        var span = bubbleEl.querySelector('.hm-msg-text');
+        if (span) span.innerHTML = mdToHtml(fullText);
+        bubbleEl.dataset.rawText = fullText;
+        if (isNearBottom()) scrollToBottom(false);
     }
 
     function copyMessage(text, btnEl) {
@@ -290,6 +306,15 @@
             .catch(function () { unavailable = true; addMsg(CFG.unavailableMessage, 'bot'); });
     }
 
+    // Streaming is opt-in via the Accept header, on a per-browser-capability
+    // basis (fetch + ReadableStream both needed to actually read a stream).
+    // If the browser can't stream, we never send that header at all, so the
+    // backend never even attempts SSE for that request — ChatController::
+    // sendMessage() only branches into streaming on the literal
+    // "text/event-stream" string, so this degrades to the exact same JSON
+    // response every older/legacy client already gets.
+    var canStream = typeof fetch !== 'undefined' && typeof ReadableStream !== 'undefined' && typeof TextDecoder !== 'undefined';
+
     function send(text) {
         var t = (typeof text === 'string' ? text : inp.value).trim();
         if (!t || !convId) return;
@@ -298,19 +323,91 @@
         addMsg(t, 'user');
         sendBtn.disabled = true;
         showTyping();
+
         fetch(H.apiUrl + '/chat/message', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': canStream ? 'text/event-stream' : 'application/json',
+            },
             body: JSON.stringify({ chatbot_id: H.chatbotId, conversation_id: convId, message: t, session_id: H.sessionId }),
         })
-            .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
-            .then(function (res) {
-                sendBtn.disabled = false;
-                hideTyping();
-                if (!res.ok) { addMsg(res.data && res.data.error ? res.data.error : CFG.genericErrorMessage, 'bot'); return; }
-                if (res.data.data && res.data.data.response) addMsg(res.data.data.response, 'bot');
+            .then(function (r) {
+                var contentType = (r.headers.get('Content-Type') || '');
+                if (canStream && contentType.indexOf('text/event-stream') !== -1 && r.body) {
+                    return handleStreamResponse(r);
+                }
+                return r.json().then(function (data) { return { ok: r.ok, data: data }; }).then(handleJsonResponse);
             })
             .catch(function () { sendBtn.disabled = false; hideTyping(); addMsg(CFG.connectionErrorMessage, 'bot'); });
+    }
+
+    function handleJsonResponse(res) {
+        sendBtn.disabled = false;
+        hideTyping();
+        if (!res.ok) { addMsg(res.data && res.data.error ? res.data.error : CFG.genericErrorMessage, 'bot'); return; }
+        if (res.data.data && res.data.data.response) addMsg(res.data.data.response, 'bot');
+    }
+
+    // Reads the SSE body as it arrives, growing one bot bubble token-by-token
+    // instead of waiting for the whole reply. Falls back to a plain error
+    // message if the stream ends having sent zero content (the server always
+    // emits at least the configured fallback text as a delta on failure, so
+    // this really only guards a truly dead/cut connection).
+    function handleStreamResponse(r) {
+        var reader = r.body.getReader();
+        var decoder = new TextDecoder();
+        var buffer = '';
+        var bubble = null;
+        var fullText = '';
+
+        function processFrame(frame) {
+            var eventName = 'message';
+            var dataLines = [];
+            frame.split('\n').forEach(function (line) {
+                if (line.indexOf('event:') === 0) eventName = line.slice(6).trim();
+                else if (line.indexOf('data:') === 0) dataLines.push(line.slice(5).replace(/^ /, ''));
+            });
+            if (!dataLines.length) return;
+            var data;
+            try { data = JSON.parse(dataLines.join('\n')); } catch (e) { return; }
+
+            if (eventName === 'error') {
+                sendBtn.disabled = false;
+                hideTyping();
+                if (!bubble) addMsg(CFG.genericErrorMessage, 'bot');
+                return;
+            }
+            if (eventName === 'done') {
+                sendBtn.disabled = false;
+                return;
+            }
+            if (data.delta) {
+                if (!bubble) { hideTyping(); bubble = addMsg('', 'bot'); }
+                fullText += data.delta;
+                updateBotBubble(bubble, fullText);
+            }
+        }
+
+        function pump() {
+            return reader.read().then(function (result) {
+                if (result.done) {
+                    sendBtn.disabled = false;
+                    hideTyping();
+                    if (!bubble) addMsg(CFG.genericErrorMessage, 'bot');
+                    return;
+                }
+                buffer += decoder.decode(result.value, { stream: true });
+                var idx;
+                while ((idx = buffer.indexOf('\n\n')) !== -1) {
+                    processFrame(buffer.slice(0, idx));
+                    buffer = buffer.slice(idx + 2);
+                }
+                return pump();
+            });
+        }
+
+        return pump();
     }
 
     if (qqBox) {

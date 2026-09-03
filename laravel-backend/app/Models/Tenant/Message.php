@@ -13,6 +13,7 @@ class Message extends Model
         'retrieved_chunk_ids' => 'array',
         'retrieval_scores'    => 'array',
         'is_fallback'         => 'boolean',
+        'is_unanswered'       => 'boolean',
         'prompt_tokens'       => 'integer',
         'completion_tokens'   => 'integer',
         'total_tokens'        => 'integer',
