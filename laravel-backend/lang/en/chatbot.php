@@ -1,6 +1,8 @@
 <?php
 return [
     'active_chatbots_stat' => 'Active Chatbots',
+    'appearance_action' => 'Widget Appearance',
+    'appearance_saved' => 'Widget appearance saved',
     'bonus_tokens_desc' => "These are used only after your plan's monthly quota runs out, and never expire.",
     'bonus_tokens_heading' => 'Purchased Bonus Tokens',
     'buy_new_nav' => 'Buy New Chatbot',
@@ -22,7 +24,9 @@ return [
     'nav' => 'Chatbots',
     'overdue_filter' => 'Overdue (still active)',
     'price_per_month' => 'Price/Month',
+    'primary_color_label' => 'Widget Primary Color',
     'primary_domain_help' => "The widget's allowed domain — if empty, no restriction is enforced.",
+    'powered_by_toggle_label' => 'Show "Powered by HamanTech"',
     'purchase_description' => 'New chatbot purchase: :name (:type)',
     'purchased_success' => 'Chatbot purchased successfully',
     'reactivate' => 'Reactivate',

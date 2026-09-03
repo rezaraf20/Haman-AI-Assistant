@@ -166,6 +166,24 @@ class ChatController extends BaseApiController
         ]);
     }
 
+    // Companion to history() above, keyed by conversation_id instead of
+    // session_id — what the WordPress widget uses to restore a conversation
+    // it persisted in localStorage across a page reload, when it no longer
+    // has (or trusts) the original session_id's in-memory state.
+    public function conversationMessages(Request $req, string $conversationId): JsonResponse
+    {
+        $chatbotId = $req->query('chatbot_id');
+        if (!$chatbotId) return $this->notFound('chatbot_id required');
+        $index = $this->setSchemaFromChatbot($chatbotId, $req->attributes->get('chatbot_index'));
+        if (!$index) return $this->notFound('Chatbot not found');
+        $conv = Conversation::where('id', $conversationId)->where('chatbot_id', $chatbotId)->first();
+        if (!$conv) return $this->notFound('Conversation not found');
+        return $this->ok([
+            'conversation_id' => $conv->id,
+            'messages'        => $conv->messages()->get(['id', 'role', 'content', 'created_at']),
+        ]);
+    }
+
     public function submitFeedback(Request $req): JsonResponse
     {
         $req->validate(['message_id' => 'required|uuid', 'rating' => 'required|in:1,-1']);

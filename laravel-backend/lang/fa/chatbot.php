@@ -1,6 +1,8 @@
 <?php
 return [
     'active_chatbots_stat' => 'چت‌بات‌های فعال',
+    'appearance_action' => 'ظاهر ویجت',
+    'appearance_saved' => 'ظاهر ویجت ذخیره شد',
     'bonus_tokens_desc' => 'این‌ها بعد از تمام‌شدن سقف ماهانه‌ی پلن شما مصرف می‌شوند و منقضی نمی‌شوند.',
     'bonus_tokens_heading' => 'توکن اضافه خریداری‌شده',
     'buy_new_nav' => 'خرید چت‌بات جدید',
@@ -22,7 +24,9 @@ return [
     'nav' => 'چت‌بات‌ها',
     'overdue_filter' => 'منقضی‌شده (هنوز فعاله)',
     'price_per_month' => 'هزینه/ماه',
+    'primary_color_label' => 'رنگ اصلی ویجت',
     'primary_domain_help' => 'دامنه‌ی مجاز ویجت — اگر خالی باشد هیچ محدودیتی اعمال نمی‌شود.',
+    'powered_by_toggle_label' => 'نمایش «قدرت‌گرفته از هامان‌تک»',
     'purchase_description' => 'خرید چت‌بات جدید: :name (:type)',
     'purchased_success' => 'چت‌بات با موفقیت خریداری شد',
     'reactivate' => 'فعال‌سازی مجدد',

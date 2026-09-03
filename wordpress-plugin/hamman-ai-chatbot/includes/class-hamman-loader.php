@@ -20,7 +20,7 @@ class Hamman_Loader {
         $this->add_action( 'admin_enqueue_scripts', $admin,  'enqueue_assets' );
         $this->add_action( 'admin_post_hamman_save_settings', $admin, 'save_settings' );
         $this->add_action( 'admin_post_hamman_manual_sync',   $admin, 'manual_sync' );
-        $this->add_action( 'wp_footer',            $public, 'inject_widget' );
+        $this->add_action( 'wp_enqueue_scripts',   $public, 'enqueue_assets' );
         $this->add_action( 'hamman_hourly_sync',   $sync,   'run_incremental_sync' );
         $this->add_action( 'rest_api_init',        new Hamman_Webhook_Handler(), 'register_routes' );
 

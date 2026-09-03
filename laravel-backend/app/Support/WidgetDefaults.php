@@ -17,7 +17,21 @@ namespace App\Support;
  */
 class WidgetDefaults {
     public static function forLanguage(?string $language): array {
-        return $language === 'en' ? self::english() : self::persian();
+        return array_merge(self::common(), $language === 'en' ? self::english() : self::persian());
+    }
+
+    // Language-independent — not fa/en text, so both branches merge the same
+    // values. primary_color/powered_by_enabled are admin-settable per chatbot
+    // (see the customer portal's MyChatbots "appearance" action, which writes
+    // straight into widget_config and so always overrides these defaults, the
+    // same way an explicit send_button_label etc. already does).
+    private static function common(): array {
+        return [
+            'primary_color'       => '#1B3A6B',
+            'powered_by_enabled'  => true,
+            'powered_by_name'     => 'HamanTech',
+            'powered_by_url'      => 'https://hamantech.ir',
+        ];
     }
 
     private static function persian(): array {
