@@ -56,6 +56,13 @@ COPY resources/ resources/
 # omitted here for a while after it was first added, which is exactly the
 # kind of thing that's obvious once broken and invisible until then.
 COPY lang/ lang/
+# tests/ + phpunit.xml: without these the image only ever carries Laravel's
+# default create-project scaffold test, not this project's real suite — so
+# `vendor/bin/phpunit` inside a deployed/throwaway container silently proves
+# nothing. CI runs against the checked-out repo directly and was unaffected,
+# which is exactly why this went unnoticed for a while.
+COPY tests/ tests/
+COPY phpunit.xml phpunit.xml
 COPY .env .env
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 
