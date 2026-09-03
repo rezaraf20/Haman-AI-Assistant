@@ -30,7 +30,7 @@ class OtpLogin extends Component {
     public function sendCode(SmsService $sms): void {
         $this->error = null;
         $this->validate(['phone' => ['required', 'regex:/^09\d{9}$/']], [
-            'phone.regex' => 'شماره موبایل را به‌صورت صحیح وارد کنید (مثال: 09123456789).',
+            'phone.regex' => __('validation.phone_format'),
         ]);
 
         $result = $sms->sendOtp($this->phone);
@@ -38,7 +38,7 @@ class OtpLogin extends Component {
             $this->error = $result['message'];
             return;
         }
-        $this->info = 'کد تایید ارسال شد.';
+        $this->info = __('validation.otp_sent');
         $this->step = 'otp';
     }
 
@@ -50,7 +50,7 @@ class OtpLogin extends Component {
             $this->error = $result['message'];
             return;
         }
-        $this->info = 'کد تایید مجدداً ارسال شد.';
+        $this->info = __('validation.otp_resent');
     }
 
     public function verifyCode(SmsService $sms): void {
@@ -82,11 +82,11 @@ class OtpLogin extends Component {
             'email'       => 'required|email|max:255|unique:users,email',
             'address'     => 'required|string|max:1000',
         ], [], [
-            'first_name'  => 'نام',
-            'last_name'   => 'نام خانوادگی',
-            'national_id' => 'کد ملی',
-            'email'       => 'ایمیل',
-            'address'     => 'آدرس',
+            'first_name'  => __('panel.first_name'),
+            'last_name'   => __('panel.last_name'),
+            'national_id' => __('panel.national_id'),
+            'email'       => __('common.email'),
+            'address'     => __('common.address'),
         ]);
 
         $result = $tenantService->registerViaPhone([

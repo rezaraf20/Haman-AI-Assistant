@@ -14,14 +14,16 @@ use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Columns\{TextColumn, BadgeColumn};
 use Filament\Notifications\Notification;
 use App\Support\Jalali;
+use App\Support\Money;
 
 class Wallet extends Page implements HasForms, HasTable {
     use InteractsWithForms, InteractsWithTable;
 
     protected static string $view = 'filament.customer.pages.wallet';
     protected static ?string $navigationIcon = 'heroicon-o-wallet';
-    protected static ?string $navigationLabel = 'کیف پول';
-    protected static ?string $title = 'کیف پول';
+
+    public static function getNavigationLabel(): string { return __('wallet.nav'); }
+    public function getTitle(): string { return __('wallet.nav'); }
 
     public ?array $data = [];
 
@@ -31,10 +33,10 @@ class Wallet extends Page implements HasForms, HasTable {
         // Zarinpal redirected back here after payment — surface the outcome.
         $topup = request()->query('topup');
         if ($topup === 'success') {
-            Notification::make()->title('پرداخت با موفقیت انجام شد')->success()->send();
+            Notification::make()->title(__('wallet.payment_success'))->success()->send();
         } elseif ($topup === 'failed') {
             Notification::make()
-                ->title('پرداخت ناموفق بود')
+                ->title(__('wallet.payment_failed'))
                 ->body(request()->query('message', ''))
                 ->danger()
                 ->send();
@@ -44,7 +46,7 @@ class Wallet extends Page implements HasForms, HasTable {
     public function form(Form $form): Form {
         return $form->schema([
             TextInput::make('amount_toman')
-                ->label('مبلغ شارژ (تومان)')
+                ->label(__('wallet.topup_amount'))
                 ->numeric()
                 ->required()
                 ->minValue(10000)
@@ -70,7 +72,7 @@ class Wallet extends Page implements HasForms, HasTable {
             $this->redirect($result['redirect_url']);
         } else {
             Notification::make()
-                ->title('شروع پرداخت ناموفق بود')
+                ->title(__('wallet.topup_init_failed'))
                 ->body($result['message'] ?? '')
                 ->danger()
                 ->send();
@@ -81,22 +83,30 @@ class Wallet extends Page implements HasForms, HasTable {
         return $table
             ->query(fn () => WalletTransaction::query()->where('tenant_id', auth()->user()->tenant_id))
             ->columns([
-                TextColumn::make('created_at')->label('تاریخ')->formatStateUsing(fn ($state) => Jalali::dateTime($state)),
-                BadgeColumn::make('type')->label('نوع')->colors([
+                TextColumn::make('created_at')->label(__('wallet.date'))->formatStateUsing(fn ($state) => Jalali::dateTime($state)),
+                BadgeColumn::make('type')->label(__('wallet.type'))->colors([
                     'success' => 'topup',
                     'danger'  => 'plan_charge',
                     'warning' => 'admin_adjustment',
                     'gray'    => 'refund',
-                ]),
-                TextColumn::make('amount_toman')->label('مبلغ (تومان)')
+                ])->formatStateUsing(fn (string $state) => match ($state) {
+                    'topup' => __('wallet.type_topup'), 'plan_charge' => __('wallet.type_plan_charge'),
+                    'admin_adjustment' => __('wallet.type_admin_adjustment'), 'refund' => __('wallet.type_refund'),
+                    default => $state,
+                }),
+                TextColumn::make('amount_toman')->label(__('wallet.amount_toman_col'))
                     ->formatStateUsing(fn (int $state) => number_format($state))
                     ->color(fn (int $state) => $state >= 0 ? 'success' : 'danger'),
-                BadgeColumn::make('status')->label('وضعیت')->colors([
+                BadgeColumn::make('status')->label(__('common.status'))->colors([
                     'success' => 'completed',
                     'warning' => 'pending',
                     'danger'  => ['failed', 'reversed'],
-                ]),
-                TextColumn::make('description')->label('توضیحات')->limit(40),
+                ])->formatStateUsing(fn (string $state) => match ($state) {
+                    'completed' => __('wallet.status_completed'), 'pending' => __('wallet.status_pending'),
+                    'failed' => __('wallet.status_failed'), 'reversed' => __('wallet.status_reversed'),
+                    default => $state,
+                }),
+                TextColumn::make('description')->label(__('common.description'))->limit(40),
             ])
             ->defaultSort('created_at', 'desc');
     }

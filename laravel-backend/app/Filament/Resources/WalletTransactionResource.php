@@ -17,9 +17,10 @@ class WalletTransactionResource extends Resource {
     protected static ?string $model = WalletTransaction::class;
     protected static ?string $navigationIcon = 'heroicon-o-banknotes';
     protected static ?int $navigationSort = 5;
-    protected static ?string $navigationLabel = 'تراکنش‌های کیف پول';
-    protected static ?string $modelLabel = 'تراکنش';
-    protected static ?string $pluralModelLabel = 'تراکنش‌ها';
+
+    public static function getNavigationLabel(): string { return __('wallet.transactions_nav'); }
+    public static function getModelLabel(): string { return __('wallet.transaction_singular'); }
+    public static function getPluralModelLabel(): string { return __('wallet.transaction_plural'); }
 
     // Only "create" is allowed here (for manual admin adjustments), via the
     // WalletService ledger helper — no Edit/Delete: transactions are an
@@ -31,56 +32,62 @@ class WalletTransactionResource extends Resource {
     public static function form(Form $form): Form {
         return $form->schema([
             Select::make('tenant_id')
-                ->label('مشتری')
+                ->label(__('panel.tenant'))
                 ->options(fn () => Tenant::pluck('name', 'id'))
                 ->searchable()
                 ->required(),
             TextInput::make('amount_toman')
-                ->label('مبلغ (تومان)')
+                ->label(__('wallet.amount_toman'))
                 ->numeric()
                 ->required()
-                ->helperText('برای شارژ عدد مثبت، برای کسر عدد منفی وارد کنید.'),
-            Textarea::make('description')->label('توضیحات')->required()->placeholder('دلیل این تغییر دستی (مثلاً تخفیف یا واریز کارت‌به‌کارت)'),
+                ->helperText(__('wallet.amount_toman_help')),
+            Textarea::make('description')->label(__('common.description'))->required()->placeholder(__('wallet.adjustment_reason_placeholder')),
         ]);
     }
 
     public static function table(Table $table): Table {
         return $table
             ->columns([
-                TextColumn::make('created_at')->label('تاریخ')->formatStateUsing(fn ($state) => Jalali::dateTime($state))->sortable(),
-                TextColumn::make('tenant.name')->label('مشتری')->searchable(),
-                BadgeColumn::make('type')->label('نوع')->colors([
+                TextColumn::make('created_at')->label(__('wallet.date'))->formatStateUsing(fn ($state) => Jalali::dateTime($state))->sortable(),
+                TextColumn::make('tenant.name')->label(__('panel.tenant'))->searchable(),
+                BadgeColumn::make('type')->label(__('wallet.type'))->colors([
                     'success' => 'topup',
                     'danger'  => 'plan_charge',
                     'warning' => 'admin_adjustment',
                     'gray'    => 'refund',
                 ])->formatStateUsing(fn (string $state) => match ($state) {
-                    'topup' => 'شارژ', 'plan_charge' => 'کسر بابت خرید', 'admin_adjustment' => 'تنظیم دستی', 'refund' => 'بازگشت وجه', default => $state,
+                    'topup' => __('wallet.type_topup'), 'plan_charge' => __('wallet.type_plan_charge'),
+                    'admin_adjustment' => __('wallet.type_admin_adjustment'), 'refund' => __('wallet.type_refund'),
+                    default => $state,
                 }),
-                TextColumn::make('amount_toman')->label('مبلغ')
+                TextColumn::make('amount_toman')->label(__('wallet.amount'))
                     ->formatStateUsing(fn (int $state) => number_format($state))
                     ->color(fn (int $state) => $state >= 0 ? 'success' : 'danger'),
-                TextColumn::make('balance_after_toman')->label('موجودی پس از تراکنش')
+                TextColumn::make('balance_after_toman')->label(__('wallet.balance_after'))
                     ->formatStateUsing(fn (int $state) => number_format($state)),
-                BadgeColumn::make('status')->label('وضعیت')->colors([
+                BadgeColumn::make('status')->label(__('common.status'))->colors([
                     'success' => 'completed',
                     'warning' => 'pending',
                     'danger'  => ['failed', 'reversed'],
                 ])->formatStateUsing(fn (string $state) => match ($state) {
-                    'completed' => 'موفق', 'pending' => 'در انتظار', 'failed' => 'ناموفق', 'reversed' => 'برگشت‌خورده', default => $state,
+                    'completed' => __('wallet.status_completed'), 'pending' => __('wallet.status_pending'),
+                    'failed' => __('wallet.status_failed'), 'reversed' => __('wallet.status_reversed'),
+                    default => $state,
                 }),
-                TextColumn::make('gateway')->label('درگاه')->placeholder('—'),
-                TextColumn::make('gateway_ref_id')->label('شماره پیگیری')->placeholder('—')->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('description')->label('توضیحات')->limit(40),
+                TextColumn::make('gateway')->label(__('wallet.gateway'))->placeholder('—'),
+                TextColumn::make('gateway_ref_id')->label(__('wallet.gateway_ref_id'))->placeholder('—')->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('description')->label(__('common.description'))->limit(40),
             ])
             ->filters([
-                SelectFilter::make('status')->label('وضعیت')->options([
-                    'pending' => 'در انتظار', 'completed' => 'موفق', 'failed' => 'ناموفق', 'reversed' => 'برگشت‌خورده',
+                SelectFilter::make('status')->label(__('common.status'))->options([
+                    'pending' => __('wallet.status_pending'), 'completed' => __('wallet.status_completed'),
+                    'failed' => __('wallet.status_failed'), 'reversed' => __('wallet.status_reversed'),
                 ]),
-                SelectFilter::make('type')->label('نوع')->options([
-                    'topup' => 'شارژ', 'plan_charge' => 'کسر بابت خرید', 'admin_adjustment' => 'تنظیم دستی', 'refund' => 'بازگشت وجه',
+                SelectFilter::make('type')->label(__('wallet.type'))->options([
+                    'topup' => __('wallet.type_topup'), 'plan_charge' => __('wallet.type_plan_charge'),
+                    'admin_adjustment' => __('wallet.type_admin_adjustment'), 'refund' => __('wallet.type_refund'),
                 ]),
-                SelectFilter::make('tenant_id')->relationship('tenant', 'name')->label('مشتری')->searchable(),
+                SelectFilter::make('tenant_id')->relationship('tenant', 'name')->label(__('panel.tenant'))->searchable(),
             ])
             ->defaultSort('created_at', 'desc');
     }

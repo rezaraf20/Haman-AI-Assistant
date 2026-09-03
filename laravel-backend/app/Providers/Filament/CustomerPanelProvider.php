@@ -13,7 +13,9 @@ use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
-use App\Http\Middleware\SetPersianLocale;
+use App\Http\Middleware\SetLocale;
+use Filament\View\PanelsRenderHook;
+use Illuminate\Support\HtmlString;
 
 // Second Filament panel, entirely separate from AdminPanelProvider — tenant
 // customers log in here and only ever see their own tenant's data. Resources/
@@ -25,7 +27,7 @@ class CustomerPanelProvider extends PanelProvider {
         return $panel
             ->id('customer')
             ->path('portal')
-            ->brandName('Haman AI — پرتال مشتری')
+            ->brandName(fn () => 'Haman AI — ' . __('common.customer_portal'))
             // No ->login() — auth is phone+SMS-OTP via the plain Livewire flow
             // at routes/web.php's /portal/login (app/Livewire/OtpLogin.php),
             // not Filament's built-in email/password login page. It still
@@ -34,6 +36,18 @@ class CustomerPanelProvider extends PanelProvider {
             // like its own login would — bootstrap/app.php's redirectGuestsTo
             // sends unauthenticated /portal* visitors to that route instead.
             ->colors(['primary' => '#1B3A6B'])
+            // See AdminPanelProvider for why this is a render hook and not
+            // ->font() (whose $family parameter is a plain, eagerly-evaluated
+            // string, not string|Closure), and why it overrides the
+            // `--font-family` custom property rather than body/.fi-body's
+            // font-family — Filament's compiled CSS reads fonts from that
+            // variable on every utility class, not from inheritance.
+            ->renderHook(
+                PanelsRenderHook::HEAD_END,
+                fn () => new HtmlString(app()->getLocale() === 'fa'
+                    ? '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=vazirmatn:400,500,600,700"><style>:root{--font-family:"Vazirmatn"}</style>'
+                    : '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=inter:400,500,600,700"><style>:root{--font-family:"Inter"}</style>'),
+            )
             // discoverPages() only picks up files under Filament/Customer/Pages
             // — it does NOT auto-register Filament's own built-in Dashboard
             // page (that only happens when a panel's pages are left at their
@@ -46,7 +60,7 @@ class CustomerPanelProvider extends PanelProvider {
             ->discoverPages(in: app_path('Filament/Customer/Pages'), for: 'App\\Filament\\Customer\\Pages')
             ->discoverWidgets(in: app_path('Filament/Customer/Widgets'), for: 'App\\Filament\\Customer\\Widgets')
             ->middleware([
-                SetPersianLocale::class,
+                SetLocale::class,
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,

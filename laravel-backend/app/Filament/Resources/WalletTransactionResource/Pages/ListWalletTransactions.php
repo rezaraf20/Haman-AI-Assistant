@@ -9,6 +9,6 @@ class ListWalletTransactions extends ListRecords {
     protected static string $resource = WalletTransactionResource::class;
 
     protected function getHeaderActions(): array {
-        return [CreateAction::make()->label('تنظیم دستی')];
+        return [CreateAction::make()->label(__('wallet.manual_adjustment'))];
     }
 }

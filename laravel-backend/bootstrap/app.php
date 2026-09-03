@@ -16,6 +16,13 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // Applied to the whole 'web' group (not just each Filament panel's own
+        // middleware array) specifically so it also covers Livewire's internal
+        // AJAX update endpoint and the plain /portal/login route — both sit
+        // outside any panel's route registration, and OtpLogin's component
+        // methods (sendCode/verifyCode/completeProfile) run through the former,
+        // not the page's own initial GET request.
+        $middleware->web(append: [\App\Http\Middleware\SetLocale::class]);
         $middleware->alias([
             'auth.apikey'    => \App\Http\Middleware\AuthenticateTenantApiKey::class,
             'tenant.schema'  => \App\Http\Middleware\SetTenantSchema::class,

@@ -11,42 +11,40 @@ use Filament\Tables\Columns\{TextColumn, IconColumn};
 use Filament\Tables\Actions\Action;
 use Filament\Notifications\Notification;
 use App\Support\Jalali;
+use App\Support\Money;
 
 class MyChatbots extends Page implements HasTable {
     use InteractsWithTable;
 
     protected static string $view = 'filament.customer.pages.my-chatbots';
     protected static ?string $navigationIcon = 'heroicon-o-chat-bubble-left-right';
-    protected static ?string $navigationLabel = 'چت‌بات‌های من';
-    protected static ?string $title = 'چت‌بات‌های من';
+
+    public static function getNavigationLabel(): string { return __('chatbot.my_chatbots_nav'); }
+    public function getTitle(): string { return __('chatbot.my_chatbots_nav'); }
 
     public function table(Table $table): Table {
         return $table
             ->query(fn () => ChatbotIndexEntry::query()->where('tenant_id', auth()->user()->tenant_id))
             ->columns([
-                TextColumn::make('name')->label('نام')->default('(بدون نام)'),
-                TextColumn::make('primary_domain')->label('دامنه')->placeholder('—'),
-                IconColumn::make('is_active')->boolean()->label('فعال'),
-                TextColumn::make('expires_at')->label('تاریخ انقضا')->formatStateUsing(fn ($state) => Jalali::date($state))
-                    ->placeholder('نامحدود')
+                TextColumn::make('name')->label(__('common.name'))->default(__('panel.chatbot_no_name')),
+                TextColumn::make('primary_domain')->label(__('common.domain'))->placeholder('—'),
+                IconColumn::make('is_active')->boolean()->label(__('common.active')),
+                TextColumn::make('expires_at')->label(__('chatbot.expiry_date'))->formatStateUsing(fn ($state) => Jalali::date($state))
+                    ->placeholder(__('common.unlimited'))
                     ->color(fn ($record) => $record->expires_at && $record->expires_at->isPast() ? 'danger' : null),
-                TextColumn::make('monthly_price_toman')->label('هزینه تمدید ماهانه')
-                    ->formatStateUsing(fn (int $state) => $state > 0 ? number_format($state) . ' تومان' : 'تماس با پشتیبانی'),
+                TextColumn::make('monthly_price_toman')->label(__('chatbot.monthly_renewal_cost'))
+                    ->formatStateUsing(fn (int $state) => $state > 0 ? Money::toman($state) : __('chatbot.contact_support')),
             ])
             ->actions([
                 Action::make('renew')
-                    ->label('تمدید از کیف پول')
+                    ->label(__('chatbot.renew_action'))
                     ->icon('heroicon-o-arrow-path')
                     ->color('success')
                     ->visible(fn (ChatbotIndexEntry $record) => $record->monthly_price_toman > 0)
                     ->requiresConfirmation()
-                    ->modalDescription(fn (ChatbotIndexEntry $record) => "مبلغ {$this->formatToman($record->monthly_price_toman)} از کیف پول شما کسر می‌شود و یک ماه به تاریخ انقضا اضافه می‌شود.")
+                    ->modalDescription(fn (ChatbotIndexEntry $record) => __('chatbot.renew_confirm_description', ['amount' => Money::toman($record->monthly_price_toman)]))
                     ->action(fn (ChatbotIndexEntry $record) => $this->renew($record)),
             ]);
-    }
-
-    private function formatToman(int $amount): string {
-        return number_format($amount) . ' تومان';
     }
 
     private function renew(ChatbotIndexEntry $record): void {
@@ -55,8 +53,8 @@ class MyChatbots extends Page implements HasTable {
 
         if ($tenant->wallet_balance_toman < $price) {
             Notification::make()
-                ->title('موجودی کیف پول کافی نیست')
-                ->body('لطفاً ابتدا کیف پول خود را شارژ کنید.')
+                ->title(__('wallet.insufficient_balance'))
+                ->body(__('wallet.topup_first'))
                 ->danger()
                 ->send();
             return;
@@ -66,7 +64,7 @@ class MyChatbots extends Page implements HasTable {
             $tenant,
             'plan_charge',
             -$price,
-            ['description' => "تمدید چت‌بات: {$record->name}"],
+            ['description' => __('chatbot.renewal_description', ['name' => $record->name])],
         );
 
         $base = ($record->expires_at && $record->expires_at->isFuture()) ? $record->expires_at : now();
@@ -75,6 +73,6 @@ class MyChatbots extends Page implements HasTable {
             'is_active'  => true,
         ]);
 
-        Notification::make()->title('تمدید با موفقیت انجام شد')->success()->send();
+        Notification::make()->title(__('chatbot.renewed_success'))->success()->send();
     }
 }

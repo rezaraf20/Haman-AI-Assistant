@@ -6,6 +6,7 @@ use App\Models\Tenant\{Chatbot, Conversation};
 use Illuminate\Http\{Request, JsonResponse};
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
+use App\Support\WidgetDefaults;
 
 class ChatController extends BaseApiController
 {
@@ -26,6 +27,16 @@ class ChatController extends BaseApiController
         $tenant = \App\Models\Tenant::find($index->tenant_id);
         if ($tenant) app()->instance('current_tenant', $tenant);
         return $index;
+    }
+
+    // Widget UI text (send button, placeholder, error messages) defaults per
+    // the chatbot's own `language` column — see App\Support\WidgetDefaults —
+    // with anything the admin explicitly set via updateWidgetSettings()
+    // taking priority. The WordPress plugin applies this once it receives it;
+    // it has its own get_locale()-based fallback for the very first paint,
+    // before this response exists.
+    private function mergedWidgetConfig(Chatbot $chatbot): array {
+        return array_merge(WidgetDefaults::forLanguage($chatbot->language), $chatbot->widget_config ?? []);
     }
 
     public function createSession(Request $req): JsonResponse
@@ -53,7 +64,7 @@ class ChatController extends BaseApiController
                 'session_id'      => $existing->session_id,
                 'welcome_message' => $chatbot->welcome_message,
                 'language'        => $chatbot->language,
-                'widget_config'   => $chatbot->widget_config,
+                'widget_config'   => $this->mergedWidgetConfig($chatbot),
             ]);
         }
 
@@ -119,7 +130,11 @@ class ChatController extends BaseApiController
         if ($maxMsgs && $blockMins) {
             $key = 'hamman-chat:' . $conv->chatbot_id . ':' . $req->ip();
             if (RateLimiter::tooManyAttempts($key, (int) $maxMsgs)) {
-                return $this->tooManyRequests('تعداد پیام‌های مجاز شما به پایان رسیده. لطفاً چند دقیقه دیگر دوباره امتحان کنید.', RateLimiter::availableIn($key));
+                $rateLimitMessage = $chatbot->widget_config['rate_limit_message']
+                    ?? ($chatbot->language === 'en'
+                        ? "You've reached the message limit. Please try again in a few minutes."
+                        : 'تعداد پیام‌های مجاز شما به پایان رسیده. لطفاً چند دقیقه دیگر دوباره امتحان کنید.'); // i18n:widget
+                return $this->tooManyRequests($rateLimitMessage, RateLimiter::availableIn($key));
             }
             RateLimiter::hit($key, (int) $blockMins * 60);
         }

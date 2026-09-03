@@ -13,7 +13,9 @@ use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
-use App\Http\Middleware\SetPersianLocale;
+use App\Http\Middleware\SetLocale;
+use Filament\View\PanelsRenderHook;
+use Illuminate\Support\HtmlString;
 
 class AdminPanelProvider extends PanelProvider {
     public function panel(Panel $panel): Panel {
@@ -24,6 +26,27 @@ class AdminPanelProvider extends PanelProvider {
             ->brandName('Haman AI')
             ->login()
             ->colors(['primary' => '#1B3A6B'])
+            // Not ->font(): that method's $family parameter is a plain
+            // `string`, not `string|Closure` — Filament needs the name eagerly,
+            // at boot, to register the font asset, which is before SetLocale
+            // has run (panel() executes during service-provider boot, ahead of
+            // the request pipeline). A render hook's closure runs per-request
+            // instead, which is what locale-dependent output actually needs.
+            //
+            // Overriding just body/.fi-body's font-family does NOT work: every
+            // Filament/Tailwind utility class resolves fonts via the
+            // `--font-family` CSS custom property (compiled CSS is littered
+            // with `font-family:var(--font-family),ui-sans-serif,...`), which
+            // Filament itself sets via its own `<style>:root{--font-family:
+            // 'Inter';...}</style>` block earlier in <head>. This render hook
+            // runs at HEAD_END (after that block), so redefining the same
+            // custom property on :root here wins by source order.
+            ->renderHook(
+                PanelsRenderHook::HEAD_END,
+                fn () => new HtmlString(app()->getLocale() === 'fa'
+                    ? '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=vazirmatn:400,500,600,700"><style>:root{--font-family:"Vazirmatn"}</style>'
+                    : '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=inter:400,500,600,700"><style>:root{--font-family:"Inter"}</style>'),
+            )
             // Same fix as CustomerPanelProvider: discoverPages() alone never
             // registers Filament's built-in Dashboard, so /admin's root was
             // silently redirecting straight to the first nav resource instead
@@ -32,7 +55,7 @@ class AdminPanelProvider extends PanelProvider {
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
             ->middleware([
-                SetPersianLocale::class,
+                SetLocale::class,
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,

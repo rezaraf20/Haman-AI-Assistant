@@ -11,12 +11,38 @@ class Hamman_Public {
         $qq = get_option('hamman_quick_questions', []);
         if (!is_array($qq)) $qq = [];
 
+        // First-paint-only fallback, before /chat/session has responded with
+        // this chatbot's own widget_config (see ChatController::
+        // mergedWidgetConfig() and App\Support\WidgetDefaults on the backend)
+        // — that response, once it lands, always wins: a chatbot configured
+        // for English by its owner reads English even on a Persian WP site,
+        // and vice versa. This is only what a visitor sees for the fraction
+        // of a second before that happens.
+        $is_fa = strpos(get_locale(), 'fa') === 0;
+        $l10n_defaults = $is_fa ? [
+            'sendButtonLabel'        => 'ارسال',
+            'placeholder'            => 'پیام خود را بنویسید...',
+            'unavailableMessage'     => 'چت‌بات در حال حاضر در دسترس نیست. لطفاً بعداً دوباره تلاش کنید.',
+            'genericErrorMessage'    => 'خطایی رخ داد.',
+            'connectionErrorMessage' => 'ارتباط با سرور برقرار نشد. لطفاً دوباره تلاش کنید.',
+        ] : [
+            'sendButtonLabel'        => 'Send',
+            'placeholder'            => 'Write your message...',
+            'unavailableMessage'     => "The chatbot isn't available right now. Please try again later.",
+            'genericErrorMessage'    => 'Something went wrong.',
+            'connectionErrorMessage' => 'Could not connect to the server. Please try again.',
+        ];
+
         $cfg = [
             'chatbotId'   => $chatbot_id,
             'apiUrl'      => $api_url,
             'aiName'      => get_option('hamman_ai_name','AI BOT'),
             'chatTitle'   => get_option('hamman_chat_title','') ?: get_option('hamman_ai_name','AI BOT'),
-            'placeholder' => get_option('hamman_input_placeholder','') ?: 'پیام خود را بنویسید...',
+            'placeholder' => get_option('hamman_input_placeholder','') ?: $l10n_defaults['placeholder'],
+            'sendButtonLabel'        => $l10n_defaults['sendButtonLabel'],
+            'unavailableMessage'     => $l10n_defaults['unavailableMessage'],
+            'genericErrorMessage'    => $l10n_defaults['genericErrorMessage'],
+            'connectionErrorMessage' => $l10n_defaults['connectionErrorMessage'],
             'quickQuestions' => $qq,
         ];
         ?>
@@ -30,10 +56,21 @@ document.head.appendChild(css);
 var w=document.createElement('div');w.id='hm-w';
 var qqHtml='';
 if(CFG.quickQuestions&&CFG.quickQuestions.length){qqHtml='<div id="hm-qq">'+CFG.quickQuestions.map(function(q,i){return '<button type="button" data-i="'+i+'">'+esc(q.question)+'</button>';}).join('')+'</div>';}
-w.innerHTML='<div id="hm-box"><div id="hm-hdr"><div><h3>'+esc(CFG.chatTitle)+'</h3><span>'+esc(CFG.aiName)+'</span></div><button id="hm-close">✕</button></div><div id="hm-msgs"></div>'+qqHtml+'<div id="hm-in-row"><textarea id="hm-in" rows="1" placeholder="'+esc(CFG.placeholder)+'"></textarea><button id="hm-send">ارسال</button></div><div id="hm-powered">Powered by <a href="https://hamman.ir" target="_blank">Hamman AI</a></div></div><button id="hm-btn" title="Chat">💬</button>';
+w.innerHTML='<div id="hm-box"><div id="hm-hdr"><div><h3>'+esc(CFG.chatTitle)+'</h3><span>'+esc(CFG.aiName)+'</span></div><button id="hm-close">✕</button></div><div id="hm-msgs"></div>'+qqHtml+'<div id="hm-in-row"><textarea id="hm-in" rows="1" placeholder="'+esc(CFG.placeholder)+'"></textarea><button id="hm-send">'+esc(CFG.sendButtonLabel)+'</button></div><div id="hm-powered">Powered by <a href="https://hamman.ir" target="_blank">Hamman AI</a></div></div><button id="hm-btn" title="Chat">💬</button>';
 document.body.appendChild(w);
 var box=document.getElementById('hm-box'),msgs=document.getElementById('hm-msgs'),inp=document.getElementById('hm-in'),sendBtn=document.getElementById('hm-send'),qqBox=document.getElementById('hm-qq'),convId=null,isOpen=false,unavailable=false;
 function esc(t){var d=document.createElement('div');d.textContent=t==null?'':t;return d.innerHTML;}
+// Once /chat/session responds with this chatbot's own widget_config, its
+// text wins over the get_locale()-based CFG defaults set above — a chatbot
+// an admin configured for English reads English even on a Persian WP site.
+function applyWidgetConfig(wc){
+  if(!wc)return;
+  if(wc.send_button_label){CFG.sendButtonLabel=wc.send_button_label;sendBtn.textContent=wc.send_button_label;}
+  if(wc.input_placeholder){CFG.placeholder=wc.input_placeholder;inp.setAttribute('placeholder',wc.input_placeholder);}
+  if(wc.unavailable_message)CFG.unavailableMessage=wc.unavailable_message;
+  if(wc.generic_error_message)CFG.genericErrorMessage=wc.generic_error_message;
+  if(wc.connection_error_message)CFG.connectionErrorMessage=wc.connection_error_message;
+}
 function toggle(){isOpen=!isOpen;box.style.display=isOpen?'flex':'none';if(isOpen&&!convId&&!unavailable)init();if(isOpen)inp.focus();}
 function mdToHtml(t){return esc(t).replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\*(.*?)\*/g,'<em>$1</em>').replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,'<a href="$2" target="_blank" style="color:#1B3A6B;text-decoration:underline">$1</a>').replace(/\n/g,'<br>');}
 function addMsg(t,r){var d=document.createElement('div');d.className='hm-msg '+(r==='user'?'user':'bot');if(r==='bot'){d.innerHTML=mdToHtml(t);}else{d.textContent=t;}msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;}
@@ -42,9 +79,10 @@ function init(){
   .then(function(r){ if(!r.ok){ throw new Error('unavailable'); } return r.json(); })
   .then(function(data){
     convId=data.data&&data.data.conversation_id;
+    applyWidgetConfig(data.data&&data.data.widget_config);
     if(data.data&&data.data.welcome_message)addMsg(data.data.welcome_message,'bot');
   })
-  .catch(function(){ unavailable=true; addMsg('چت‌بات در حال حاضر در دسترس نیست. لطفاً بعداً دوباره تلاش کنید.','bot'); });
+  .catch(function(){ unavailable=true; addMsg(CFG.unavailableMessage,'bot'); });
 }
 function send(){
   var t=inp.value.trim();if(!t||!convId)return;
@@ -53,10 +91,10 @@ function send(){
   .then(function(r){ return r.json().then(function(data){ return {ok:r.ok,data:data}; }); })
   .then(function(res){
     sendBtn.disabled=false;
-    if(!res.ok){ addMsg(res.data&&res.data.error?res.data.error:'خطایی رخ داد.','bot'); return; }
+    if(!res.ok){ addMsg(res.data&&res.data.error?res.data.error:CFG.genericErrorMessage,'bot'); return; }
     if(res.data.data&&res.data.data.response)addMsg(res.data.data.response,'bot');
   })
-  .catch(function(){ sendBtn.disabled=false; addMsg('ارتباط با سرور برقرار نشد. لطفاً دوباره تلاش کنید.','bot'); });
+  .catch(function(){ sendBtn.disabled=false; addMsg(CFG.connectionErrorMessage,'bot'); });
 }
 if(qqBox){qqBox.addEventListener('click',function(e){
   var btn=e.target.closest('button[data-i]');if(!btn)return;

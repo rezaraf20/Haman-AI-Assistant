@@ -10,7 +10,7 @@ use App\Traits\HasUuid;
 
 class User extends Authenticatable implements FilamentUser {
     use HasUuid, HasApiTokens, Notifiable, SoftDeletes;
-    protected $fillable = ['tenant_id','email','phone','first_name','last_name','national_id','address','password','password_hash','name','role','avatar_url','email_verified_at','last_login_at','last_login_ip','failed_login_count','locked_until','preferences'];
+    protected $fillable = ['tenant_id','email','phone','first_name','last_name','national_id','address','password','password_hash','name','role','avatar_url','email_verified_at','last_login_at','last_login_ip','failed_login_count','locked_until','preferences','locale'];
     protected $hidden = ['password','password_hash'];
     protected $casts = ['email_verified_at'=>'datetime','last_login_at'=>'datetime','locked_until'=>'datetime','preferences'=>'array'];
     public function getAuthPassword(): string { return $this->password_hash ?? $this->password ?? ''; }

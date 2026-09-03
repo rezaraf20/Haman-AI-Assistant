@@ -27,10 +27,14 @@ class ManageTicket extends Page implements HasForms {
     public function form(Form $form): Form {
         return $form->schema([
             Select::make('status')
-                ->label('وضعیت')
-                ->options(['open' => 'باز', 'answered' => 'پاسخ داده‌شده', 'closed' => 'بسته'])
+                ->label(__('common.status'))
+                ->options([
+                    'open' => __('ticket.status_open'),
+                    'answered' => __('ticket.status_answered'),
+                    'closed' => __('ticket.status_closed'),
+                ])
                 ->required(),
-            Textarea::make('reply')->label('پاسخ')->rows(4),
+            Textarea::make('reply')->label(__('ticket.reply'))->rows(4),
         ])->statePath('data');
     }
 
@@ -50,6 +54,6 @@ class ManageTicket extends Page implements HasForms {
         $this->record->touch();
         $this->form->fill(['status' => $state['status'], 'reply' => '']);
 
-        Notification::make()->title('ذخیره شد')->success()->send();
+        Notification::make()->title(__('common.saved'))->success()->send();
     }
 }

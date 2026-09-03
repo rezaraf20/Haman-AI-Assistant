@@ -52,6 +52,24 @@ COPY config/ config/
 COPY database/ database/
 COPY routes/ routes/
 COPY resources/ resources/
+# lang/ (fa/en translation files) — nothing under __() resolves without this;
+# omitted here for a while after it was first added, which is exactly the
+# kind of thing that's obvious once broken and invisible until then.
+COPY lang/ lang/
+# tests/ + phpunit.xml: without these the image only ever carries Laravel's
+# default create-project scaffold test, not this project's real suite — so
+# `vendor/bin/phpunit` inside a deployed/throwaway container silently proves
+# nothing. CI runs against the checked-out repo directly and was unaffected,
+# which is exactly why this went unnoticed for a while.
+COPY tests/ tests/
+COPY phpunit.xml phpunit.xml
+# create-project generates its own tests/Feature/ExampleTest.php before the
+# COPY above runs; COPY overlays our tests/ tree onto it but doesn't delete
+# files absent from our source, so the stock scaffold test survives and
+# fails (it asserts "/" returns 200, but this app has no public welcome
+# route — it's API/panel-only). Same removal pattern as the default
+# migrations below.
+RUN rm -f tests/Feature/ExampleTest.php
 COPY .env .env
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 

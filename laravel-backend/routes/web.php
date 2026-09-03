@@ -6,6 +6,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\PaymentController;
+use App\Http\Middleware\SetLocale;
 
 // Zarinpal redirects the end user's browser here after payment — deliberately
 // outside any auth guard (see PaymentController for why that's safe).
@@ -19,4 +20,4 @@ Route::any('/payments/zarinpal/callback', [PaymentController::class, 'zarinpalCa
 Route::get('/portal/login', fn () => auth()->check()
     ? redirect('/portal')
     : view('auth.otp-login-page')
-)->name('portal.login');
+)->name('portal.login')->middleware(SetLocale::class);

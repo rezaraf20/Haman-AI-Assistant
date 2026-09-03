@@ -24,7 +24,7 @@ class SmsService {
         if ($recent && $recent->created_at->diffInSeconds(now()) < self::RESEND_COOLDOWN_SECONDS) {
             return [
                 'ok' => false,
-                'message' => 'لطفاً کمی صبر کنید و دوباره تلاش کنید.',
+                'message' => __('validation.please_wait'),
                 'retry_after' => self::RESEND_COOLDOWN_SECONDS - $recent->created_at->diffInSeconds(now()),
             ];
         }
@@ -39,7 +39,7 @@ class SmsService {
 
         $sent = $this->send($phone, $code);
         if (!$sent['ok']) {
-            return ['ok' => false, 'message' => 'ارسال پیامک ناموفق بود. لطفاً بعداً تلاش کنید.'];
+            return ['ok' => false, 'message' => __('validation.sms_send_failed')];
         }
         return ['ok' => true];
     }
@@ -54,17 +54,17 @@ class SmsService {
             ->first();
 
         if (!$otp) {
-            return ['ok' => false, 'message' => 'ابتدا کد تایید را درخواست کنید.'];
+            return ['ok' => false, 'message' => __('validation.request_otp_first')];
         }
         if ($otp->expires_at->isPast()) {
-            return ['ok' => false, 'message' => 'کد منقضی شده است. دوباره درخواست دهید.'];
+            return ['ok' => false, 'message' => __('validation.otp_expired')];
         }
         if ($otp->attempts >= self::MAX_VERIFY_ATTEMPTS) {
-            return ['ok' => false, 'message' => 'تعداد تلاش‌های مجاز تمام شد. کد جدید درخواست دهید.'];
+            return ['ok' => false, 'message' => __('validation.otp_max_attempts')];
         }
         if (!hash_equals($otp->code, $code)) {
             $otp->increment('attempts');
-            return ['ok' => false, 'message' => 'کد وارد شده صحیح نیست.'];
+            return ['ok' => false, 'message' => __('validation.otp_incorrect')];
         }
 
         $otp->update(['consumed_at' => now()]);
@@ -111,7 +111,10 @@ class SmsService {
                     'password' => $settings->melipayamak_password,
                     'to'       => $phone,
                     'from'     => $settings->melipayamak_sender,
-                    'text'     => "کد تایید هامان AI: {$code}\nاین کد تا " . self::CODE_TTL_MINUTES . " دقیقه معتبر است.",
+                    // Actual SMS body text, out of the panel's fa/en system:
+                    // phone numbers matching Iran's 09XXXXXXXXX format are
+                    // the only ones this OTP flow ever sends to.
+                    'text'     => "کد تایید هامان AI: {$code}\nاین کد تا " . self::CODE_TTL_MINUTES . " دقیقه معتبر است.", // i18n:widget
                     'isflash'  => false,
                 ]);
             }

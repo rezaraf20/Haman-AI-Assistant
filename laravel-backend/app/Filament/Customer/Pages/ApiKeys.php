@@ -22,42 +22,43 @@ class ApiKeys extends Page implements HasTable {
 
     protected static string $view = 'filament.customer.pages.api-keys';
     protected static ?string $navigationIcon = 'heroicon-o-key';
-    protected static ?string $navigationLabel = 'کلیدهای API';
-    protected static ?string $title = 'کلیدهای API من';
+
+    public static function getNavigationLabel(): string { return __('panel.api_keys_nav'); }
+    public function getTitle(): string { return __('panel.my_api_keys_title'); }
 
     public function table(Table $table): Table {
         return $table
             ->query(fn () => ApiKey::query()->where('tenant_id', auth()->user()->tenant_id))
             ->columns([
-                TextColumn::make('name')->label('نام'),
-                TextColumn::make('chatbotIndexEntry.name')->label('چت‌بات')->default('—'),
-                TextColumn::make('chatbotIndexEntry.primary_domain')->label('دامنه')->default('—'),
-                TextColumn::make('key_prefix')->label('پیشوند')->fontFamily('mono'),
-                IconColumn::make('is_active')->boolean()->label('فعال'),
-                TextColumn::make('expires_at')->label('انقضا')->formatStateUsing(fn ($state) => Jalali::dateTime($state))->placeholder('نامحدود'),
-                TextColumn::make('created_at')->label('تاریخ ساخت')->formatStateUsing(fn ($state) => Jalali::dateTime($state)),
+                TextColumn::make('name')->label(__('common.name')),
+                TextColumn::make('chatbotIndexEntry.name')->label(__('chatbot.singular'))->default('—'),
+                TextColumn::make('chatbotIndexEntry.primary_domain')->label(__('common.domain'))->default('—'),
+                TextColumn::make('key_prefix')->label(__('panel.key_prefix'))->fontFamily('mono'),
+                IconColumn::make('is_active')->boolean()->label(__('common.active')),
+                TextColumn::make('expires_at')->label(__('panel.expires_at'))->formatStateUsing(fn ($state) => Jalali::dateTime($state))->placeholder(__('common.unlimited')),
+                TextColumn::make('created_at')->label(__('panel.created_date'))->formatStateUsing(fn ($state) => Jalali::dateTime($state)),
             ])
             ->actions([
                 Action::make('showKey')
-                    ->label('نمایش کلید')
+                    ->label(__('panel.show_key'))
                     ->icon('heroicon-o-eye')
                     ->color('gray')
-                    ->modalHeading('کلید API کامل')
+                    ->modalHeading(__('panel.full_api_key_heading'))
                     ->modalDescription(fn (ApiKey $record) => $record->revealKey()
-                        ? 'این کلید را در تنظیمات افزونه‌ی وردپرس خود وارد کنید. آن را در جای امنی نگه دارید.'
-                        : 'این کلید قدیمی است و دیگر قابل نمایش مجدد نیست — از پشتیبانی بخواهید کلید جدیدی برایتان بسازد.')
+                        ? __('panel.key_reveal_customer_help')
+                        : __('panel.key_reveal_customer_unavailable'))
                     ->modalSubmitAction(false)
-                    ->modalCancelActionLabel('بستن')
+                    ->modalCancelActionLabel(__('common.close'))
                     ->form(fn (ApiKey $record) => $record->revealKey() ? [
                         TextInput::make('key')
-                            ->label('کلید API')
+                            ->label(__('panel.api_key'))
                             ->default(fn () => $record->revealKey())
                             ->readOnly()
                             ->extraInputAttributes(['class' => 'font-mono text-sm', 'id' => "hamman-cust-key-{$record->id}"])
                             ->suffixActions([
                                 FieldAction::make('copy')
                                     ->icon('heroicon-m-clipboard')
-                                    ->label('کپی')
+                                    ->label(__('common.copy'))
                                     ->alpineClickHandler(
                                         "navigator.clipboard.writeText(document.getElementById('hamman-cust-key-{$record->id}').value)"
                                     ),
