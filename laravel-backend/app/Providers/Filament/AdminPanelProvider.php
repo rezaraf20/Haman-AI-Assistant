@@ -32,11 +32,20 @@ class AdminPanelProvider extends PanelProvider {
             // has run (panel() executes during service-provider boot, ahead of
             // the request pipeline). A render hook's closure runs per-request
             // instead, which is what locale-dependent output actually needs.
+            //
+            // Overriding just body/.fi-body's font-family does NOT work: every
+            // Filament/Tailwind utility class resolves fonts via the
+            // `--font-family` CSS custom property (compiled CSS is littered
+            // with `font-family:var(--font-family),ui-sans-serif,...`), which
+            // Filament itself sets via its own `<style>:root{--font-family:
+            // 'Inter';...}</style>` block earlier in <head>. This render hook
+            // runs at HEAD_END (after that block), so redefining the same
+            // custom property on :root here wins by source order.
             ->renderHook(
                 PanelsRenderHook::HEAD_END,
                 fn () => new HtmlString(app()->getLocale() === 'fa'
-                    ? '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=vazirmatn:400,500,600,700"><style>body,.fi-body{font-family:"Vazirmatn",sans-serif}</style>'
-                    : '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=inter:400,500,600,700"><style>body,.fi-body{font-family:"Inter",sans-serif}</style>'),
+                    ? '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=vazirmatn:400,500,600,700"><style>:root{--font-family:"Vazirmatn"}</style>'
+                    : '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=inter:400,500,600,700"><style>:root{--font-family:"Inter"}</style>'),
             )
             // Same fix as CustomerPanelProvider: discoverPages() alone never
             // registers Filament's built-in Dashboard, so /admin's root was

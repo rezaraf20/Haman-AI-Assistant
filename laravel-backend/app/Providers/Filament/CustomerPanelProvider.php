@@ -38,12 +38,15 @@ class CustomerPanelProvider extends PanelProvider {
             ->colors(['primary' => '#1B3A6B'])
             // See AdminPanelProvider for why this is a render hook and not
             // ->font() (whose $family parameter is a plain, eagerly-evaluated
-            // string, not string|Closure).
+            // string, not string|Closure), and why it overrides the
+            // `--font-family` custom property rather than body/.fi-body's
+            // font-family — Filament's compiled CSS reads fonts from that
+            // variable on every utility class, not from inheritance.
             ->renderHook(
                 PanelsRenderHook::HEAD_END,
                 fn () => new HtmlString(app()->getLocale() === 'fa'
-                    ? '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=vazirmatn:400,500,600,700"><style>body,.fi-body{font-family:"Vazirmatn",sans-serif}</style>'
-                    : '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=inter:400,500,600,700"><style>body,.fi-body{font-family:"Inter",sans-serif}</style>'),
+                    ? '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=vazirmatn:400,500,600,700"><style>:root{--font-family:"Vazirmatn"}</style>'
+                    : '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=inter:400,500,600,700"><style>:root{--font-family:"Inter"}</style>'),
             )
             // discoverPages() only picks up files under Filament/Customer/Pages
             // — it does NOT auto-register Filament's own built-in Dashboard
