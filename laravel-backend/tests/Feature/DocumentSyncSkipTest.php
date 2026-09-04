@@ -34,6 +34,10 @@ class DocumentSyncSkipTest extends TestCase
             'slug' => 'test-' . Str::random(8), 'name' => 'Test Tenant',
             'email' => Str::random(12) . '@example.test', 'plan_id' => $plan->id,
             'schema_name' => 'placeholder', 'status' => 'active', 'trial_ends_at' => now()->addDays(14),
+            // Needed for the webhook-signature test below — Tenant::
+            // getWebhookSecret() reads this; without it both sides compute
+            // against a null secret and VerifyWebhookSignature always 401s.
+            'settings' => ['webhook_secret' => Str::random(32)],
         ]);
         $schema = 'tenant_' . str_replace('-', '', $tenant->id);
         $tenant->update(['schema_name' => $schema]);
