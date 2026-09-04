@@ -5,6 +5,11 @@ return [
         'secret' => env('AI_SERVICE_SECRET'),
         'timeout'=> 30,
         'retry'  => 2,
+        // A streamed reply's total wall time (not just time-to-first-byte)
+        // can genuinely exceed the normal 30s request timeout even though
+        // bytes are arriving the whole time — AiGatewayService::chatStream()
+        // uses this instead.
+        'stream_timeout' => env('AI_SERVICE_STREAM_TIMEOUT', 120),
     ],
     'tenant' => [
         'api_key_prefix' => 'hfp_',

@@ -25,6 +25,8 @@ Route::prefix('v1')->group(function () {
             ->middleware(['chatbot.domain', 'throttle:chat-message']);
         Route::get('history/{sessionId}', [ChatController::class, 'history'])
             ->middleware(['chatbot.domain', 'throttle:chat-message']);
+        Route::get('conversation/{conversationId}/messages', [ChatController::class, 'conversationMessages'])
+            ->middleware(['chatbot.domain', 'throttle:chat-message']);
         Route::post('feedback', [ChatController::class, 'submitFeedback'])
             ->middleware('throttle:chat-message');
     });

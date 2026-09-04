@@ -7,6 +7,7 @@ use Illuminate\Http\{Request, JsonResponse};
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use App\Support\WidgetDefaults;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ChatController extends BaseApiController
 {
@@ -89,7 +90,7 @@ class ChatController extends BaseApiController
         ]);
     }
 
-    public function sendMessage(Request $req): JsonResponse
+    public function sendMessage(Request $req): JsonResponse|StreamedResponse
     {
         // TODO(remove after legacy plugin migration): chatbot_id is nullable
         // here — not required|uuid — only because the pre-1.2.0 WordPress
@@ -139,6 +140,17 @@ class ChatController extends BaseApiController
             RateLimiter::hit($key, (int) $blockMins * 60);
         }
 
+        // Strict literal match, not $req->accepts('text/event-stream') —
+        // that helper also matches a plain "*/*" Accept header, which is
+        // what curl and older/legacy widget builds send by default. Only a
+        // client that explicitly names text/event-stream gets a stream;
+        // every other request — including every pre-existing WordPress
+        // plugin install — gets the exact same single JSON response as
+        // before this feature existed.
+        if (str_contains($req->header('Accept', ''), 'text/event-stream')) {
+            return $this->streamMessage($conv, $d['message']);
+        }
+
         $r   = $this->svc->sendMessage($conv, $d['message']);
         $msg = $r['message'];
 
@@ -152,6 +164,39 @@ class ChatController extends BaseApiController
         ]);
     }
 
+    private function streamMessage(Conversation $conv, string $message): StreamedResponse
+    {
+        return response()->stream(function () use ($conv, $message) {
+            $write = function (string $chunk) {
+                echo $chunk;
+                if (ob_get_level() > 0) { @ob_flush(); }
+                flush();
+            };
+
+            try {
+                $r = $this->svc->sendMessageStream($conv, $message, function (string $delta) use ($write) {
+                    $write('data: ' . json_encode(['delta' => $delta], JSON_UNESCAPED_UNICODE) . "\n\n");
+                });
+                $msg = $r['message'];
+                $write('event: done' . "\n" . 'data: ' . json_encode([
+                    'message_id'  => $msg->id,
+                    'model'       => $msg->model_used,
+                    'latency_ms'  => $msg->latency_ms,
+                    'is_fallback' => $msg->is_fallback,
+                    'sources'     => $r['result']['sources'] ?? [],
+                ], JSON_UNESCAPED_UNICODE) . "\n\n");
+            } catch (\Throwable $e) {
+                report($e);
+                $write('event: error' . "\n" . 'data: ' . json_encode(['error' => 'stream_failed']) . "\n\n");
+            }
+        }, 200, [
+            'Content-Type'      => 'text/event-stream',
+            'Cache-Control'     => 'no-cache',
+            'X-Accel-Buffering' => 'no',
+            'Connection'        => 'keep-alive',
+        ]);
+    }
+
     public function history(Request $req, string $sessionId): JsonResponse
     {
         $chatbotId = $req->query('chatbot_id');
@@ -160,6 +205,24 @@ class ChatController extends BaseApiController
         if (!$index) return $this->notFound('Chatbot not found');
         $conv = Conversation::where('session_id', $sessionId)->first();
         if (!$conv) return $this->notFound('Session not found');
+        return $this->ok([
+            'conversation_id' => $conv->id,
+            'messages'        => $conv->messages()->get(['id', 'role', 'content', 'created_at']),
+        ]);
+    }
+
+    // Companion to history() above, keyed by conversation_id instead of
+    // session_id — what the WordPress widget uses to restore a conversation
+    // it persisted in localStorage across a page reload, when it no longer
+    // has (or trusts) the original session_id's in-memory state.
+    public function conversationMessages(Request $req, string $conversationId): JsonResponse
+    {
+        $chatbotId = $req->query('chatbot_id');
+        if (!$chatbotId) return $this->notFound('chatbot_id required');
+        $index = $this->setSchemaFromChatbot($chatbotId, $req->attributes->get('chatbot_index'));
+        if (!$index) return $this->notFound('Chatbot not found');
+        $conv = Conversation::where('id', $conversationId)->where('chatbot_id', $chatbotId)->first();
+        if (!$conv) return $this->notFound('Conversation not found');
         return $this->ok([
             'conversation_id' => $conv->id,
             'messages'        => $conv->messages()->get(['id', 'role', 'content', 'created_at']),

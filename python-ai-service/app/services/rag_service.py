@@ -1,7 +1,8 @@
 import time
+import json
 import logging
 import requests as _requests
-from typing import List, Optional
+from typing import List, Optional, AsyncGenerator, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.core.config import settings
@@ -146,6 +147,211 @@ def _chat_completion(db: Session, prompt: str, max_tokens: int, temperature: flo
     raise last_error
 
 
+def _openai_compatible_chat_stream(profile: dict, prompt: str, max_tokens: int, temperature: float):
+    """Same request as _openai_compatible_chat() but with stream:true — yields
+    ("delta", text) for each token fragment the provider sends, and exactly
+    one trailing ("usage", dict) once the stream ends (empty dict if the
+    provider never included one; Groq/xAI only attach it to the final chunk
+    when stream_options.include_usage is set, which this always requests)."""
+    resp = _requests.post(
+        f"{profile['base_url'].rstrip('/')}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {profile['api_key']}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": profile['model_name'],
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": profile.get('max_tokens_response') or max_tokens,
+            "temperature": temperature,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        },
+        timeout=profile.get('timeout_seconds') or 30,
+        stream=True,
+    )
+    resp.raise_for_status()
+    usage = {}
+    for line in resp.iter_lines(decode_unicode=True):
+        if not line or not line.startswith("data:"):
+            continue
+        payload = line[len("data:"):].strip()
+        if payload == "[DONE]":
+            break
+        try:
+            chunk = json.loads(payload)
+        except ValueError:
+            continue
+        choices = chunk.get("choices") or []
+        if choices:
+            delta = (choices[0].get("delta") or {}).get("content")
+            if delta:
+                yield ("delta", delta)
+        if chunk.get("usage"):
+            usage = chunk["usage"]
+    yield ("usage", usage)
+
+
+def _chat_completion_stream(db: Session, prompt: str, max_tokens: int, temperature: float):
+    """Streaming counterpart to _chat_completion() — same priority-ordered
+    provider list, but failover only works *before* any text has actually
+    reached the caller for a given provider. Once a provider's stream has
+    started yielding real content, a failure ends the generator with an
+    exception instead of silently switching providers mid-answer (which
+    would splice together text from two different models into one reply).
+
+    Yields ("delta", text) fragments, then exactly one
+    ("meta", {"model", "usage", "cost_toman"}) event on success.
+    """
+    profiles = llm_provider_service.get_active_profiles(db)
+    if not profiles:
+        raise RuntimeError("No active LLM provider profiles configured")
+
+    last_error = None
+    for profile in profiles:
+        started = False
+        try:
+            usage = {}
+            for kind, payload in _openai_compatible_chat_stream(profile, prompt, max_tokens, temperature):
+                if kind == "delta":
+                    started = True
+                    yield ("delta", payload)
+                elif kind == "usage":
+                    usage = payload
+            llm_provider_service.record_outcome(db, profile['name'], success=True)
+            cost_toman = _compute_cost_toman(profile, usage)
+            yield ("meta", {
+                "model": f"{profile['provider']}/{profile['model_name']}",
+                "usage": usage,
+                "cost_toman": cost_toman,
+            })
+            return
+        except Exception as e:
+            last_error = e
+            llm_provider_service.record_outcome(db, profile['name'], success=False)
+            if started:
+                raise
+            logger.warning(f"LLM provider '{profile['name']}' failed before streaming any content, trying next: {e}")
+            continue
+
+    raise last_error
+
+
+async def run_rag_pipeline_stream(
+    db: Session, chatbot_id: str, query: str, history: List[dict],
+    system_prompt: Optional[str], fallback_resp: Optional[str], llm_model: str,
+    top_k: int, threshold: float, temperature: float, max_tokens: int, language: str
+) -> AsyncGenerator[Tuple[str, object], None]:
+    """Streaming counterpart to run_rag_pipeline() — identical retrieval and
+    prompt-building, but yields ("delta", str) as the answer is generated
+    instead of returning one finished dict. Always ends with exactly one
+    ("done", dict) carrying the same fields run_rag_pipeline()'s return value
+    has (with "response" holding the full accumulated text), so callers that
+    only care about the final persisted record can treat it the same way.
+    """
+    start = time.time()
+
+    try:
+        query_embedding = _embed_query(query)
+    except Exception as e:
+        logger.error(f"Query embedding error: {e}")
+        text_out = fallback_resp or "Sorry, I cannot process your request right now."
+        yield ("delta", text_out)
+        yield ("done", {
+            "response": text_out, "chunk_ids": [], "scores": [], "sources": [],
+            "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost_toman": 0,
+            "model": "n/a", "latency_ms": int((time.time() - start) * 1000),
+            "is_fallback": True, "is_unanswered": False, "finish_reason": "error",
+        })
+        return
+
+    chunks = retrieve_chunks(db, chatbot_id, query_embedding, top_k, threshold)
+    retrieval_gap = len(chunks) == 0
+    is_fallback = retrieval_gap
+
+    if is_fallback and fallback_resp:
+        yield ("delta", fallback_resp)
+        yield ("done", {
+            "response": fallback_resp, "chunk_ids": [], "scores": [], "sources": [],
+            "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost_toman": 0,
+            "model": "n/a", "latency_ms": int((time.time() - start) * 1000),
+            "is_fallback": True, "is_unanswered": True, "finish_reason": "fallback",
+        })
+        return
+
+    context_parts = []
+    for i, chunk in enumerate(chunks, 1):
+        meta = chunk.get("metadata", {})
+        title = meta.get("title", "")
+        header = f"[Source {i}]" + (f" {title}" if title else "")
+        context_parts.append(f"{header}\n{chunk['content']}")
+    context = "\n\n---\n\n".join(context_parts)
+
+    sys_p = GROUNDING_RULES
+    if system_prompt:
+        sys_p += f"\n\n{system_prompt}"
+    if context:
+        sys_p += f"\n\n=== CONTEXT ===\n{context}\n=== END CONTEXT ==="
+
+    lang_map = {"fa": "Persian/Farsi", "ar": "Arabic", "en": "English"}
+    if language and language != "auto" and language in lang_map:
+        sys_p += f"\n\nIMPORTANT: Always respond in {lang_map[language]}."
+
+    hist_text = ""
+    for h in history[-12:]:
+        if h.get("role") in ("user", "assistant") and h.get("content"):
+            role_label = "User" if h["role"] == "user" else "Assistant"
+            hist_text += f"{role_label}: {h['content']}\n"
+
+    full_prompt = f"{sys_p}\n\n{hist_text}User: {query}\nAssistant:"
+
+    sources = []
+    for c in chunks[:3]:
+        m = c.get("metadata", {})
+        src = {}
+        if m.get("title"): src["title"] = m["title"]
+        if m.get("url"): src["url"] = m["url"]
+        if m.get("type"): src["type"] = m["type"]
+        if src: sources.append(src)
+
+    full_text = ""
+    model_used = "n/a"
+    usage = {}
+    cost_toman = 0
+    stream_failed = False
+    try:
+        for kind, payload in _chat_completion_stream(db, full_prompt, max_tokens, temperature):
+            if kind == "delta":
+                full_text += payload
+                yield ("delta", payload)
+            elif kind == "meta":
+                model_used = payload["model"]
+                usage = payload["usage"]
+                cost_toman = payload["cost_toman"]
+    except Exception as e:
+        logger.error(f"Streaming LLM error (all providers failed or died mid-stream): {e}")
+        stream_failed = True
+        if not full_text:
+            full_text = fallback_resp or "Sorry, I could not generate a response."
+            yield ("delta", full_text)
+
+    yield ("done", {
+        "response": full_text,
+        "chunk_ids": [c["id"] for c in chunks],
+        "scores": [round(c["similarity"], 4) for c in chunks],
+        "sources": sources,
+        "prompt_tokens": usage.get("prompt_tokens", 0),
+        "completion_tokens": usage.get("completion_tokens", 0),
+        "total_tokens": usage.get("total_tokens", 0),
+        "cost_toman": cost_toman,
+        "model": model_used,
+        "latency_ms": int((time.time() - start) * 1000),
+        "is_fallback": is_fallback or stream_failed,
+        "is_unanswered": retrieval_gap,
+        "finish_reason": "error" if stream_failed else "stop",
+    })
+
+
 async def run_rag_pipeline(
     db: Session, chatbot_id: str, query: str, history: List[dict],
     system_prompt: Optional[str], fallback_resp: Optional[str], llm_model: str,
@@ -164,11 +370,22 @@ async def run_rag_pipeline(
             "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost_toman": 0,
             "model": "n/a",
             "latency_ms": int((time.time() - start) * 1000),
-            "is_fallback": True, "finish_reason": "error",
+            # A failed embedding call is an infra problem, not evidence the
+            # catalog is missing content — is_unanswered stays false here.
+            "is_fallback": True, "is_unanswered": False, "finish_reason": "error",
         }
 
     chunks = retrieve_chunks(db, chatbot_id, query_embedding, top_k, threshold)
-    is_fallback = len(chunks) == 0
+    # retrieve_chunks() already filters to similarity > threshold (the
+    # chatbot's own, admin-configurable retrieval_threshold — see
+    # Chatbot.retrieval_threshold / config('hamman.rag.default_threshold'),
+    # never a value hardcoded here) — an empty result means nothing cleared
+    # that bar, i.e. a genuine content gap. Captured in its own variable
+    # because is_fallback below gets overwritten again on an LLM-call
+    # failure, which is a technical failure, not a content gap, and must
+    # not be counted as "unanswered" for the demand-gap dashboard.
+    retrieval_gap = len(chunks) == 0
+    is_fallback = retrieval_gap
 
     if is_fallback and fallback_resp:
         return {
@@ -176,7 +393,7 @@ async def run_rag_pipeline(
             "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost_toman": 0,
             "model": "n/a",
             "latency_ms": int((time.time() - start) * 1000),
-            "is_fallback": True, "finish_reason": "fallback",
+            "is_fallback": True, "is_unanswered": True, "finish_reason": "fallback",
         }
 
     context_parts = []
@@ -240,5 +457,6 @@ async def run_rag_pipeline(
         "model": model_used,
         "latency_ms": int((time.time() - start) * 1000),
         "is_fallback": is_fallback,
+        "is_unanswered": retrieval_gap,
         "finish_reason": "stop",
     }

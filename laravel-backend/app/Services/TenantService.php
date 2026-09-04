@@ -143,6 +143,13 @@ class TenantService
         try {
             DB::statement("ALTER TABLE {$schemaName}.messages ADD COLUMN IF NOT EXISTS cost_toman DECIMAL(14,4) NOT NULL DEFAULT 0");
         } catch (\Throwable $e) {}
+        // Set by the Python RAG service (rag_service.py) whenever retrieval
+        // found no chunk above the chatbot's own retrieval_threshold — a real
+        // content-gap signal, not a technical failure, that drives the
+        // customer portal's demand-gap dashboard (DemandGap.php).
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.messages ADD COLUMN IF NOT EXISTS is_unanswered BOOLEAN NOT NULL DEFAULT false");
+        } catch (\Throwable $e) {}
     }
 
     private function createTenantTables(string $s): void
@@ -318,6 +325,7 @@ class TenantService
                 model_used VARCHAR(100),
                 latency_ms INTEGER,
                 is_fallback BOOLEAN DEFAULT false,
+                is_unanswered BOOLEAN NOT NULL DEFAULT false,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             )
         ");

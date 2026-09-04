@@ -28,6 +28,7 @@ class ChatResponse(BaseModel):
     model: str = ""
     latency_ms: int = 0
     is_fallback: bool = False
+    is_unanswered: bool = False
     finish_reason: str = "stop"
 
 class EmbedRequest(BaseModel):
