@@ -188,25 +188,31 @@ def _rerank_llm(db: Session, query: str, candidates: List[dict], top_n: int = RE
             c.setdefault("rerank_score", c.get("rrf_score", 0.0))
         return candidates[:top_n], 0.0, {}
 
-    profile = profiles[0]
     listing = "\n\n".join(f"[{i}] {c['content'][:500]}" for i, c in enumerate(candidates))
     prompt = f"{RERANK_SYSTEM_PROMPT}\n\nQuestion: {query}\n\nPassages:\n{listing}\n\nJSON:"
 
-    try:
-        raw, usage = _openai_compatible_chat(profile, prompt, max_tokens, temperature=0.0)
-        cost_toman = _compute_cost_toman(profile, usage)
-        scores = _parse_rerank_scores(raw, len(candidates))
-        if not scores:
-            raise ValueError(f"Rerank response had no parseable scores: {raw[:200]!r}")
-        for i, c in enumerate(candidates):
-            c["rerank_score"] = scores.get(i, 0.0)
-        ranked = sorted(candidates, key=lambda c: c["rerank_score"], reverse=True)
-        return ranked[:top_n], cost_toman, usage
-    except Exception as e:
-        logger.warning(f"Rerank call failed, falling back to RRF order: {e}")
-        for c in candidates:
-            c.setdefault("rerank_score", c.get("rrf_score", 0.0))
-        return candidates[:top_n], 0.0, {}
+    # Same priority-ordered failover as _chat_completion() — a rate-limited
+    # or down top-priority provider shouldn't silently disable reranking
+    # entirely when a lower-priority one is available and healthy.
+    for profile in profiles:
+        try:
+            raw, usage = _openai_compatible_chat(profile, prompt, max_tokens, temperature=0.0)
+            cost_toman = _compute_cost_toman(profile, usage)
+            scores = _parse_rerank_scores(raw, len(candidates))
+            if not scores:
+                raise ValueError(f"Rerank response had no parseable scores: {raw[:200]!r}")
+            for i, c in enumerate(candidates):
+                c["rerank_score"] = scores.get(i, 0.0)
+            ranked = sorted(candidates, key=lambda c: c["rerank_score"], reverse=True)
+            return ranked[:top_n], cost_toman, usage
+        except Exception as e:
+            logger.warning(f"Rerank call via '{profile['name']}' failed, trying next provider: {e}")
+            continue
+
+    logger.warning("Rerank failed on every active provider — falling back to RRF order")
+    for c in candidates:
+        c.setdefault("rerank_score", c.get("rrf_score", 0.0))
+    return candidates[:top_n], 0.0, {}
 
 
 def hybrid_retrieve(

@@ -20,6 +20,7 @@ leg):
 """
 import sys
 import os
+import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy import text
@@ -168,6 +169,12 @@ def main():
                 newly_answered.append(item["question"])
 
             print(f"  [{i}/{len(items)}] before: recall={b_recall:.0f} mrr={b_mrr:.2f} | after: recall={a_recall:.0f} mrr={a_mrr:.2f}{marker}")
+
+            # 25 back-to-back rerank calls is a self-inflicted burst no real
+            # traffic pattern produces — space them out enough to stay under
+            # Groq's per-minute rate limit rather than exhausting it against
+            # ourselves and only ever exercising the failover/fallback path.
+            time.sleep(2)
 
         n = len(before_recalls)
         print("\n" + "=" * 60)
