@@ -91,7 +91,10 @@ class DocumentSyncSkipTest extends TestCase
 
         DB::statement("SET search_path TO {$schema}, public");
         $doc = DB::table('documents')->where('external_id', '501')->first();
-        $secondJobResult = DB::table('sync_jobs')->where('job_type', 'pages')->latest('id')->first();
+        // latest('id') would be wrong here: sync_jobs.id is a UUID (HasUuid),
+        // and ordering a UUID string lexicographically has nothing to do
+        // with insertion order — created_at is the real chronological signal.
+        $secondJobResult = DB::table('sync_jobs')->where('job_type', 'pages')->latest('created_at')->first();
         DB::statement('SET search_path TO public');
 
         $this->assertNotEquals($firstSyncedAt, $doc->last_synced_at, 'last_synced_at should still be updated on a skipped re-sync.');
