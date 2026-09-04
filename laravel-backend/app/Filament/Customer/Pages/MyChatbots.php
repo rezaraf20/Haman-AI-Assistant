@@ -3,6 +3,7 @@ namespace App\Filament\Customer\Pages;
 
 use App\Models\ChatbotIndexEntry;
 use App\Models\Tenant\Chatbot;
+use App\Models\Tenant\SyncJob;
 use App\Services\WalletService;
 use App\Support\WidgetDefaults;
 use Filament\Pages\Page;
@@ -16,6 +17,7 @@ use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
 use App\Support\Jalali;
 use App\Support\Money;
+use App\Support\Numbers;
 
 class MyChatbots extends Page implements HasTable {
     use InteractsWithTable;
@@ -38,6 +40,11 @@ class MyChatbots extends Page implements HasTable {
                     ->color(fn ($record) => $record->expires_at && $record->expires_at->isPast() ? 'danger' : null),
                 TextColumn::make('monthly_price_toman')->label(__('chatbot.monthly_renewal_cost'))
                     ->formatStateUsing(fn (int $state) => $state > 0 ? Money::toman($state) : __('chatbot.contact_support')),
+                TextColumn::make('sync_stats')
+                    ->label(__('chatbot.sync_stats_label'))
+                    ->getStateUsing(fn (ChatbotIndexEntry $record) => $this->syncStatsSummary($record))
+                    ->placeholder(__('chatbot.sync_stats_none'))
+                    ->wrap(),
             ])
             ->actions([
                 Action::make('appearance')
@@ -94,6 +101,43 @@ class MyChatbots extends Page implements HasTable {
         DB::statement('SET search_path TO public');
 
         Notification::make()->title(__('chatbot.appearance_saved'))->success()->send();
+    }
+
+    // Sums the most recent sync job of each content type (products, pages,
+    // faqs) — "the results of the last time each was synced" — rather than
+    // just the single latest job, since a full sync run creates one
+    // SyncJob row per content type, not one combined row. Real-time
+    // deletions (product.deleted/page.deleted webhooks) run through their
+    // own 'deletion' job_type and are counted in separately so a deletion
+    // between two full syncs still shows up here.
+    private function syncStatsSummary(ChatbotIndexEntry $record): ?string {
+        DB::statement("SET search_path TO {$record->schema_name}, public");
+        $jobs = SyncJob::where('chatbot_id', $record->chatbot_id)
+            ->whereIn('job_type', ['products', 'pages', 'faqs', 'deletion'])
+            ->whereNotNull('completed_at')
+            ->orderByDesc('completed_at')
+            ->get()
+            ->groupBy('job_type')
+            ->map(fn ($jobs) => $jobs->first());
+        DB::statement('SET search_path TO public');
+
+        if ($jobs->isEmpty()) return null;
+
+        $totals = ['new' => 0, 'updated' => 0, 'skipped' => 0, 'deleted' => 0];
+        foreach ($jobs as $job) {
+            foreach ($totals as $key => $_) {
+                $totals[$key] += $job->result[$key] ?? 0;
+            }
+        }
+        $lastSyncedAt = $jobs->max('completed_at');
+
+        return __('chatbot.sync_stats_summary', [
+            'new'     => Numbers::format($totals['new']),
+            'updated' => Numbers::format($totals['updated']),
+            'skipped' => Numbers::format($totals['skipped']),
+            'deleted' => Numbers::format($totals['deleted']),
+            'when'    => Jalali::dateTime($lastSyncedAt),
+        ]);
     }
 
     private function renew(ChatbotIndexEntry $record): void {

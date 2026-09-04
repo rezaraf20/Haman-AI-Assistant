@@ -28,7 +28,9 @@ class Hamman_Loader {
             $this->add_action( 'woocommerce_update_product', $sync, 'on_product_updated' );
             $this->add_action( 'woocommerce_delete_product', $sync, 'on_product_deleted' );
         }
-        $this->add_action( 'save_post', $sync, 'on_post_saved', 10, 3 );
+        $this->add_action( 'save_post',    $sync, 'on_post_saved',   10, 3 );
+        $this->add_action( 'delete_post',  $sync, 'on_post_removed' );
+        $this->add_action( 'wp_trash_post', $sync, 'on_post_removed' );
     }
 
     private function add_action( string $hook, object $component, string $callback, int $priority = 10, int $args = 1 ): void {
