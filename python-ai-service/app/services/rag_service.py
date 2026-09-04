@@ -51,6 +51,14 @@ def retrieve_chunks(db: Session, chatbot_id: str, query_embedding: List[float], 
         """), {"emb": emb_str, "cid": chatbot_id, "threshold": threshold, "top_k": top_k}).fetchall()
         return [{"id": str(r[0]), "content": r[1], "metadata": r[2] or {}, "similarity": float(r[3])} for r in rows]
     except Exception as e:
+        # A failed statement leaves Postgres's transaction aborted — every
+        # later query on this same session would fail too ("current
+        # transaction is aborted") until rolled back. Each FastAPI request
+        # gets its own fresh session (get_db()) so this was invisible there,
+        # but a long-lived session reusing one connection across many calls
+        # (scripts/eval_retrieval.py) would cascade-fail from a single
+        # transient error onward. Real bug, not just a script-side one.
+        db.rollback()
         logger.error(f"Vector search error: {e}")
         return []
 
@@ -78,6 +86,7 @@ def _vector_search(db: Session, chatbot_id: str, query_embedding: List[float], l
         """), {"emb": emb_str, "cid": chatbot_id, "limit": limit}).fetchall()
         return [{"id": str(r[0]), "content": r[1], "metadata": r[2] or {}, "similarity": float(r[3])} for r in rows]
     except Exception as e:
+        db.rollback()
         logger.error(f"Vector search error: {e}")
         return []
 
@@ -102,6 +111,7 @@ def _fulltext_search(db: Session, chatbot_id: str, query: str, language: str, li
         """), {"cfg": config, "q": query, "cid": chatbot_id, "limit": limit}).fetchall()
         return [{"id": str(r[0]), "content": r[1], "metadata": r[2] or {}, "ft_rank": float(r[3])} for r in rows]
     except Exception as e:
+        db.rollback()
         logger.error(f"Full-text search error: {e}")
         return []
 

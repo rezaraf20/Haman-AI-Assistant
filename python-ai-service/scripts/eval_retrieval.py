@@ -131,6 +131,14 @@ def main():
 
             settings = get_chatbot_settings(db, item["schema"], item["chatbot_id"])
 
+            # get_chatbot_settings() resets search_path to public when it
+            # returns (mirrors collect_eval_items()'s own cleanup) — must be
+            # switched back to the tenant schema before every query that
+            # touches tenant-schema tables (chunks, chatbots), here and in
+            # the AFTER block below.
+            db.execute(text(f"SET search_path TO {item['schema']}, public"))
+            db.commit()
+
             # BEFORE: retrieve_chunks() is untouched — the exact pre-hybrid-
             # search pure vector query, still live in rag_service.py for
             # /search/semantic.
