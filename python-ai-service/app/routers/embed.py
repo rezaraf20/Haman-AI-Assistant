@@ -15,14 +15,19 @@ def embed_document(req: EmbedRequest, db: Session = Depends(get_db)):
     set_schema(db, req.schema_name)
 
     row = db.execute(text(
-        "SELECT id, raw_content, source_type, title, metadata "
+        "SELECT id, raw_content, source_type, title, metadata, language "
         "FROM documents WHERE id = CAST(:id AS uuid) AND chatbot_id = CAST(:cid AS uuid)"
     ), {"id": req.document_id, "cid": req.chatbot_id}).fetchone()
 
     if not row:
         raise HTTPException(404, "Document not found")
 
-    doc_id, content, src_type, title, metadata = row
+    doc_id, content, src_type, title, metadata, doc_language = row
+    # Postgres ships no Persian stemmer/dictionary — 'simple' (tokenize +
+    # lowercase, no stemming) is the honest option for fa; 'english' gets
+    # real stemming for everything else, matching this app's fa/en-only
+    # convention elsewhere (WidgetDefaults, SetLocale, ...).
+    tsv_config = 'simple' if doc_language == 'fa' else 'english'
     if not content or not content.strip():
         db.execute(text("UPDATE documents SET status='indexed', chunk_count=0, indexed_at=now() WHERE id=CAST(:id AS uuid)"),
                    {"id": str(doc_id)})
@@ -53,11 +58,11 @@ def embed_document(req: EmbedRequest, db: Session = Depends(get_db)):
         chunk_meta = dict(base_meta)
         chunk_meta["chunk_index"] = i
         db.execute(text("""
-            INSERT INTO chunks (id, document_id, chatbot_id, chunk_index, content, embedding, metadata, token_count, embedding_model, created_at)
-            VALUES (gen_random_uuid(), CAST(:did AS uuid), CAST(:cid AS uuid), :idx, :content, CAST(:emb AS vector), CAST(:meta AS jsonb), :toks, :model, now())
+            INSERT INTO chunks (id, document_id, chatbot_id, chunk_index, content, embedding, content_tsv, metadata, token_count, embedding_model, created_at)
+            VALUES (gen_random_uuid(), CAST(:did AS uuid), CAST(:cid AS uuid), :idx, :content, CAST(:emb AS vector), to_tsvector(CAST(:tsconfig AS regconfig), :content), CAST(:meta AS jsonb), :toks, :model, now())
         """), {
             "did": str(doc_id), "cid": req.chatbot_id, "idx": i,
-            "content": chunk_val, "emb": emb_str, "meta": json.dumps(chunk_meta),
+            "content": chunk_val, "emb": emb_str, "tsconfig": tsv_config, "meta": json.dumps(chunk_meta),
             "toks": tok_count, "model": "text-embedding-004",
         })
 

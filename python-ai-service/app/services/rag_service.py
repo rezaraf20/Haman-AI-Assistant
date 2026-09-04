@@ -55,6 +55,193 @@ def retrieve_chunks(db: Session, chatbot_id: str, query_embedding: List[float], 
         return []
 
 
+RRF_K = 60
+RRF_CANDIDATE_POOL = 40   # per leg, before fusion
+RRF_FUSED_LIMIT = 20      # candidates handed to rerank (or used directly)
+RERANK_TOP_N = 5          # what actually reaches the LLM's context when reranking
+
+
+def _vector_search(db: Session, chatbot_id: str, query_embedding: List[float], limit: int = RRF_CANDIDATE_POOL) -> List[dict]:
+    """Unlike retrieve_chunks() (used by /search/semantic, unrelated to chat),
+    this applies no similarity threshold — RRF needs a full ranked candidate
+    pool from each leg to fuse, not a pre-filtered one. Thresholding happens
+    once, after fusion (and rerank, if enabled) — see hybrid_retrieve()."""
+    try:
+        emb_str = "[" + ",".join(str(x) for x in query_embedding) + "]"
+        rows = db.execute(text("""
+            SELECT id::text, content, metadata,
+                   1 - (embedding <=> CAST(:emb AS vector)) AS similarity
+            FROM chunks
+            WHERE chatbot_id = CAST(:cid AS uuid) AND embedding IS NOT NULL
+            ORDER BY embedding <=> CAST(:emb AS vector)
+            LIMIT :limit
+        """), {"emb": emb_str, "cid": chatbot_id, "limit": limit}).fetchall()
+        return [{"id": str(r[0]), "content": r[1], "metadata": r[2] or {}, "similarity": float(r[3])} for r in rows]
+    except Exception as e:
+        logger.error(f"Vector search error: {e}")
+        return []
+
+
+def _fulltext_search(db: Session, chatbot_id: str, query: str, language: str, limit: int = RRF_CANDIDATE_POOL) -> List[dict]:
+    """content_tsv is populated at embed time (embed.py) using the source
+    document's own language — 'simple' for fa (Postgres has no Persian
+    stemmer), 'english' otherwise. The query side uses the chatbot's
+    language/response_language the same way, since that's the best signal
+    available for what language an incoming message is likely in."""
+    config = 'simple' if language == 'fa' else 'english'
+    try:
+        rows = db.execute(text("""
+            SELECT id::text, content, metadata,
+                   ts_rank(content_tsv, plainto_tsquery(CAST(:cfg AS regconfig), :q)) AS ft_rank
+            FROM chunks
+            WHERE chatbot_id = CAST(:cid AS uuid)
+              AND content_tsv IS NOT NULL
+              AND content_tsv @@ plainto_tsquery(CAST(:cfg AS regconfig), :q)
+            ORDER BY ft_rank DESC
+            LIMIT :limit
+        """), {"cfg": config, "q": query, "cid": chatbot_id, "limit": limit}).fetchall()
+        return [{"id": str(r[0]), "content": r[1], "metadata": r[2] or {}, "ft_rank": float(r[3])} for r in rows]
+    except Exception as e:
+        logger.error(f"Full-text search error: {e}")
+        return []
+
+
+def _reciprocal_rank_fusion(vector_rows: List[dict], fulltext_rows: List[dict], k: int = RRF_K, limit: int = RRF_FUSED_LIMIT) -> List[dict]:
+    """RRF: score(doc) = sum over each ranked list it appears in of
+    1/(k + rank), rank 1-indexed. Simple, no per-source weight tuning needed
+    (that's the whole appeal over hand-picked vector/BM25 blend weights), and
+    naturally rewards a document both legs agree on over one only one leg
+    ranks highly."""
+    scores: dict[str, float] = {}
+    docs: dict[str, dict] = {}
+    for rank, r in enumerate(vector_rows, start=1):
+        scores[r["id"]] = scores.get(r["id"], 0.0) + 1.0 / (k + rank)
+        docs[r["id"]] = r
+    for rank, r in enumerate(fulltext_rows, start=1):
+        scores[r["id"]] = scores.get(r["id"], 0.0) + 1.0 / (k + rank)
+        docs.setdefault(r["id"], r)
+
+    ordered_ids = sorted(scores.keys(), key=lambda i: scores[i], reverse=True)[:limit]
+    fused = []
+    for doc_id in ordered_ids:
+        d = dict(docs[doc_id])
+        d["rrf_score"] = scores[doc_id]
+        d.setdefault("similarity", 0.0)
+        fused.append(d)
+    return fused
+
+
+RERANK_SYSTEM_PROMPT = (
+    "You are a relevance-scoring system, not a chat assistant. You will be given a "
+    "user question and a numbered list of candidate passages. Score each passage's "
+    "relevance to answering the question, from 0.0 (irrelevant) to 1.0 (directly "
+    "answers it). Respond with ONLY a JSON array, one entry per passage, in the exact "
+    "form [{\"index\": 0, \"score\": 0.9}, {\"index\": 1, \"score\": 0.2}, ...]. No "
+    "other text, no markdown code fences."
+)
+
+
+def _parse_rerank_scores(raw: str, n: int) -> dict[int, float]:
+    try:
+        start = raw.index("[")
+        end = raw.rindex("]") + 1
+        parsed = json.loads(raw[start:end])
+        return {
+            int(item["index"]): max(0.0, min(1.0, float(item["score"])))
+            for item in parsed
+            if isinstance(item, dict) and "index" in item and "score" in item and 0 <= int(item["index"]) < n
+        }
+    except Exception:
+        return {}
+
+
+def _rerank_llm(db: Session, query: str, candidates: List[dict], top_n: int = RERANK_TOP_N, max_tokens: int = 800) -> Tuple[List[dict], float, dict]:
+    """A real cross-encoder model is too heavy to add to this lightweight
+    FastAPI service (new ML runtime + weights just for this), so this scores
+    relevance via one extra LLM call instead — the same admin-configured
+    provider failover chain as the answer call, one combined prompt scoring
+    all candidates at once (not N separate calls), so cost/latency stay
+    bounded. Its cost is real and gets folded into the message's cost_toman
+    by the caller, not hidden.
+
+    On any failure (no active provider, malformed JSON, etc.) this degrades
+    gracefully to the RRF order rather than breaking the chat response —
+    same philosophy as _chat_completion()'s provider failover.
+    """
+    if not candidates:
+        return [], 0.0, {}
+
+    profiles = llm_provider_service.get_active_profiles(db)
+    if not profiles:
+        logger.warning("Rerank requested but no active LLM provider profiles — falling back to RRF order")
+        for c in candidates:
+            c.setdefault("rerank_score", c.get("rrf_score", 0.0))
+        return candidates[:top_n], 0.0, {}
+
+    profile = profiles[0]
+    listing = "\n\n".join(f"[{i}] {c['content'][:500]}" for i, c in enumerate(candidates))
+    prompt = f"{RERANK_SYSTEM_PROMPT}\n\nQuestion: {query}\n\nPassages:\n{listing}\n\nJSON:"
+
+    try:
+        raw, usage = _openai_compatible_chat(profile, prompt, max_tokens, temperature=0.0)
+        cost_toman = _compute_cost_toman(profile, usage)
+        scores = _parse_rerank_scores(raw, len(candidates))
+        if not scores:
+            raise ValueError(f"Rerank response had no parseable scores: {raw[:200]!r}")
+        for i, c in enumerate(candidates):
+            c["rerank_score"] = scores.get(i, 0.0)
+        ranked = sorted(candidates, key=lambda c: c["rerank_score"], reverse=True)
+        return ranked[:top_n], cost_toman, usage
+    except Exception as e:
+        logger.warning(f"Rerank call failed, falling back to RRF order: {e}")
+        for c in candidates:
+            c.setdefault("rerank_score", c.get("rrf_score", 0.0))
+        return candidates[:top_n], 0.0, {}
+
+
+def hybrid_retrieve(
+    db: Session, chatbot_id: str, query: str, query_embedding: List[float],
+    top_k: int, threshold: float, language: str,
+    rerank_enabled: bool, rerank_threshold: float,
+) -> dict:
+    """Vector search + full-text search, fused with Reciprocal Rank Fusion,
+    optionally reranked. Returns:
+      chunks: the final list to build LLM context from
+      is_unanswered: score-based gap signal — checked against rerank_threshold
+        on the top *rerank* score when reranking is on, against the plain
+        `threshold` on top *raw similarity* when it's off (a rerank score and
+        a cosine similarity are not on the same scale, so they can't share
+        one threshold — see the caller's config for both).
+      rerank_cost_toman / rerank_usage: 0 / {} when reranking is off or the
+        rerank call itself failed and fell back.
+    """
+    vec = _vector_search(db, chatbot_id, query_embedding)
+    ft = _fulltext_search(db, chatbot_id, query, language)
+    fused = _reciprocal_rank_fusion(vec, ft)
+
+    if not fused:
+        return {"chunks": [], "is_unanswered": True, "rerank_cost_toman": 0.0, "rerank_usage": {}}
+
+    if rerank_enabled:
+        reranked, cost_toman, usage = _rerank_llm(db, query, fused, top_n=RERANK_TOP_N)
+        best_score = reranked[0]["rerank_score"] if reranked else 0.0
+        return {
+            "chunks": reranked,
+            "is_unanswered": best_score < rerank_threshold,
+            "rerank_cost_toman": cost_toman,
+            "rerank_usage": usage,
+        }
+
+    top = fused[:top_k]
+    best_similarity = top[0].get("similarity", 0.0) if top else 0.0
+    return {
+        "chunks": top,
+        "is_unanswered": best_similarity < threshold,
+        "rerank_cost_toman": 0.0,
+        "rerank_usage": {},
+    }
+
+
 def _embed_query(query: str) -> List[float]:
     resp = _requests.post(
         f"{GEMINI_V1_EMBED_URL}?key={settings.GEMINI_API_KEY}",
@@ -240,7 +427,8 @@ def _chat_completion_stream(db: Session, prompt: str, max_tokens: int, temperatu
 async def run_rag_pipeline_stream(
     db: Session, chatbot_id: str, query: str, history: List[dict],
     system_prompt: Optional[str], fallback_resp: Optional[str], llm_model: str,
-    top_k: int, threshold: float, temperature: float, max_tokens: int, language: str
+    top_k: int, threshold: float, temperature: float, max_tokens: int, language: str,
+    rerank_enabled: bool = False, rerank_threshold: float = 0.500,
 ) -> AsyncGenerator[Tuple[str, object], None]:
     """Streaming counterpart to run_rag_pipeline() — identical retrieval and
     prompt-building, but yields ("delta", str) as the answer is generated
@@ -265,15 +453,17 @@ async def run_rag_pipeline_stream(
         })
         return
 
-    chunks = retrieve_chunks(db, chatbot_id, query_embedding, top_k, threshold)
-    retrieval_gap = len(chunks) == 0
-    is_fallback = retrieval_gap
+    retrieval = hybrid_retrieve(db, chatbot_id, query, query_embedding, top_k, threshold, language, rerank_enabled, rerank_threshold)
+    chunks = retrieval["chunks"]
+    is_unanswered = retrieval["is_unanswered"]
+    is_fallback = is_unanswered
+    retrieval_cost_toman = retrieval["rerank_cost_toman"]
 
     if is_fallback and fallback_resp:
         yield ("delta", fallback_resp)
         yield ("done", {
             "response": fallback_resp, "chunk_ids": [], "scores": [], "sources": [],
-            "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost_toman": 0,
+            "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost_toman": retrieval_cost_toman,
             "model": "n/a", "latency_ms": int((time.time() - start) * 1000),
             "is_fallback": True, "is_unanswered": True, "finish_reason": "fallback",
         })
@@ -317,7 +507,7 @@ async def run_rag_pipeline_stream(
     full_text = ""
     model_used = "n/a"
     usage = {}
-    cost_toman = 0
+    cost_toman = retrieval_cost_toman
     stream_failed = False
     try:
         for kind, payload in _chat_completion_stream(db, full_prompt, max_tokens, temperature):
@@ -327,7 +517,7 @@ async def run_rag_pipeline_stream(
             elif kind == "meta":
                 model_used = payload["model"]
                 usage = payload["usage"]
-                cost_toman = payload["cost_toman"]
+                cost_toman += payload["cost_toman"]
     except Exception as e:
         logger.error(f"Streaming LLM error (all providers failed or died mid-stream): {e}")
         stream_failed = True
@@ -338,7 +528,7 @@ async def run_rag_pipeline_stream(
     yield ("done", {
         "response": full_text,
         "chunk_ids": [c["id"] for c in chunks],
-        "scores": [round(c["similarity"], 4) for c in chunks],
+        "scores": [round(c.get("rerank_score", c.get("similarity", 0.0)), 4) for c in chunks],
         "sources": sources,
         "prompt_tokens": usage.get("prompt_tokens", 0),
         "completion_tokens": usage.get("completion_tokens", 0),
@@ -347,7 +537,7 @@ async def run_rag_pipeline_stream(
         "model": model_used,
         "latency_ms": int((time.time() - start) * 1000),
         "is_fallback": is_fallback or stream_failed,
-        "is_unanswered": retrieval_gap,
+        "is_unanswered": is_unanswered,
         "finish_reason": "error" if stream_failed else "stop",
     })
 
@@ -355,7 +545,8 @@ async def run_rag_pipeline_stream(
 async def run_rag_pipeline(
     db: Session, chatbot_id: str, query: str, history: List[dict],
     system_prompt: Optional[str], fallback_resp: Optional[str], llm_model: str,
-    top_k: int, threshold: float, temperature: float, max_tokens: int, language: str
+    top_k: int, threshold: float, temperature: float, max_tokens: int, language: str,
+    rerank_enabled: bool = False, rerank_threshold: float = 0.500,
 ) -> dict:
 
     start = time.time()
@@ -375,22 +566,26 @@ async def run_rag_pipeline(
             "is_fallback": True, "is_unanswered": False, "finish_reason": "error",
         }
 
-    chunks = retrieve_chunks(db, chatbot_id, query_embedding, top_k, threshold)
-    # retrieve_chunks() already filters to similarity > threshold (the
-    # chatbot's own, admin-configurable retrieval_threshold — see
-    # Chatbot.retrieval_threshold / config('hamman.rag.default_threshold'),
-    # never a value hardcoded here) — an empty result means nothing cleared
-    # that bar, i.e. a genuine content gap. Captured in its own variable
-    # because is_fallback below gets overwritten again on an LLM-call
-    # failure, which is a technical failure, not a content gap, and must
-    # not be counted as "unanswered" for the demand-gap dashboard.
-    retrieval_gap = len(chunks) == 0
-    is_fallback = retrieval_gap
+    # Vector search + full-text search fused with RRF, then optionally
+    # reranked — see hybrid_retrieve(). is_unanswered is now a genuine
+    # score-based signal (rerank score vs. rerank_threshold when reranking is
+    # on, raw similarity vs. the chatbot's own retrieval_threshold when it's
+    # off — never hardcoded, both admin-configurable per chatbot), not a
+    # proxy for "did retrieval return zero rows", which hybrid search makes
+    # almost always false regardless of relevance. Captured in its own
+    # variable because is_fallback below gets overwritten again on an
+    # LLM-call failure, which is a technical failure, not a content gap, and
+    # must not be counted as "unanswered" for the demand-gap dashboard.
+    retrieval = hybrid_retrieve(db, chatbot_id, query, query_embedding, top_k, threshold, language, rerank_enabled, rerank_threshold)
+    chunks = retrieval["chunks"]
+    is_unanswered = retrieval["is_unanswered"]
+    is_fallback = is_unanswered
+    retrieval_cost_toman = retrieval["rerank_cost_toman"]
 
     if is_fallback and fallback_resp:
         return {
             "response": fallback_resp, "chunk_ids": [], "scores": [], "sources": [],
-            "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost_toman": 0,
+            "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost_toman": retrieval_cost_toman,
             "model": "n/a",
             "latency_ms": int((time.time() - start) * 1000),
             "is_fallback": True, "is_unanswered": True, "finish_reason": "fallback",
@@ -428,9 +623,10 @@ async def run_rag_pipeline(
 
     model_used = "n/a"
     usage = {}
-    cost_toman = 0
+    cost_toman = retrieval_cost_toman
     try:
-        answer, model_used, usage, cost_toman = _chat_completion(db, full_prompt, max_tokens, temperature)
+        answer, model_used, usage, chat_cost_toman = _chat_completion(db, full_prompt, max_tokens, temperature)
+        cost_toman += chat_cost_toman
     except Exception as e:
         logger.error(f"LLM error (all providers failed): {e}")
         answer = fallback_resp or "Sorry, I could not generate a response."
@@ -448,7 +644,7 @@ async def run_rag_pipeline(
     return {
         "response": answer,
         "chunk_ids": [c["id"] for c in chunks],
-        "scores": [round(c["similarity"], 4) for c in chunks],
+        "scores": [round(c.get("rerank_score", c.get("similarity", 0.0)), 4) for c in chunks],
         "sources": sources,
         "prompt_tokens": usage.get("prompt_tokens", 0),
         "completion_tokens": usage.get("completion_tokens", 0),
@@ -457,6 +653,6 @@ async def run_rag_pipeline(
         "model": model_used,
         "latency_ms": int((time.time() - start) * 1000),
         "is_fallback": is_fallback,
-        "is_unanswered": retrieval_gap,
+        "is_unanswered": is_unanswered,
         "finish_reason": "stop",
     }

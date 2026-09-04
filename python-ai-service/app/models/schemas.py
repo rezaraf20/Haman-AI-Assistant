@@ -15,6 +15,8 @@ class ChatRequest(BaseModel):
     language: str = "auto"
     system_prompt: Optional[str] = None
     fallback_response: Optional[str] = None
+    rerank_enabled: bool = False
+    rerank_threshold: float = 0.500
 
 class ChatResponse(BaseModel):
     response: str
