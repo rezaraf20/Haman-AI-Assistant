@@ -13,11 +13,26 @@ use App\Http\Middleware\SetLocale;
 Route::any('/payments/zarinpal/callback', [PaymentController::class, 'zarinpalCallback'])
     ->name('payments.zarinpal.callback');
 
-// Customer portal's phone+SMS-OTP login/signup (see CustomerPanelProvider for
-// why this isn't Filament's own login page, and app/Livewire/OtpLogin.php for
-// the actual flow). Already-authenticated visitors get bounced straight to
-// the portal instead of seeing a login form again.
-Route::get('/portal/login', fn () => auth()->check()
-    ? redirect('/portal')
-    : view('auth.otp-login-page')
-)->name('portal.login')->middleware(SetLocale::class);
+// Customer portal's login/signup — phone+SMS-OTP (see CustomerPanelProvider
+// for why this isn't Filament's own login page, and app/Livewire/OtpLogin.php
+// for that flow) for Persian visitors, email+password (app/Livewire/
+// EmailLogin.php) for everyone else, chosen by the resolved locale (see
+// SetLocale) but always escapable via ?method=phone/email — a Persian
+// speaker whose browser happens to report English, or vice versa, must
+// never be stuck looking at a login form for a method their account
+// doesn't use. Already-authenticated visitors get bounced straight to the
+// portal instead of seeing a login form again.
+Route::get('/portal/login', function () {
+    if (auth()->check()) return redirect('/portal');
+
+    $method = request('method');
+    if (!in_array($method, ['phone', 'email'], true)) {
+        $method = session('portal_auth_method');
+    }
+    if (!in_array($method, ['phone', 'email'], true)) {
+        $method = app()->getLocale() === 'fa' ? 'phone' : 'email';
+    }
+    session(['portal_auth_method' => $method]);
+
+    return view('auth.otp-login-page', ['method' => $method]);
+})->name('portal.login')->middleware(SetLocale::class);

@@ -112,6 +112,59 @@ class TenantService
         });
     }
 
+    /**
+     * Customer-portal self-signup via email+password (see EmailLogin
+     * Livewire component) — the English-locale counterpart to
+     * registerViaPhone()'s Persian-locale phone+SMS-OTP flow. Deliberately
+     * collects only name/email/password up front, same reasoning as
+     * registerViaPhone()'s API-key omission: the rest of the profile
+     * (first/last name split, address, national ID) is filled in later from
+     * the customer's own Profile page, not forced at signup time.
+     */
+    public function registerViaEmail(array $data): array
+    {
+        return DB::transaction(function () use ($data) {
+            $plan   = Plan::where('slug', 'free')->firstOrFail();
+            $uuid   = Str::uuid()->toString();
+            $schema = 'tenant_' . str_replace('-', '', $uuid);
+            $name   = trim($data['name']);
+            // Best-effort split so Profile's first_name/last_name fields
+            // start pre-filled instead of blank — the customer can correct
+            // this later from their own profile either way.
+            $nameParts = preg_split('/\s+/', $name, 2);
+
+            $tenant = Tenant::create([
+                'id'            => $uuid,
+                'slug'          => Str::slug($name) . '-' . substr($uuid, 0, 6),
+                'name'          => $name,
+                'email'         => $data['email'],
+                'plan_id'       => $plan->id,
+                'schema_name'   => $schema,
+                'status'        => 'trial',
+                'trial_ends_at' => now()->addDays(14),
+                'settings'      => ['webhook_secret' => Str::random(32)],
+            ]);
+
+            $this->createSchema($schema);
+
+            $user = User::create([
+                'id'                => Str::uuid()->toString(),
+                'tenant_id'         => $tenant->id,
+                'email'             => $data['email'],
+                'first_name'        => $nameParts[0] ?? $name,
+                'last_name'         => $nameParts[1] ?? '',
+                'password'          => Hash::make($data['password']),
+                'password_hash'     => Hash::make($data['password']),
+                'name'              => $name,
+                'role'              => 'owner',
+                'locale'            => 'en',
+                'email_verified_at' => now(),
+            ]);
+
+            return ['tenant' => $tenant, 'user' => $user];
+        });
+    }
+
     public function createSchema(string $schemaName): void
     {
         DB::statement("CREATE SCHEMA IF NOT EXISTS {$schemaName}");
@@ -165,6 +218,24 @@ class TenantService
         } catch (\Throwable $e) {}
         try {
             DB::statement("ALTER TABLE {$schemaName}.chatbots ADD COLUMN IF NOT EXISTS business_name VARCHAR(255)");
+        } catch (\Throwable $e) {}
+        try {
+            // products.tags was TEXT[] (Postgres native array) while
+            // Product's 'tags' => 'array' Eloquent cast always JSON-encodes
+            // — every single product sync failed with "malformed array
+            // literal" as a result (100% failure rate, confirmed zero rows
+            // in the products table for any tenant). to_jsonb() on the
+            // existing text[] column correctly converts '{a,b}' to
+            // ["a","b"]; only runs if the column is still the old type.
+            DB::statement("
+                DO \$\$
+                BEGIN
+                    IF (SELECT data_type FROM information_schema.columns WHERE table_schema = '{$schemaName}' AND table_name = 'products' AND column_name = 'tags') = 'ARRAY' THEN
+                        ALTER TABLE {$schemaName}.products ALTER COLUMN tags TYPE JSONB USING to_jsonb(tags);
+                        ALTER TABLE {$schemaName}.products ALTER COLUMN tags SET DEFAULT '[]';
+                    END IF;
+                END \$\$;
+            ");
         } catch (\Throwable $e) {}
         // Backfill: the ADD COLUMN above leaves every pre-existing chunk row
         // at content_tsv=NULL (never matches any full-text query), so hybrid
@@ -352,7 +423,13 @@ class TenantService
                 permalink TEXT,
                 featured_image TEXT,
                 attributes JSONB DEFAULT '{}',
-                tags TEXT[] DEFAULT '{}',
+                -- Not TEXT[] (Postgres native array) -- Product's tags
+                -- Eloquent cast JSON-encodes PHP arrays (the same cast
+                -- attributes above uses), which produces a JSON string that
+                -- Postgres cannot parse as a text[] literal (malformed
+                -- array literal). JSONB accepts what the cast actually
+                -- sends, matching attributes.
+                tags JSONB DEFAULT '[]',
                 embedding_status VARCHAR(20) DEFAULT 'pending',
                 synced_at TIMESTAMPTZ DEFAULT now(),
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

@@ -3,6 +3,8 @@
 // Laravel's own stock lang/{locale}/validation.php (rule-name messages like
 // "required"), which this app doesn't publish/override.
 return [
+    'account_locked' => 'حساب شما موقتاً قفل شده است.',
+    'invalid_credentials' => 'ایمیل یا رمز عبور نادرست است.',
     'otp_expired' => 'کد منقضی شده است. دوباره درخواست دهید.',
     'otp_incorrect' => 'کد وارد شده صحیح نیست.',
     'otp_max_attempts' => 'تعداد تلاش‌های مجاز تمام شد. کد جدید درخواست دهید.',
