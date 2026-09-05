@@ -4,7 +4,8 @@ namespace Tests\Feature;
 use Tests\TestCase;
 use App\Models\{User, Tenant, Plan};
 use App\Services\TenantService;
-use Illuminate\Support\Facades\{DB, Str};
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 /**
