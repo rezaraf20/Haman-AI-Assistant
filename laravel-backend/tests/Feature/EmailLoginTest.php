@@ -2,7 +2,7 @@
 namespace Tests\Feature;
 
 use Tests\TestCase;
-use App\Models\User;
+use App\Models\{User, Plan};
 use App\Livewire\EmailLogin;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -17,6 +17,19 @@ use Livewire\Livewire;
 class EmailLoginTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void {
+        parent::setUp();
+        // TenantService::registerViaEmail() (same as registerViaPhone())
+        // requires a plan with this exact slug to exist — it's the new
+        // tenant's default plan, not something the registration flow
+        // creates itself.
+        Plan::create([
+            'name' => 'Free', 'slug' => 'free', 'price_monthly' => 0,
+            'max_chatbots' => 1, 'max_tokens_monthly' => 100000,
+            'is_active' => true, 'sort_order' => 0,
+        ]);
+    }
 
     public function test_portal_login_page_shows_email_form_for_english_method(): void
     {
