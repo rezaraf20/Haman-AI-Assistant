@@ -16,14 +16,18 @@ class PlatformStatsOverview extends StatsOverviewWidget {
 
     protected function getStats(): array {
         $data = Cache::remember('dashboard:admin:stats-overview', 300, function () {
-            $activeNow = Tenant::active()->count();
             // "vs. last month": tenants that already existed (and weren't
             // soft-deleted) at the start of this month, compared to the
             // current active count — an approximation (doesn't separately
             // track churn-during-month), not a historical snapshot table,
-            // but a real signal from real created_at timestamps.
+            // but a real signal from real created_at timestamps. Both counts
+            // pulled in one query (Postgres FILTER) instead of two.
             $startOfMonth = now()->startOfMonth();
-            $activeLastMonth = Tenant::active()->where('created_at', '<', $startOfMonth)->count();
+            $counts = Tenant::active()
+                ->selectRaw("count(*) as active_now, count(*) filter (where created_at < ?) as active_last_month", [$startOfMonth])
+                ->first();
+            $activeNow = (int) $counts->active_now;
+            $activeLastMonth = (int) $counts->active_last_month;
 
             $monthRow = DB::table('platform_daily_stats')
                 ->where('date', '>=', $startOfMonth->toDateString())

@@ -33,7 +33,7 @@ class TopTopicsWidget extends Widget {
                 ->limit(5)
                 ->get();
             DB::statement('SET search_path TO public');
-            return $rows;
+            return $rows->toArray();
         });
     }
 

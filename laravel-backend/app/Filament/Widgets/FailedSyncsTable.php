@@ -28,7 +28,6 @@ class FailedSyncsTable extends Widget {
                     ->orderByDesc('created_at')
                     ->limit(self::LIMIT)
                     ->get(['job_type', 'error_log', 'created_at']);
-                DB::statement('SET search_path TO public');
 
                 foreach ($failed as $job) {
                     $errors = json_decode($job->error_log ?? '[]', true) ?: [];
@@ -41,6 +40,7 @@ class FailedSyncsTable extends Widget {
                     ];
                 }
             }
+            DB::statement('SET search_path TO public');
 
             usort($rows, fn ($a, $b) => strcmp($b['created_at'], $a['created_at']));
             return array_slice($rows, 0, self::LIMIT);

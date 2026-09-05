@@ -44,7 +44,12 @@ class TenantResource extends Resource {
     // this resource better than per-record tracking (unlike tickets, there's
     // no natural single-record "open" action a customer row funnels through).
     public static function getNavigationBadge(): ?string {
-        $count = Tenant::whereNull('admin_seen_at')->count();
+        // Filament renders the badge more than once per request (desktop +
+        // mobile nav) — cache briefly so that doesn't mean two live COUNT
+        // queries every time, on top of avoiding a query on every request.
+        $count = \Illuminate\Support\Facades\Cache::remember('nav-badge:tenants-unseen', 60, function () {
+            return Tenant::whereNull('admin_seen_at')->count();
+        });
         return $count > 0 ? (string) $count : null;
     }
     public static function getNavigationBadgeColor(): ?string { return 'success'; }
