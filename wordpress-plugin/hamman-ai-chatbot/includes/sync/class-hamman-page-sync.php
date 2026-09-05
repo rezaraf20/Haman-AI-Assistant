@@ -109,7 +109,16 @@ class Hamman_Page_Sync {
         $css_words = ['classic','full','none','initial','center','start','flex-end','wrap',
                       'inherit','justify','column','row','span','slideInUp','slow','italic',
                       'custom','space-around','flex','absolute','relative','fixed','sticky',
-                      'block','inline','grid','auto','normal','bold','uppercase','lowercase'];
+                      'block','inline','grid','auto','normal','bold','uppercase','lowercase',
+                      // Widget/box style presets and shape-divider/background
+                      // shorthand fragments seen leaking into real synced
+                      // content (see is_css_or_url()'s comment for the real
+                      // incident this traces back to) — kept here too as a
+                      // second layer, in case a future extraction path
+                      // (e.g. the rendered-HTML fallback below) reintroduces
+                      // the same words a different way.
+                      'solid','glass','middle','outline','gradient','rotate','flip',
+                      'underline','no-repeat','cover','inset','top','bottom','wave'];
         foreach ($css_words as $word) {
             $text = preg_replace('/\b' . preg_quote($word, '/') . '\b/i', '', $text);
         }
@@ -119,8 +128,30 @@ class Hamman_Page_Sync {
     }
 
     private function is_css_or_url( string $value ): bool {
-        return preg_match('/^(#|rgb|http|https|data:|\.|\d+px|\d+%)/i', $value)
-            || strpos($value, '{') !== false
-            || (strpos($value, ':') !== false && strlen($value) < 50);
+        if (preg_match('/^(#|rgb|http|https|data:|\.|\d+px|\d+%)/i', $value)) return true;
+        if (strpos($value, '{') !== false) return true;
+        if (strpos($value, ':') !== false && strlen($value) < 50) return true;
+
+        // The real incident this guards against: a live customer's bot
+        // answered "what's your company name?" with a fabricated competitor
+        // name that turned out to be nothing of the sort — it was the site's
+        // own Elementor theme/addon's internal skin identifier ("HamanCo"),
+        // scraped from a widget setting alongside dozens of other internal
+        // tokens ("glass", "middle", "solid", "ServiceButton", "hamanb")
+        // that all made it past the checks above because none of them look
+        // like a URL, a color, or a CSS declaration.
+        //
+        // What they all share instead: Elementor/theme/addon internal
+        // identifiers (skin names, widget-type slugs, style/animation
+        // presets, element IDs) are almost always a single space-free ASCII
+        // token. Real authored text is either Persian/Arabic (never matches
+        // this pattern at all) or an English phrase that — even when short
+        // ("About Us", "Get Started") — contains a space or punctuation.
+        // A bare, punctuation-free run of Latin letters/digits is the
+        // signature of an internal value, not something a site owner typed
+        // for a visitor to read.
+        if (preg_match('/^[A-Za-z][A-Za-z0-9_-]*$/', $value)) return true;
+
+        return false;
     }
 }

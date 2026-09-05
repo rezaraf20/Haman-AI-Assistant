@@ -21,6 +21,7 @@ class Settings extends Page implements HasForms {
     protected static ?int $navigationSort = 9;
 
     public static function getNavigationLabel(): string { return __('panel.settings_nav'); }
+    public static function getNavigationGroup(): ?string { return __('panel.nav_group_infrastructure'); }
     public function getTitle(): string { return __('panel.settings_title'); }
 
     public ?array $data = [];

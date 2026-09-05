@@ -27,10 +27,16 @@ class WidgetDefaults {
     // same way an explicit send_button_label etc. already does).
     private static function common(): array {
         return [
-            'primary_color'       => '#1B3A6B',
+            'primary_color'       => config('hamman.brand.primary_color'),
             'powered_by_enabled'  => true,
-            'powered_by_name'     => 'HamanTech',
-            'powered_by_url'      => 'https://hamantech.ir',
+            'powered_by_name'     => config('hamman.brand.name'),
+            'powered_by_url'      => config('hamman.brand.url'),
+            // Which corner of the page the floating widget sits in — must
+            // NOT be derived from the chatbot's text direction (a Persian
+            // site owner may still want the widget bottom-right, matching
+            // most competitors' convention); admin/customer-settable, same
+            // override path as primary_color above.
+            'position'            => 'bottom-right',
         ];
     }
 

@@ -45,4 +45,15 @@ class Hamman_Sync_Manager {
         $event = $update ? 'page.updated' : 'page.created';
         $this->api()->send_webhook(['event'=>$event,'chatbot_id'=>$this->chatbotId(),'data'=>$data]);
     }
+
+    // Bound to both delete_post (permanent deletion) and wp_trash_post (the
+    // far more common path — most users trash rather than permanently
+    // delete) so either one removes the page/post from the bot's content
+    // the same way woocommerce_delete_product already does for products.
+    // Mirrors on_product_deleted() exactly.
+    public function on_post_removed( int $id ): void {
+        if (!$this->isReady()) return;
+        if (!in_array( get_post_type($id), ['page','post'], true )) return;
+        $this->api()->send_webhook(['event'=>'page.deleted','chatbot_id'=>$this->chatbotId(),'data'=>['id'=>$id]]);
+    }
 }

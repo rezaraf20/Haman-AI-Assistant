@@ -46,6 +46,16 @@ def _fetch_from_db(db: Session) -> List[dict]:
     profiles = [dict(r) for r in rows]
     for p in profiles:
         p["api_key"] = _decrypt_api_key(p["api_key"])
+        # Postgres NUMERIC columns come back as Decimal via psycopg2, which
+        # json.dumps() can't serialize — this silently broke the Redis cache
+        # below on every single call (caught, logged, degrades to querying
+        # the DB fresh every time — harmless but pointless caching) ever
+        # since these price columns were added. _compute_cost_toman() already
+        # does float(...) on read, so this is no less correct there.
+        if p.get("input_price_per_1m_toman") is not None:
+            p["input_price_per_1m_toman"] = float(p["input_price_per_1m_toman"])
+        if p.get("output_price_per_1m_toman") is not None:
+            p["output_price_per_1m_toman"] = float(p["output_price_per_1m_toman"])
     return profiles
 
 

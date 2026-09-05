@@ -22,6 +22,7 @@ class Profile extends Page implements HasForms {
     protected static ?int $navigationSort = 99;
 
     public static function getNavigationLabel(): string { return __('panel.account_info_nav'); }
+    public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_account'); }
     public function getTitle(): string { return __('panel.account_info_nav'); }
 
     public ?array $data = [];

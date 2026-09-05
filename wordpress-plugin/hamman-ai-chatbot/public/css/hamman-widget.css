@@ -13,11 +13,17 @@
  * stylesheet.
  */
 
+/* Which corner the widget occupies is controlled by :host's own
+ * data-position attribute (set from widget_config in hamman-widget.js),
+ * never by `dir` — text direction and on-page position are independent
+ * settings. A Persian chatbot must be able to stay bottom-right (the
+ * common convention) and vice versa. Physical `right`/`left` (not
+ * inset-inline-*) so the corner doesn't silently flip when dir changes. */
 :host {
     all: initial;
     position: fixed;
     bottom: 24px;
-    inset-inline-end: 24px;
+    right: 24px;
     z-index: 2147483000;
     --hm-primary: #1B3A6B;
     --hm-primary-contrast: #ffffff;
@@ -26,14 +32,27 @@
     display: block;
 }
 
+:host([data-position="bottom-left"]) {
+    right: auto;
+    left: 24px;
+}
+
 :host * {
     box-sizing: border-box;
 }
 
+/* align-items: flex-end/flex-start here is a physical choice (which side
+ * of :host the button/window hug), not a text-direction one — it must
+ * follow data-position, not #hm-w's own `dir` attribute, or the button
+ * would drift to the wrong side whenever dir and position disagree. */
 #hm-w {
     display: flex;
     flex-direction: column;
     align-items: flex-end;
+}
+
+:host([data-position="bottom-left"]) #hm-w {
+    align-items: flex-start;
 }
 
 #hm-box {
@@ -297,13 +316,18 @@
 #hm-unread-dot {
     position: absolute;
     top: 2px;
-    inset-inline-end: 2px;
+    right: 2px;
     width: 12px;
     height: 12px;
     border-radius: 50%;
     background: #EF4444;
     border: 2px solid #fff;
     display: none;
+}
+
+:host([data-position="bottom-left"]) #hm-unread-dot {
+    right: auto;
+    left: 2px;
 }
 
 #hm-unread-dot.hm-visible {
@@ -351,7 +375,12 @@
     #hm-btn {
         position: fixed;
         bottom: calc(24px + env(safe-area-inset-bottom, 0px));
-        inset-inline-end: calc(24px + env(safe-area-inset-right, 0px));
+        right: calc(24px + env(safe-area-inset-right, 0px));
+    }
+
+    :host([data-position="bottom-left"]) #hm-btn {
+        right: auto;
+        left: calc(24px + env(safe-area-inset-left, 0px));
     }
 
     /* Widget open on mobile: the floating button sits behind the fullscreen

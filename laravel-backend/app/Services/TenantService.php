@@ -150,6 +150,82 @@ class TenantService
         try {
             DB::statement("ALTER TABLE {$schemaName}.messages ADD COLUMN IF NOT EXISTS is_unanswered BOOLEAN NOT NULL DEFAULT false");
         } catch (\Throwable $e) {}
+        // Hybrid search: full-text column + GIN index alongside the existing
+        // vector column, and the per-chatbot threshold rerank scores get
+        // checked against (raw cosine similarity and a cross-encoder-style
+        // rerank score are on different scales — see rag_service.py).
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.chunks ADD COLUMN IF NOT EXISTS content_tsv TSVECTOR");
+        } catch (\Throwable $e) {}
+        try {
+            DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_chunks_tsv ON {$schemaName}.chunks USING GIN(content_tsv)");
+        } catch (\Throwable $e) {}
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.chatbots ADD COLUMN IF NOT EXISTS rerank_threshold DECIMAL(4,3) NOT NULL DEFAULT 0.500");
+        } catch (\Throwable $e) {}
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.chatbots ADD COLUMN IF NOT EXISTS business_name VARCHAR(255)");
+        } catch (\Throwable $e) {}
+        // Backfill: the ADD COLUMN above leaves every pre-existing chunk row
+        // at content_tsv=NULL (never matches any full-text query), so hybrid
+        // search would silently degrade to vector-only for already-embedded
+        // content until this runs. Joins to documents.language the same way
+        // embed.py picks the config for newly-embedded chunks.
+        try {
+            DB::statement("
+                UPDATE {$schemaName}.chunks c
+                SET content_tsv = to_tsvector(
+                    CASE WHEN d.language = 'fa' THEN 'simple'::regconfig ELSE 'english'::regconfig END,
+                    c.content
+                )
+                FROM {$schemaName}.documents d
+                WHERE c.document_id = d.id AND c.content_tsv IS NULL
+            ");
+        } catch (\Throwable $e) {}
+        // analytics_daily: written by AggregateAnalyticsJob, read by the
+        // admin/customer dashboard widgets instead of them aggregating raw
+        // messages/conversations on every page load.
+        try {
+            DB::statement("
+                CREATE TABLE IF NOT EXISTS {$schemaName}.analytics_daily (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    chatbot_id UUID NOT NULL REFERENCES {$schemaName}.chatbots(id) ON DELETE CASCADE,
+                    date DATE NOT NULL,
+                    total_conversations BIGINT NOT NULL DEFAULT 0,
+                    total_messages BIGINT NOT NULL DEFAULT 0,
+                    user_messages BIGINT NOT NULL DEFAULT 0,
+                    assistant_messages BIGINT NOT NULL DEFAULT 0,
+                    total_tokens BIGINT NOT NULL DEFAULT 0,
+                    prompt_tokens BIGINT NOT NULL DEFAULT 0,
+                    completion_tokens BIGINT NOT NULL DEFAULT 0,
+                    cost_toman DECIMAL(14,4) NOT NULL DEFAULT 0,
+                    unique_visitors BIGINT NOT NULL DEFAULT 0,
+                    avg_messages_per_conv DECIMAL(6,2) NOT NULL DEFAULT 0,
+                    avg_response_latency_ms INTEGER,
+                    fallback_count BIGINT NOT NULL DEFAULT 0,
+                    unanswered_count BIGINT NOT NULL DEFAULT 0,
+                    escalation_count BIGINT NOT NULL DEFAULT 0,
+                    positive_feedback BIGINT NOT NULL DEFAULT 0,
+                    negative_feedback BIGINT NOT NULL DEFAULT 0,
+                    products_recommended BIGINT NOT NULL DEFAULT 0,
+                    conversions BIGINT NOT NULL DEFAULT 0,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    UNIQUE(chatbot_id, date)
+                )
+            ");
+            DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_analytics_daily_date ON {$schemaName}.analytics_daily(date)");
+        } catch (\Throwable $e) {}
+        // Pre-existing analytics_daily rows (shouldn't be any yet — the table
+        // never existed until now, and the job was never scheduled — but this
+        // is idempotent/harmless if it ever does need to run twice) get
+        // cost_toman if the column somehow predates this fix.
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.analytics_daily ADD COLUMN IF NOT EXISTS cost_toman DECIMAL(14,4) NOT NULL DEFAULT 0");
+        } catch (\Throwable $e) {}
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.analytics_daily ADD COLUMN IF NOT EXISTS unanswered_count BIGINT NOT NULL DEFAULT 0");
+        } catch (\Throwable $e) {}
     }
 
     private function createTenantTables(string $s): void
@@ -160,6 +236,14 @@ class TenantService
                 name VARCHAR(255) NOT NULL,
                 type VARCHAR(30) NOT NULL DEFAULT 'support',
                 status VARCHAR(20) NOT NULL DEFAULT 'active',
+                -- Distinct from name (the bot's own persona/display name,
+                -- e.g. Sales Bot) -- this is the actual business the bot
+                -- speaks on behalf of, injected verbatim into the LLM prompt
+                -- so it can answer a company-name question correctly instead
+                -- of guessing from scraped content. Nullable: when unset,
+                -- the prompt's grounding rules tell the model to say it
+                -- does not know rather than invent one.
+                business_name VARCHAR(255),
                 system_prompt TEXT,
                 welcome_message TEXT,
                 fallback_response TEXT,
@@ -170,6 +254,7 @@ class TenantService
                 retrieval_top_k SMALLINT NOT NULL DEFAULT 8,
                 retrieval_threshold DECIMAL(4,3) NOT NULL DEFAULT 0.600,
                 reranker_enabled BOOLEAN NOT NULL DEFAULT false,
+                rerank_threshold DECIMAL(4,3) NOT NULL DEFAULT 0.500,
                 memory_window SMALLINT NOT NULL DEFAULT 6,
                 widget_config JSONB NOT NULL DEFAULT '{}',
                 language VARCHAR(10) NOT NULL DEFAULT 'en',
@@ -226,6 +311,14 @@ class TenantService
                 chunk_index SMALLINT NOT NULL,
                 content TEXT NOT NULL,
                 embedding vector(3072),
+                -- Populated explicitly by the Python embedding pipeline
+                -- (embed.py) at insert time via to_tsvector(config, content),
+                -- not a Postgres GENERATED column: to_tsvector's regconfig
+                -- argument must vary per row (documents.language: 'simple'
+                -- for fa — Postgres has no Persian stemmer — vs 'english'),
+                -- and GENERATED ALWAYS AS requires an IMMUTABLE expression,
+                -- which rules out a per-row CASE-selected regconfig.
+                content_tsv TSVECTOR,
                 metadata JSONB NOT NULL DEFAULT '{}',
                 token_count SMALLINT NOT NULL DEFAULT 0,
                 embedding_model VARCHAR(100) NOT NULL DEFAULT 'text-embedding-004',
@@ -234,6 +327,7 @@ class TenantService
         ");
 
         DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_chunks_chatbot ON {$s}.chunks(chatbot_id)");
+        DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_chunks_tsv ON {$s}.chunks USING GIN(content_tsv)");
 
         DB::statement("
             CREATE TABLE IF NOT EXISTS {$s}.products (
@@ -351,6 +445,41 @@ class TenantService
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             )
         ");
+
+        // Written by AggregateAnalyticsJob (routes/console.php's
+        // hamman:aggregate-analytics, scheduled daily) — dashboard widgets
+        // read from here instead of aggregating raw messages/conversations
+        // on every page load. unanswered_count backs the demand-gap /
+        // product-health signal on both the admin and customer dashboards.
+        DB::statement("
+            CREATE TABLE IF NOT EXISTS {$s}.analytics_daily (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                chatbot_id UUID NOT NULL REFERENCES {$s}.chatbots(id) ON DELETE CASCADE,
+                date DATE NOT NULL,
+                total_conversations BIGINT NOT NULL DEFAULT 0,
+                total_messages BIGINT NOT NULL DEFAULT 0,
+                user_messages BIGINT NOT NULL DEFAULT 0,
+                assistant_messages BIGINT NOT NULL DEFAULT 0,
+                total_tokens BIGINT NOT NULL DEFAULT 0,
+                prompt_tokens BIGINT NOT NULL DEFAULT 0,
+                completion_tokens BIGINT NOT NULL DEFAULT 0,
+                cost_toman DECIMAL(14,4) NOT NULL DEFAULT 0,
+                unique_visitors BIGINT NOT NULL DEFAULT 0,
+                avg_messages_per_conv DECIMAL(6,2) NOT NULL DEFAULT 0,
+                avg_response_latency_ms INTEGER,
+                fallback_count BIGINT NOT NULL DEFAULT 0,
+                unanswered_count BIGINT NOT NULL DEFAULT 0,
+                escalation_count BIGINT NOT NULL DEFAULT 0,
+                positive_feedback BIGINT NOT NULL DEFAULT 0,
+                negative_feedback BIGINT NOT NULL DEFAULT 0,
+                products_recommended BIGINT NOT NULL DEFAULT 0,
+                conversions BIGINT NOT NULL DEFAULT 0,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE(chatbot_id, date)
+            )
+        ");
+        DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_analytics_daily_date ON {$s}.analytics_daily(date)");
 
         DB::statement("SET search_path TO public");
     }

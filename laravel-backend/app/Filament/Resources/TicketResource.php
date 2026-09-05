@@ -17,6 +17,7 @@ class TicketResource extends Resource {
     protected static ?int $navigationSort = 8;
 
     public static function getNavigationLabel(): string { return __('ticket.nav'); }
+    public static function getNavigationGroup(): ?string { return __('panel.nav_group_support'); }
     public static function getModelLabel(): string { return __('ticket.singular'); }
     public static function getPluralModelLabel(): string { return __('ticket.plural'); }
 
@@ -29,7 +30,12 @@ class TicketResource extends Resource {
     // Tickets::table(), which both flip status back to open on customer
     // activity) — reusing that status instead of a separate seen/unseen flag.
     public static function getNavigationBadge(): ?string {
-        $count = Ticket::where('status', 'open')->count();
+        // Filament renders the badge more than once per request (desktop +
+        // mobile nav) — cache briefly so that doesn't mean two live COUNT
+        // queries every time, on top of avoiding a query on every request.
+        $count = \Illuminate\Support\Facades\Cache::remember('nav-badge:tickets-open', 60, function () {
+            return Ticket::where('status', 'open')->count();
+        });
         return $count > 0 ? (string) $count : null;
     }
     public static function getNavigationBadgeColor(): ?string { return 'danger'; }

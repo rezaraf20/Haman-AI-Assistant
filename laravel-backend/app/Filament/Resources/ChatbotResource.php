@@ -5,7 +5,7 @@ use App\Models\ChatbotIndexEntry;
 use App\Models\Tenant;
 use App\Enums\ChatbotType;
 use Filament\Forms\Form;
-use Filament\Forms\Components\{TextInput, DateTimePicker, Select};
+use Filament\Forms\Components\{TextInput, DateTimePicker, Select, Toggle, Section};
 use Filament\Resources\Resource;
 use Filament\Tables\Table;
 use Filament\Tables\Columns\{TextColumn, IconColumn};
@@ -25,6 +25,7 @@ class ChatbotResource extends Resource {
     protected static ?int $navigationSort = 2;
 
     public static function getNavigationLabel(): string { return __('chatbot.nav'); }
+    public static function getNavigationGroup(): ?string { return __('panel.nav_group_customers'); }
     public static function getModelLabel(): string { return __('chatbot.singular'); }
     public static function getPluralModelLabel(): string { return __('chatbot.nav'); }
 
@@ -61,6 +62,35 @@ class ChatbotResource extends Resource {
                 ->default(0)
                 ->required()
                 ->helperText(__('chatbot.monthly_price_help')),
+
+            // These four live on the tenant-schema chatbots row, not this
+            // form's own ChatbotIndexEntry model — EditChatbot.php's
+            // mutateFormDataBeforeFill()/handleRecordUpdate() switch schema
+            // to load/save them alongside the public-schema fields above.
+            // Hidden on create: a brand-new chatbot doesn't have a tenant
+            // schema row yet at this point in the flow (customers create
+            // their own via the portal's BuyChatbot; this admin form only
+            // ever edits ones that already exist).
+            Section::make(__('chatbot.retrieval_section'))
+                ->description(__('chatbot.retrieval_section_desc'))
+                ->visibleOn('edit')
+                ->schema([
+                    TextInput::make('retrieval_threshold')
+                        ->label(__('chatbot.retrieval_threshold_label'))
+                        ->helperText(__('chatbot.retrieval_threshold_help'))
+                        ->numeric()->minValue(0)->maxValue(1)->step(0.01)
+                        ->default(0.600),
+                    Toggle::make('reranker_enabled')
+                        ->label(__('chatbot.rerank_enabled_label'))
+                        ->helperText(__('chatbot.rerank_enabled_help'))
+                        ->live(),
+                    TextInput::make('rerank_threshold')
+                        ->label(__('chatbot.rerank_threshold_label'))
+                        ->helperText(__('chatbot.rerank_threshold_help'))
+                        ->numeric()->minValue(0)->maxValue(1)->step(0.01)
+                        ->default(0.500)
+                        ->visible(fn ($get) => $get('reranker_enabled')),
+                ]),
         ]);
     }
 

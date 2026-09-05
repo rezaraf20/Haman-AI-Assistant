@@ -19,6 +19,7 @@ class WalletTransactionResource extends Resource {
     protected static ?int $navigationSort = 5;
 
     public static function getNavigationLabel(): string { return __('wallet.transactions_nav'); }
+    public static function getNavigationGroup(): ?string { return __('panel.nav_group_finance'); }
     public static function getModelLabel(): string { return __('wallet.transaction_singular'); }
     public static function getPluralModelLabel(): string { return __('wallet.transaction_plural'); }
 

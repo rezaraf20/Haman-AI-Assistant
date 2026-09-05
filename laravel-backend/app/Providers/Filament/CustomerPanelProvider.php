@@ -27,7 +27,7 @@ class CustomerPanelProvider extends PanelProvider {
         return $panel
             ->id('customer')
             ->path('portal')
-            ->brandName(fn () => 'Haman AI — ' . __('common.customer_portal'))
+            ->brandName(fn () => config('hamman.brand.name') . ' — ' . __('common.customer_portal'))
             // No ->login() — auth is phone+SMS-OTP via the plain Livewire flow
             // at routes/web.php's /portal/login (app/Livewire/OtpLogin.php),
             // not Filament's built-in email/password login page. It still
@@ -35,7 +35,7 @@ class CustomerPanelProvider extends PanelProvider {
             // Filament's Authenticate middleware below recognizes it exactly
             // like its own login would — bootstrap/app.php's redirectGuestsTo
             // sends unauthenticated /portal* visitors to that route instead.
-            ->colors(['primary' => '#1B3A6B'])
+            ->colors(['primary' => config('hamman.brand.primary_color')])
             // See AdminPanelProvider for why this is a render hook and not
             // ->font() (whose $family parameter is a plain, eagerly-evaluated
             // string, not string|Closure), and why it overrides the
@@ -48,17 +48,21 @@ class CustomerPanelProvider extends PanelProvider {
                     ? '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=vazirmatn:400,500,600,700"><style>:root{--font-family:"Vazirmatn"}</style>'
                     : '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=inter:400,500,600,700"><style>:root{--font-family:"Inter"}</style>'),
             )
-            // discoverPages() only picks up files under Filament/Customer/Pages
-            // — it does NOT auto-register Filament's own built-in Dashboard
-            // page (that only happens when a panel's pages are left at their
-            // untouched default). Without this line, portal/ silently had no
-            // dashboard route at all: the root path's RedirectToHomeController
-            // just fell through to the first navigation item (Wallet), so the
-            // AccountOverview widget below was never mounted anywhere.
-            ->pages([\Filament\Pages\Dashboard::class])
+            // App\Filament\Customer\Pages\Dashboard (extends Filament's own)
+            // now lives inside the discoverPages() directory below, so it's
+            // picked up automatically as the panel's root page — no separate
+            // ->pages([...]) registration needed (that was only required
+            // before because the stock vendor Dashboard class lives outside
+            // this directory entirely; without it, portal/ had no dashboard
+            // route at all and fell through to the first nav item).
             ->discoverResources(in: app_path('Filament/Customer/Resources'), for: 'App\\Filament\\Customer\\Resources')
             ->discoverPages(in: app_path('Filament/Customer/Pages'), for: 'App\\Filament\\Customer\\Pages')
             ->discoverWidgets(in: app_path('Filament/Customer/Widgets'), for: 'App\\Filament\\Customer\\Widgets')
+            ->navigationGroups([
+                __('panel.nav_group_customer_chatbots'),
+                __('panel.nav_group_customer_wallet'),
+                __('panel.nav_group_customer_account'),
+            ])
             ->middleware([
                 SetLocale::class,
                 EncryptCookies::class,

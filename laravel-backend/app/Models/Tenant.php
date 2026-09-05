@@ -24,6 +24,10 @@ class Tenant extends Model {
     public function walletTransactions() { return $this->hasMany(WalletTransaction::class); }
     public function subscription() { return $this->hasOne(Subscription::class)->latestOfMany(); }
     public function isAccessible(): bool { return in_array($this->status, ['active','trial']); }
+    // AggregateAnalyticsJob calls Tenant::active() but this scope never
+    // existed — the job would throw BadMethodCallException the first time it
+    // actually ran. Same status set as isAccessible() above.
+    public function scopeActive($q) { return $q->whereIn('status', ['active', 'trial']); }
     // Purchased bonus_tokens (Customer\Pages\BuyTokens) only kick in once the
     // plan's own monthly allowance is used up — see TenantService::incrementUsage()
     // for where they actually get drawn down.

@@ -55,6 +55,12 @@
     // ── Shadow DOM host ────────────────────────────────────────────────
     var hostEl = document.createElement('div');
     hostEl.id = 'hamman-widget-host';
+    // Which corner the widget sits in — deliberately a separate attribute
+    // from `dir` (set on #hm-w below). The widget's on-page position and
+    // the chatbot's text direction are independent settings; hamman-widget.css
+    // keys all position/alignment rules off data-position, never off dir,
+    // so a Persian chatbot doesn't silently jump to the opposite corner.
+    hostEl.setAttribute('data-position', CFG.position || 'bottom-right');
     document.body.appendChild(hostEl);
     var root = hostEl.attachShadow({ mode: 'open' });
 
@@ -263,6 +269,7 @@
         if (wc.generic_error_message) CFG.genericErrorMessage = wc.generic_error_message;
         if (wc.connection_error_message) CFG.connectionErrorMessage = wc.connection_error_message;
         if (wc.primary_color) { CFG.primaryColor = wc.primary_color; setThemeVars(wc.primary_color, w.getAttribute('dir')); }
+        if (wc.position) { CFG.position = wc.position; hostEl.setAttribute('data-position', wc.position); }
         if (typeof wc.powered_by_enabled !== 'undefined') CFG.poweredByEnabled = wc.powered_by_enabled;
         if (wc.powered_by_name) CFG.poweredByName = wc.powered_by_name;
         if (wc.powered_by_url) CFG.poweredByUrl = wc.powered_by_url;

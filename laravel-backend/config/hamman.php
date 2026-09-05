@@ -27,4 +27,15 @@ return [
         'merchant_id' => env('ZARINPAL_MERCHANT_ID'),
         'sandbox'     => env('ZARINPAL_SANDBOX', true),
     ],
+    // Single source of truth for the brand identity — previously '#1B3A6B'
+    // was hardcoded separately in AdminPanelProvider, CustomerPanelProvider,
+    // and WidgetDefaults::common() (the chat widget's own default), and the
+    // admin panel's brandName() said "Haman AI" while the actual product/
+    // domain/chat-widget branding is "HamanTech" / hamantech.ir — one name,
+    // one color, read from here everywhere.
+    'brand' => [
+        'name'          => 'HamanTech',
+        'url'           => 'https://hamantech.ir',
+        'primary_color' => '#1B3A6B',
+    ],
 ];

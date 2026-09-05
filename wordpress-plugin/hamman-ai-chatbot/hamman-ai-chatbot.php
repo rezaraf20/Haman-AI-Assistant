@@ -3,7 +3,7 @@
  * Plugin Name:       Hamman AI Chatbot
  * Plugin URI:        https://hamman.ir/ai-chatbot
  * Description:       AI-powered chatbot for customer support, sales, and WooCommerce recommendations.
- * Version:           1.4.0
+ * Version:           1.5.1
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            Reza Rafiei
@@ -15,7 +15,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'HAMMAN_VERSION',    '1.4.0' );
+define( 'HAMMAN_VERSION',    '1.5.1' );
 define( 'HAMMAN_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'HAMMAN_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'HAMMAN_API_BASE',   'https://api.arshanweb.ir/api/v1' );

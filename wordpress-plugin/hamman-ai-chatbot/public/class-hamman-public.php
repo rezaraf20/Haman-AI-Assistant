@@ -79,6 +79,12 @@ class Hamman_Public {
             'apiUrl'      => $api_url,
             'cssUrl'      => HAMMAN_PLUGIN_URL . 'public/css/hamman-widget.css',
             'dir'         => $dir,
+            // First-paint-only fallback (see comment above) — real value
+            // comes from the chatbot's own widget_config once /chat/session
+            // responds. Must not be derived from $dir: the widget's on-page
+            // corner and the chatbot's text direction are independent
+            // settings (see hamman-widget.css's :host/data-position rules).
+            'position'    => 'bottom-right',
             'aiName'      => get_option('hamman_ai_name','AI BOT'),
             'chatTitle'   => get_option('hamman_chat_title','') ?: get_option('hamman_ai_name','AI BOT'),
             'placeholder' => get_option('hamman_input_placeholder','') ?: $l10n_defaults['placeholder'],

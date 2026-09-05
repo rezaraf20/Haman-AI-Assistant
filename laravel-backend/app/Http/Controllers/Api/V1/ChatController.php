@@ -190,7 +190,12 @@ class ChatController extends BaseApiController
                 $write('event: error' . "\n" . 'data: ' . json_encode(['error' => 'stream_failed']) . "\n\n");
             }
         }, 200, [
-            'Content-Type'      => 'text/event-stream',
+            // Explicit charset — this stream carries raw UTF-8 bytes
+            // (JSON_UNESCAPED_UNICODE below emits multi-byte characters
+            // as-is rather than \uXXXX-escaping them), so this response
+            // must not rely on a client falling back to some default
+            // encoding to render Persian/Arabic text correctly.
+            'Content-Type'      => 'text/event-stream; charset=utf-8',
             'Cache-Control'     => 'no-cache',
             'X-Accel-Buffering' => 'no',
             'Connection'        => 'keep-alive',

@@ -21,6 +21,7 @@ class Tickets extends Page implements HasTable {
     protected static ?string $navigationIcon = 'heroicon-o-lifebuoy';
 
     public static function getNavigationLabel(): string { return __('ticket.support_nav'); }
+    public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_account'); }
     public function getTitle(): string { return __('ticket.plural'); }
 
     // Mirrors TicketResource::getNavigationBadge() on the admin side: 'answered'
@@ -29,7 +30,12 @@ class Tickets extends Page implements HasTable {
     public static function getNavigationBadge(): ?string {
         $tenantId = auth()->user()?->tenant_id;
         if (!$tenantId) return null;
-        $count = Ticket::where('tenant_id', $tenantId)->where('status', 'answered')->count();
+        // Filament renders the badge more than once per request (desktop +
+        // mobile nav) — cache briefly so that doesn't mean two live COUNT
+        // queries every time, on top of avoiding a query on every request.
+        $count = \Illuminate\Support\Facades\Cache::remember("nav-badge:tickets-answered:{$tenantId}", 60, function () use ($tenantId) {
+            return Ticket::where('tenant_id', $tenantId)->where('status', 'answered')->count();
+        });
         return $count > 0 ? (string) $count : null;
     }
     public static function getNavigationBadgeColor(): ?string { return 'danger'; }
