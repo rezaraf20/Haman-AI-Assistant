@@ -1,10 +1,8 @@
 <?php
 namespace App\Filament\Customer\Widgets;
 
-use App\Models\ChatbotIndexEntry;
-use App\Support\{Jalali, CustomerOnboarding};
+use App\Support\{Jalali, CustomerOnboarding, CustomerDashboardData};
 use Filament\Widgets\Widget;
-use Illuminate\Support\Facades\{DB, Cache};
 
 class ChatbotStatusWidget extends Widget {
     protected static string $view = 'filament.customer.widgets.chatbot-status';
@@ -18,36 +16,22 @@ class ChatbotStatusWidget extends Widget {
 
     public function getRows(): array {
         $tenant = auth()->user()->tenant;
+        $data = CustomerDashboardData::forTenant($tenant);
 
-        return Cache::remember("dashboard:customer:chatbot-status:{$tenant->id}", 300, function () use ($tenant) {
-            $chatbots = ChatbotIndexEntry::where('tenant_id', $tenant->id)->get();
-            if ($chatbots->isEmpty()) return [];
+        return array_map(function (array $chatbot) {
+            $status = match (true) {
+                !$chatbot['is_active'] => 'suspended',
+                $chatbot['sync_status'] === 'running' => 'syncing',
+                $chatbot['sync_status'] === 'failed' => 'error',
+                default => 'active',
+            };
 
-            DB::statement("SET search_path TO {$tenant->schema_name}, public");
-            $rows = [];
-            foreach ($chatbots as $chatbot) {
-                $latestSync = DB::table('sync_jobs')
-                    ->where('chatbot_id', $chatbot->chatbot_id)
-                    ->orderByDesc('created_at')
-                    ->first(['status', 'created_at']);
-
-                $status = match (true) {
-                    !$chatbot->is_active => 'suspended',
-                    $latestSync?->status === 'running' => 'syncing',
-                    $latestSync?->status === 'failed' => 'error',
-                    default => 'active',
-                };
-
-                $rows[] = [
-                    'name' => $chatbot->name ?: '—',
-                    'status' => $status,
-                    'last_sync' => $latestSync?->created_at,
-                ];
-            }
-            DB::statement('SET search_path TO public');
-
-            return $rows;
-        });
+            return [
+                'name' => $chatbot['name'],
+                'status' => $status,
+                'last_sync' => $chatbot['last_sync'],
+            ];
+        }, $data['chatbotStatuses']);
     }
 
     public function statusLabel(string $status): string {

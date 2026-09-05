@@ -1,9 +1,8 @@
 <?php
 namespace App\Filament\Customer\Widgets;
 
-use App\Support\{Jalali, CustomerOnboarding};
+use App\Support\{Jalali, CustomerOnboarding, CustomerDashboardData};
 use Filament\Widgets\ChartWidget;
-use Illuminate\Support\Facades\{DB, Cache};
 
 class DailyConversationsChart extends ChartWidget {
     protected static ?string $pollingInterval = null;
@@ -21,18 +20,7 @@ class DailyConversationsChart extends ChartWidget {
 
     protected function getData(): array {
         $tenant = auth()->user()->tenant;
-
-        $rows = Cache::remember("dashboard:customer:daily-conversations:{$tenant->id}", 300, function () use ($tenant) {
-            DB::statement("SET search_path TO {$tenant->schema_name}, public");
-            $data = DB::table('analytics_daily')
-                ->where('date', '>=', now()->subDays(29)->toDateString())
-                ->selectRaw('date, SUM(total_conversations) as convs')
-                ->groupBy('date')
-                ->get()
-                ->keyBy(fn ($r) => $r->date instanceof \DateTimeInterface ? $r->date->format('Y-m-d') : substr($r->date, 0, 10));
-            DB::statement('SET search_path TO public');
-            return $data;
-        });
+        $rows = CustomerDashboardData::forTenant($tenant)['dailyRows'];
 
         $labels = [];
         $values = [];

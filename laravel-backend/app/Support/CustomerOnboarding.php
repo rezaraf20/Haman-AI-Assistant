@@ -2,8 +2,6 @@
 namespace App\Support;
 
 use App\Models\Tenant;
-use App\Models\ApiKey;
-use App\Models\ChatbotIndexEntry;
 use Illuminate\Support\Facades\{DB, Cache};
 
 /**
@@ -17,21 +15,35 @@ use Illuminate\Support\Facades\{DB, Cache};
 class CustomerOnboarding {
     public static function status(Tenant $tenant): array {
         return Cache::remember("onboarding_status:{$tenant->id}", 300, function () use ($tenant) {
-            $chatbotCreated = ChatbotIndexEntry::where('tenant_id', $tenant->id)->exists();
-
+            // Both public-schema existence checks in one query (two EXISTS
+            // subqueries) instead of two — this gate runs on every customer
+            // dashboard request that isn't cache-warm yet, and the dashboard
+            // has a real query budget.
+            //
             // "Plugin installed" can't be observed directly — the closest
             // real signal this app has is the tenant's API key actually
             // having been used at least once (the WordPress plugin
             // authenticating successfully), which happens before any sync
             // completes.
-            $pluginInstalled = ApiKey::where('tenant_id', $tenant->id)->whereNotNull('last_used_at')->exists();
+            $public = DB::selectOne('
+                SELECT
+                    EXISTS(SELECT 1 FROM chatbot_index WHERE tenant_id = ?) AS chatbot_created,
+                    EXISTS(SELECT 1 FROM api_keys WHERE tenant_id = ? AND last_used_at IS NOT NULL) AS plugin_installed
+            ', [$tenant->id, $tenant->id]);
+            $chatbotCreated = (bool) $public->chatbot_created;
+            $pluginInstalled = (bool) $public->plugin_installed;
 
             $firstSyncDone = false;
             $firstConversationDone = false;
             if ($chatbotCreated) {
                 DB::statement("SET search_path TO {$tenant->schema_name}, public");
-                $firstSyncDone = DB::table('sync_jobs')->where('status', 'completed')->exists();
-                $firstConversationDone = DB::table('conversations')->exists();
+                $tenantChecks = DB::selectOne("
+                    SELECT
+                        EXISTS(SELECT 1 FROM sync_jobs WHERE status = 'completed') AS first_sync_done,
+                        EXISTS(SELECT 1 FROM conversations) AS first_conversation_done
+                ");
+                $firstSyncDone = (bool) $tenantChecks->first_sync_done;
+                $firstConversationDone = (bool) $tenantChecks->first_conversation_done;
                 DB::statement('SET search_path TO public');
             }
 
