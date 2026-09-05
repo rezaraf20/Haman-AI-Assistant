@@ -12,6 +12,9 @@ class OnboardingChecklist extends Widget {
     protected static string $view = 'filament.customer.widgets.onboarding-checklist';
     protected int|string|array $columnSpan = 'full';
     protected static ?int $sort = -10;
+    // See CustomerStatsOverview — this is the very first thing a new tenant
+    // sees, so it especially can't be left as a loading placeholder.
+    protected static bool $isLazy = false;
 
     public static function canView(): bool {
         $tenant = auth()->user()?->tenant;

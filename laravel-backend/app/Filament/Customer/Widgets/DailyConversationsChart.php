@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\{DB, Cache};
 class DailyConversationsChart extends ChartWidget {
     protected static ?string $pollingInterval = null;
     protected int|string|array $columnSpan = 2;
+    protected static bool $isLazy = false;
 
     public static function canView(): bool {
         $tenant = auth()->user()?->tenant;

@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\{DB, Cache};
 class FailedSyncsTable extends Widget {
     protected static string $view = 'filament.widgets.failed-syncs-table';
     protected int|string|array $columnSpan = 'full';
+    protected static bool $isLazy = false;
     private const LIMIT = 10;
 
     public function getRows(): array {

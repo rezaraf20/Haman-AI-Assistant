@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Cache;
 class TenantsAtRiskTable extends Widget {
     protected static string $view = 'filament.widgets.tenants-at-risk-table';
     protected int|string|array $columnSpan = 'full';
+    protected static bool $isLazy = false;
 
     // A tenant nearing their plan's token ceiling is both a churn risk (if
     // they hit the wall and get frustrated) and a sales opportunity (ready

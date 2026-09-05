@@ -11,6 +11,11 @@ use Illuminate\Support\Facades\{DB, Cache};
 class CustomerStatsOverview extends Widget {
     protected static string $view = 'filament.customer.widgets.customer-stats-overview';
     protected int|string|array $columnSpan = 'full';
+    // Filament widgets default to $isLazy = true (a separate Livewire
+    // round-trip after the initial page load) — the dashboard's whole point
+    // is showing real numbers immediately, not a placeholder that then pops
+    // in a beat later.
+    protected static bool $isLazy = false;
 
     public static function canView(): bool {
         $tenant = auth()->user()?->tenant;

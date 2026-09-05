@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\{DB, Cache};
 class TopTopicsWidget extends Widget {
     protected static string $view = 'filament.customer.widgets.top-topics';
     protected int|string|array $columnSpan = 1;
+    protected static bool $isLazy = false;
 
     public static function canView(): bool {
         $tenant = auth()->user()?->tenant;

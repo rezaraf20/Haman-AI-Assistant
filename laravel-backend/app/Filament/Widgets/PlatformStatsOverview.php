@@ -9,6 +9,10 @@ use Illuminate\Support\Facades\{DB, Cache};
 
 class PlatformStatsOverview extends StatsOverviewWidget {
     protected static ?string $pollingInterval = null;
+    // Filament widgets default to $isLazy = true (loaded via a separate
+    // Livewire round-trip after the initial page load) — this dashboard's
+    // whole point is showing real numbers immediately.
+    protected static bool $isLazy = false;
 
     protected function getStats(): array {
         $data = Cache::remember('dashboard:admin:stats-overview', 300, function () {

@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\{DB, Cache};
 class UnansweredRateOverview extends StatsOverviewWidget {
     protected static ?string $pollingInterval = null;
     protected int|string|array $columnSpan = 'full';
+    protected static bool $isLazy = false;
 
     protected function getStats(): array {
         $row = Cache::remember('dashboard:admin:unanswered-rate', 300, function () {

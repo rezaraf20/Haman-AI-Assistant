@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\{DB, Cache};
 class DailyMessagesChart extends ChartWidget {
     protected static ?string $pollingInterval = null;
     protected int|string|array $columnSpan = 2;
+    protected static bool $isLazy = false;
 
     public function getHeading(): string {
         return __('dashboard.admin_chart_daily_messages');
