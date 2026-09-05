@@ -231,6 +231,11 @@ class TenantService
                 DO \$\$
                 BEGIN
                     IF (SELECT data_type FROM information_schema.columns WHERE table_schema = '{$schemaName}' AND table_name = 'products' AND column_name = 'tags') = 'ARRAY' THEN
+                        -- The existing DEFAULT '{}' (a Postgres array
+                        -- literal) can't be auto-cast to jsonb by the type
+                        -- change below -- must be dropped first, then
+                        -- reapplied as a jsonb-typed default afterward.
+                        ALTER TABLE {$schemaName}.products ALTER COLUMN tags DROP DEFAULT;
                         ALTER TABLE {$schemaName}.products ALTER COLUMN tags TYPE JSONB USING to_jsonb(tags);
                         ALTER TABLE {$schemaName}.products ALTER COLUMN tags SET DEFAULT '[]';
                     END IF;
