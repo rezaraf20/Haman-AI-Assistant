@@ -1,14 +1,13 @@
 <?php
 namespace App\Filament\Widgets;
 
-use App\Models\Tenant;
 use App\Support\Money;
 use Filament\Widgets\Widget;
-use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\{DB, Cache};
 
 // Both signals (token quota usage, wallet balance) live on the public-schema
-// Tenant/Plan rows — one query with an eager-loaded relation, no per-tenant
-// schema switching needed, unlike FailedSyncsTable.
+// Tenant/Plan rows — one joined query, no per-tenant schema switching
+// needed, unlike FailedSyncsTable.
 class TenantsAtRiskTable extends Widget {
     protected static string $view = 'filament.widgets.tenants-at-risk-table';
     protected int|string|array $columnSpan = 'full';
@@ -25,11 +24,18 @@ class TenantsAtRiskTable extends Widget {
 
     public function getRows(): array {
         return Cache::remember('dashboard:admin:tenants-at-risk', 300, function () {
-            $tenants = Tenant::active()->with('plan')->get();
+            // A single joined query instead of Tenant::active()->with('plan')
+            // (2 queries) — this dashboard has a real query budget.
+            $tenants = DB::table('tenants')
+                ->leftJoin('plans', 'plans.id', '=', 'tenants.plan_id')
+                ->whereIn('tenants.status', ['active', 'trial'])
+                ->whereNull('tenants.deleted_at')
+                ->select('tenants.name', 'tenants.usage_tokens_current', 'tenants.wallet_balance_toman', 'plans.max_tokens_monthly')
+                ->get();
             $rows = [];
 
             foreach ($tenants as $tenant) {
-                $limit = $tenant->plan?->max_tokens_monthly;
+                $limit = $tenant->max_tokens_monthly;
                 if ($limit && $tenant->usage_tokens_current >= $limit * self::QUOTA_RISK_THRESHOLD) {
                     $rows[] = [
                         'tenant' => $tenant->name,

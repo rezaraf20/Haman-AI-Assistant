@@ -3,7 +3,7 @@
     <x-filament::section>
         <x-slot name="heading">{{ __('dashboard.customer_top_topics') }}</x-slot>
 
-        @if ($rows->isEmpty())
+        @if (empty($rows))
             <p class="text-sm text-gray-500">{{ __('dashboard.customer_top_topics_empty') }}</p>
         @else
             <ul class="space-y-2">
