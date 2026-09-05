@@ -51,6 +51,11 @@ class TranslationCompletenessTest extends TestCase
             'role' => 'owner',
             'email_verified_at' => now(),
         ]);
+        // is_platform_admin, not role — see User::canAccessPanel(). Not
+        // mass-assignable (deliberately absent from $fillable), so it's set
+        // directly here rather than passed into create().
+        $admin->is_platform_admin = true;
+        $admin->save();
 
         $paths = ['/admin', '/admin/tenants', '/admin/chatbots', '/admin/api-keys', '/admin/tickets', '/admin/wallet-transactions'];
 
