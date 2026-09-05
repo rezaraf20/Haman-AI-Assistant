@@ -31,6 +31,12 @@ class WidgetDefaults {
             'powered_by_enabled'  => true,
             'powered_by_name'     => config('hamman.brand.name'),
             'powered_by_url'      => config('hamman.brand.url'),
+            // Which corner of the page the floating widget sits in — must
+            // NOT be derived from the chatbot's text direction (a Persian
+            // site owner may still want the widget bottom-right, matching
+            // most competitors' convention); admin/customer-settable, same
+            // override path as primary_color above.
+            'position'            => 'bottom-right',
         ];
     }
 

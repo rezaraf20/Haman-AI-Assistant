@@ -72,5 +72,8 @@ return [
     'type_unavailable' => 'این نوع چت‌بات در حال حاضر قابل خرید نیست',
     'usage_nav' => 'میزان مصرف',
     'usage_of' => ':used از :limit',
+    'widget_position_label' => 'موقعیت ویجت روی صفحه',
+    'widget_position_bottom_right' => 'پایین راست',
+    'widget_position_bottom_left' => 'پایین چپ',
     'wp_plugin_key_name' => ':name — افزونه وردپرس',
 ];

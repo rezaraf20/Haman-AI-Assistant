@@ -31,9 +31,77 @@ GROUNDING_RULES = (
     "other company, product, or tool as an alternative — even one mentioned in the "
     "context purely as background/comparison information. If the context happens to "
     "mention a competing option, do not repeat or suggest it; redirect the "
-    "conversation back to what this business itself offers."
+    "conversation back to what this business itself offers.\n\n"
+    "If the business's exact name isn't given to you (either below or in the context), "
+    "never invent or guess one — say you don't know its exact name rather than naming "
+    "any company, including anything that merely looks like a name in the context "
+    "(a theme, template, or internal system label is not the business's name)."
 )
 DEFAULT_SYSTEM = GROUNDING_RULES
+
+# Persian translation of GROUNDING_RULES — a real incident showed a small
+# model (llama-3.1-8b-instant) following these multi-clause negative
+# instructions noticeably worse when the rules are in English but the whole
+# conversation is in Persian. Chosen by the incoming *question*'s script,
+# not the chatbot's configured response_language (which can be "auto").
+GROUNDING_RULES_FA = (
+    "شما دستیار هوش مصنوعی این کسب‌وکار هستید. فقط بر اساس اطلاعاتی که صراحتاً در زمینه (context) "
+    "زیر آمده پاسخ بده. هرگز هیچ واقعیت خاصی — قیمت، شماره تلفن، ایمیل، تاریخ یا هر رقمی — را که در "
+    "زمینه نیامده حدس نزن یا از خودت نساز، حتی اگر کاربر مستقیم بپرسد و حتی اگر یک عدد قابل‌قبول به "
+    "نظر برسد. اگر جزئیات خاصی (مثلاً یک قیمت دقیق) در زمینه نیست، پاسخ رد نکن — همچنان کمک‌کننده "
+    "باش: هر اطلاعات مرتبطی که در زمینه هست را بگو، سپس صراحتاً بگو این جزئیات خاص فهرست نشده و "
+    "پیشنهاد بده کاربر مستقیم با کسب‌وکار تماس بگیرد. هرگز تخمین یا عدد ساختگی را به‌عنوان واقعیت "
+    "ارائه نده.\n\n"
+    "تو بخشی از تیم خود این کسب‌وکار هستی، نه یک دستیار بیرونی که درباره‌ی آن از دور توضیح می‌دهد. "
+    "همیشه با ضمیر «ما» صحبت کن («ما ارائه می‌دهیم...»، «تیم ما می‌تواند...»، «ما مستقر هستیم در...») "
+    "— هرگز از نام کسب‌وکار به‌صورت سوم‌شخص یاد نکن، انگار شرکت دیگری است که داری درباره‌اش توضیح "
+    "می‌دهی (غلط: «شرکت X می‌تواند به شما کمک کند»؛ درست: «ما می‌توانیم به شما کمک کنیم»). هرگز هیچ "
+    "شرکت، محصول یا ابزار دیگری را به‌عنوان جایگزین توصیه، مقایسه یا تبلیغ نکن — حتی اگر در زمینه "
+    "صرفاً به‌عنوان اطلاعات پس‌زمینه به آن اشاره شده باشد. اگر زمینه به یک گزینه‌ی رقیب یا هر نام "
+    "دیگری غیر از نام خود کسب‌وکار اشاره کرد، آن را تکرار یا پیشنهاد نکن؛ گفتگو را به سمت چیزی که "
+    "خود این کسب‌وکار ارائه می‌دهد برگردان.\n\n"
+    "اگر نام دقیق این کسب‌وکار در ادامه یا در زمینه مشخص نشده، هرگز نام هیچ شرکتی را نساز — حتی اگر "
+    "چیزی در زمینه شبیه یک اسم به نظر برسد (نام یک قالب، افزونه یا برچسب داخلی سیستم، نام این "
+    "کسب‌وکار نیست) — به‌جای آن صادقانه بگو نام دقیق آن را نمی‌دانی."
+)
+
+
+def _looks_persian(text_val: str) -> bool:
+    """True if the text contains Persian/Arabic-script characters — used to
+    pick the grounding rules' language from the actual incoming question,
+    not the chatbot's configured response_language (which is often 'auto')."""
+    return any('؀' <= ch <= 'ۿ' or 'ݐ' <= ch <= 'ݿ' for ch in text_val)
+
+
+def _grounding_rules_for(query: str) -> str:
+    return GROUNDING_RULES_FA if _looks_persian(query) else GROUNDING_RULES
+
+
+def _business_name_rule(business_name: Optional[str], is_fa: bool) -> str:
+    if not business_name:
+        return ""
+    if is_fa:
+        return f"\n\nنام این کسب‌وکار «{business_name}» است. هرگز نام دیگری برای آن به کار نبر و هیچ نام شرکت دیگری را ذکر نکن."
+    return f"\n\nThis business's name is \"{business_name}\". Never use any other name for it, and never state any other company's name as its own."
+
+
+def _grounding_reminder(is_fa: bool) -> str:
+    """A short, final restatement of the highest-risk rules, placed right
+    before the user's question — the repetition closest to the generated
+    text has more influence than the same rule stated once at the top of a
+    long system prompt, which is otherwise easy for a small model to lose
+    track of by the time it reaches the actual question."""
+    if is_fa:
+        return (
+            "یادآوری: فقط بر اساس زمینه‌ی بالا پاسخ بده. هیچ نام شرکتی (چه رقیب، چه هر نام دیگری) "
+            "را که در بالا صراحتاً به‌عنوان نام این کسب‌وکار داده نشده، نساز یا به‌کار نبر — اگر نام "
+            "دقیق را نمی‌دانی، صادقانه بگو نمی‌دانی."
+        )
+    return (
+        "Reminder: answer using only the context above. Never invent or state any "
+        "company name (a competitor's or anything else) that wasn't explicitly given "
+        "above as this business's own name — if you don't know its exact name, say so."
+    )
 
 
 def retrieve_chunks(db: Session, chatbot_id: str, query_embedding: List[float], top_k: int = 8, threshold: float = 0.60) -> List[dict]:
@@ -375,23 +443,64 @@ def _openai_compatible_chat_stream(profile: dict, prompt: str, max_tokens: int, 
     )
     resp.raise_for_status()
     usage = {}
-    for line in resp.iter_lines(decode_unicode=True):
+
+    def _handle_line(line: str) -> Optional[Tuple[str, str]]:
+        """Returns ("done", "") / ("delta", text) / None (nothing to yield)."""
+        nonlocal usage
         if not line or not line.startswith("data:"):
-            continue
+            return None
         payload = line[len("data:"):].strip()
         if payload == "[DONE]":
-            break
+            return ("done", "")
         try:
             chunk = json.loads(payload)
         except ValueError:
-            continue
+            return None
         choices = chunk.get("choices") or []
         if choices:
             delta = (choices[0].get("delta") or {}).get("content")
             if delta:
-                yield ("delta", delta)
+                return ("delta", delta)
         if chunk.get("usage"):
             usage = chunk["usage"]
+        return None
+
+    # iter_lines(decode_unicode=True) decodes each line using resp.encoding,
+    # which `requests` derives from the response's Content-Type header per
+    # RFC 2616 — falling back to ISO-8859-1 whenever no charset is present,
+    # which is exactly what Groq/xAI send for text/event-stream. Every
+    # multi-byte UTF-8 character (any non-ASCII text, e.g. Persian) then gets
+    # decoded one byte at a time as Latin-1 and turns into mojibake. The
+    # non-streaming path never hit this because it uses resp.json(), which
+    # decodes the body from raw bytes correctly regardless of resp.encoding.
+    #
+    # Fix: read raw bytes, split on the line boundary ourselves, and decode
+    # each complete line explicitly as UTF-8 — never handing decoding to
+    # `requests`' guessed encoding. iter_content(chunk_size=None) also avoids
+    # iter_lines' own byte-buffering, which could otherwise split a
+    # multi-byte UTF-8 character across two chunks even with the right
+    # encoding.
+    buf = b""
+    for raw_chunk in resp.iter_content(chunk_size=None):
+        if not raw_chunk:
+            continue
+        buf += raw_chunk
+        while b"\n" in buf:
+            line_bytes, buf = buf.split(b"\n", 1)
+            line = line_bytes.decode("utf-8", errors="replace").rstrip("\r")
+            result = _handle_line(line)
+            if result is None:
+                continue
+            kind, text_val = result
+            if kind == "done":
+                yield ("usage", usage)
+                return
+            yield ("delta", text_val)
+    if buf:
+        line = buf.decode("utf-8", errors="replace").rstrip("\r")
+        result = _handle_line(line)
+        if result is not None and result[0] == "delta":
+            yield ("delta", result[1])
     yield ("usage", usage)
 
 
@@ -445,6 +554,7 @@ async def run_rag_pipeline_stream(
     system_prompt: Optional[str], fallback_resp: Optional[str], llm_model: str,
     top_k: int, threshold: float, temperature: float, max_tokens: int, language: str,
     rerank_enabled: bool = False, rerank_threshold: float = 0.500,
+    business_name: Optional[str] = None,
 ) -> AsyncGenerator[Tuple[str, object], None]:
     """Streaming counterpart to run_rag_pipeline() — identical retrieval and
     prompt-building, but yields ("delta", str) as the answer is generated
@@ -493,7 +603,9 @@ async def run_rag_pipeline_stream(
         context_parts.append(f"{header}\n{chunk['content']}")
     context = "\n\n---\n\n".join(context_parts)
 
-    sys_p = GROUNDING_RULES
+    is_fa_question = _looks_persian(query)
+    sys_p = _grounding_rules_for(query)
+    sys_p += _business_name_rule(business_name, is_fa_question)
     if system_prompt:
         sys_p += f"\n\n{system_prompt}"
     if context:
@@ -509,7 +621,13 @@ async def run_rag_pipeline_stream(
             role_label = "User" if h["role"] == "user" else "Assistant"
             hist_text += f"{role_label}: {h['content']}\n"
 
-    full_prompt = f"{sys_p}\n\n{hist_text}User: {query}\nAssistant:"
+    # The grounding/business-name rules are repeated here, right before the
+    # question, in addition to the top of the prompt — repetition closest to
+    # the generated text carries more weight than a rule stated once far
+    # above, which a small model can lose track of by the time it reaches
+    # the actual answer.
+    reminder = _grounding_reminder(is_fa_question)
+    full_prompt = f"{sys_p}\n\n{hist_text}{reminder}\n\nUser: {query}\nAssistant:"
 
     sources = []
     for c in chunks[:3]:
@@ -563,6 +681,7 @@ async def run_rag_pipeline(
     system_prompt: Optional[str], fallback_resp: Optional[str], llm_model: str,
     top_k: int, threshold: float, temperature: float, max_tokens: int, language: str,
     rerank_enabled: bool = False, rerank_threshold: float = 0.500,
+    business_name: Optional[str] = None,
 ) -> dict:
 
     start = time.time()
@@ -619,7 +738,12 @@ async def run_rag_pipeline(
     # prompt — previously a custom system_prompt fully *replaced* DEFAULT_SYSTEM
     # instead of adding to it, silently dropping the "don't invent facts" rule and
     # leaving small models free to fabricate plausible-sounding prices/contacts.
-    sys_p = GROUNDING_RULES
+    # Chosen by the incoming question's own script (Persian vs. not) — see
+    # _grounding_rules_for()'s docstring for why that's more reliable here
+    # than the chatbot's configured response_language.
+    is_fa_question = _looks_persian(query)
+    sys_p = _grounding_rules_for(query)
+    sys_p += _business_name_rule(business_name, is_fa_question)
     if system_prompt:
         sys_p += f"\n\n{system_prompt}"
     if context:
@@ -635,7 +759,10 @@ async def run_rag_pipeline(
             role_label = "User" if h["role"] == "user" else "Assistant"
             hist_text += f"{role_label}: {h['content']}\n"
 
-    full_prompt = f"{sys_p}\n\n{hist_text}User: {query}\nAssistant:"
+    # Repeated right before the question, in addition to the top of the
+    # prompt — see run_rag_pipeline_stream()'s identical comment.
+    reminder = _grounding_reminder(is_fa_question)
+    full_prompt = f"{sys_p}\n\n{hist_text}{reminder}\n\nUser: {query}\nAssistant:"
 
     model_used = "n/a"
     usage = {}

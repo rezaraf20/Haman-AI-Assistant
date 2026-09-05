@@ -163,6 +163,9 @@ class TenantService
         try {
             DB::statement("ALTER TABLE {$schemaName}.chatbots ADD COLUMN IF NOT EXISTS rerank_threshold DECIMAL(4,3) NOT NULL DEFAULT 0.500");
         } catch (\Throwable $e) {}
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.chatbots ADD COLUMN IF NOT EXISTS business_name VARCHAR(255)");
+        } catch (\Throwable $e) {}
         // Backfill: the ADD COLUMN above leaves every pre-existing chunk row
         // at content_tsv=NULL (never matches any full-text query), so hybrid
         // search would silently degrade to vector-only for already-embedded
@@ -233,6 +236,14 @@ class TenantService
                 name VARCHAR(255) NOT NULL,
                 type VARCHAR(30) NOT NULL DEFAULT 'support',
                 status VARCHAR(20) NOT NULL DEFAULT 'active',
+                -- Distinct from name (the bot's own persona/display name,
+                -- e.g. Sales Bot) -- this is the actual business the bot
+                -- speaks on behalf of, injected verbatim into the LLM prompt
+                -- so it can answer a company-name question correctly instead
+                -- of guessing from scraped content. Nullable: when unset,
+                -- the prompt's grounding rules tell the model to say it
+                -- does not know rather than invent one.
+                business_name VARCHAR(255),
                 system_prompt TEXT,
                 welcome_message TEXT,
                 fallback_response TEXT,

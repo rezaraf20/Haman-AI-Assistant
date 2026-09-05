@@ -12,7 +12,7 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Columns\{TextColumn, IconColumn};
 use Filament\Tables\Actions\Action;
-use Filament\Forms\Components\{ColorPicker, Toggle};
+use Filament\Forms\Components\{ColorPicker, Toggle, Select};
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
 use App\Support\Jalali;
@@ -55,6 +55,14 @@ class MyChatbots extends Page implements HasTable {
                     ->form([
                         ColorPicker::make('primary_color')
                             ->label(__('chatbot.primary_color_label')),
+                        Select::make('position')
+                            ->label(__('chatbot.widget_position_label'))
+                            ->options([
+                                'bottom-right' => __('chatbot.widget_position_bottom_right'),
+                                'bottom-left'  => __('chatbot.widget_position_bottom_left'),
+                            ])
+                            ->default('bottom-right')
+                            ->required(),
                         Toggle::make('powered_by_enabled')
                             ->label(__('chatbot.powered_by_toggle_label'))
                             ->default(true),
@@ -84,6 +92,7 @@ class MyChatbots extends Page implements HasTable {
 
         return [
             'primary_color'      => $config['primary_color'],
+            'position'           => $config['position'],
             'powered_by_enabled' => $config['powered_by_enabled'],
         ];
     }
@@ -95,6 +104,7 @@ class MyChatbots extends Page implements HasTable {
             $chatbot->update([
                 'widget_config' => array_merge($chatbot->widget_config ?? [], [
                     'primary_color'      => $data['primary_color'],
+                    'position'           => $data['position'],
                     'powered_by_enabled' => (bool) $data['powered_by_enabled'],
                 ]),
             ]);

@@ -72,5 +72,8 @@ return [
     'type_unavailable' => "This chatbot type isn't available for purchase right now",
     'usage_nav' => 'Usage',
     'usage_of' => ':used of :limit',
+    'widget_position_label' => 'Widget position on page',
+    'widget_position_bottom_right' => 'Bottom right',
+    'widget_position_bottom_left' => 'Bottom left',
     'wp_plugin_key_name' => ':name — WordPress plugin',
 ];

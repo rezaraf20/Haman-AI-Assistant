@@ -17,6 +17,7 @@ async def chat_complete(req: ChatRequest, db: Session = Depends(get_db)):
         llm_model=req.llm_model, top_k=req.top_k, threshold=req.threshold,
         temperature=req.temperature, max_tokens=req.max_tokens, language=req.language,
         rerank_enabled=req.rerank_enabled, rerank_threshold=req.rerank_threshold,
+        business_name=req.business_name,
     )
     return ChatResponse(**result)
 
@@ -39,6 +40,7 @@ async def chat_stream(req: ChatRequest, db: Session = Depends(get_db)):
             llm_model=req.llm_model, top_k=req.top_k, threshold=req.threshold,
             temperature=req.temperature, max_tokens=req.max_tokens, language=req.language,
             rerank_enabled=req.rerank_enabled, rerank_threshold=req.rerank_threshold,
+            business_name=req.business_name,
         ):
             if kind == "delta":
                 yield f"data: {json.dumps({'delta': payload})}\n\n"
@@ -47,6 +49,6 @@ async def chat_stream(req: ChatRequest, db: Session = Depends(get_db)):
 
     return StreamingResponse(
         event_source(),
-        media_type="text/event-stream",
+        media_type="text/event-stream; charset=utf-8",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

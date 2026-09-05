@@ -17,6 +17,7 @@ class ChatRequest(BaseModel):
     fallback_response: Optional[str] = None
     rerank_enabled: bool = False
     rerank_threshold: float = 0.500
+    business_name: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str
