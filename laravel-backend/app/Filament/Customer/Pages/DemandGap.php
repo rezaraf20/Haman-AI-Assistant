@@ -20,6 +20,7 @@ class DemandGap extends Page {
     protected static ?string $navigationIcon = 'heroicon-o-magnifying-glass-circle';
 
     public static function getNavigationLabel(): string { return __('chatbot.demand_gap_nav'); }
+    public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_chatbots'); }
     public function getTitle(): string { return __('chatbot.demand_gap_nav'); }
 
     public function getDashboardData(): array {

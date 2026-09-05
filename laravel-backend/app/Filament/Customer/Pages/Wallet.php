@@ -23,6 +23,7 @@ class Wallet extends Page implements HasForms, HasTable {
     protected static ?string $navigationIcon = 'heroicon-o-wallet';
 
     public static function getNavigationLabel(): string { return __('wallet.nav'); }
+    public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_wallet'); }
     public function getTitle(): string { return __('wallet.nav'); }
 
     public ?array $data = [];

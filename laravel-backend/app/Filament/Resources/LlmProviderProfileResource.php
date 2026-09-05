@@ -17,6 +17,7 @@ class LlmProviderProfileResource extends Resource {
     protected static ?int $navigationSort = 4;
 
     public static function getNavigationLabel(): string { return __('panel.llm_providers_nav'); }
+    public static function getNavigationGroup(): ?string { return __('panel.nav_group_infrastructure'); }
     public static function getModelLabel(): string { return __('panel.llm_provider_singular'); }
     public static function getPluralModelLabel(): string { return __('panel.llm_providers_nav'); }
 

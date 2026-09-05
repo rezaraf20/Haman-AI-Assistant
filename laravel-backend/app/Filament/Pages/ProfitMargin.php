@@ -29,6 +29,7 @@ class ProfitMargin extends Page implements HasForms {
     protected static ?int $navigationSort = 8;
 
     public static function getNavigationLabel(): string { return __('panel.profit_margin_nav'); }
+    public static function getNavigationGroup(): ?string { return __('panel.nav_group_finance'); }
     public function getTitle(): string { return __('panel.profit_margin_title'); }
 
     public ?array $data = [];

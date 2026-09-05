@@ -8,6 +8,7 @@ class Usage extends Page {
     protected static ?string $navigationIcon = 'heroicon-o-chart-bar';
 
     public static function getNavigationLabel(): string { return __('chatbot.usage_nav'); }
+    public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_chatbots'); }
     public function getTitle(): string { return __('chatbot.usage_nav'); }
 
     // Same shape as TenantController::usage() (routes/api.php's Sanctum

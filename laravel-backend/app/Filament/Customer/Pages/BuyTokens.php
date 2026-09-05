@@ -23,6 +23,7 @@ class BuyTokens extends Page implements HasTable {
     protected static ?string $navigationIcon = 'heroicon-o-bolt';
 
     public static function getNavigationLabel(): string { return __('plan.buy_tokens_nav'); }
+    public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_wallet'); }
     public function getTitle(): string { return __('plan.buy_tokens_title'); }
 
     public function getWalletBalance(): int {

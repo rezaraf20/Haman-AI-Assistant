@@ -17,6 +17,7 @@ class TicketResource extends Resource {
     protected static ?int $navigationSort = 8;
 
     public static function getNavigationLabel(): string { return __('ticket.nav'); }
+    public static function getNavigationGroup(): ?string { return __('panel.nav_group_support'); }
     public static function getModelLabel(): string { return __('ticket.singular'); }
     public static function getPluralModelLabel(): string { return __('ticket.plural'); }
 

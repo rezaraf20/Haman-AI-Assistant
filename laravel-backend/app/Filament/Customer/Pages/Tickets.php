@@ -21,6 +21,7 @@ class Tickets extends Page implements HasTable {
     protected static ?string $navigationIcon = 'heroicon-o-lifebuoy';
 
     public static function getNavigationLabel(): string { return __('ticket.support_nav'); }
+    public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_account'); }
     public function getTitle(): string { return __('ticket.plural'); }
 
     // Mirrors TicketResource::getNavigationBadge() on the admin side: 'answered'

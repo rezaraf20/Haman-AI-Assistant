@@ -18,6 +18,7 @@ class ChatbotTypePriceResource extends Resource {
     protected static ?int $navigationSort = 6;
 
     public static function getNavigationLabel(): string { return __('plan.chatbot_pricing_nav'); }
+    public static function getNavigationGroup(): ?string { return __('panel.nav_group_finance'); }
     public static function getModelLabel(): string { return __('plan.chatbot_price_singular'); }
     public static function getPluralModelLabel(): string { return __('plan.chatbot_pricing_nav'); }
 

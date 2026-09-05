@@ -23,9 +23,9 @@ class AdminPanelProvider extends PanelProvider {
             ->default()
             ->id('admin')
             ->path('admin')
-            ->brandName('Haman AI')
+            ->brandName(config('hamman.brand.name'))
             ->login()
-            ->colors(['primary' => '#1B3A6B'])
+            ->colors(['primary' => config('hamman.brand.primary_color')])
             // Not ->font(): that method's $family parameter is a plain
             // `string`, not `string|Closure` — Filament needs the name eagerly,
             // at boot, to register the font asset, which is before SetLocale
@@ -47,13 +47,20 @@ class AdminPanelProvider extends PanelProvider {
                     ? '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=vazirmatn:400,500,600,700"><style>:root{--font-family:"Vazirmatn"}</style>'
                     : '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=inter:400,500,600,700"><style>:root{--font-family:"Inter"}</style>'),
             )
-            // Same fix as CustomerPanelProvider: discoverPages() alone never
-            // registers Filament's built-in Dashboard, so /admin's root was
-            // silently redirecting straight to the first nav resource instead
-            // of a real landing page.
-            ->pages([\Filament\Pages\Dashboard::class])
+            // App\Filament\Pages\Dashboard (extends Filament's own) now lives
+            // inside the discoverPages() directory below, so it's picked up
+            // automatically — no separate ->pages([...]) registration needed
+            // (that was only required before because the stock vendor
+            // Dashboard class lives outside this directory entirely).
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
+            ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\\Filament\\Widgets')
+            ->navigationGroups([
+                __('panel.nav_group_customers'),
+                __('panel.nav_group_finance'),
+                __('panel.nav_group_support'),
+                __('panel.nav_group_infrastructure'),
+            ])
             ->middleware([
                 SetLocale::class,
                 EncryptCookies::class,

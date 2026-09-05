@@ -24,6 +24,7 @@ class BuyChatbot extends Page implements HasForms {
     protected static ?string $navigationIcon = 'heroicon-o-plus-circle';
 
     public static function getNavigationLabel(): string { return __('chatbot.buy_new_nav'); }
+    public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_chatbots'); }
     public function getTitle(): string { return __('chatbot.buy_new_nav'); }
 
     public ?array $data = [];

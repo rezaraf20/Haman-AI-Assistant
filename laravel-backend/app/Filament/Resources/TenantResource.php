@@ -28,6 +28,7 @@ class TenantResource extends Resource {
     // Filament's documented pattern for a locale-dependent label, since
     // they're called fresh on every request instead of once at class load.
     public static function getNavigationLabel(): string { return __('panel.tenants_nav'); }
+    public static function getNavigationGroup(): ?string { return __('panel.nav_group_customers'); }
     public static function getModelLabel(): string { return __('panel.tenant_singular'); }
     public static function getPluralModelLabel(): string { return __('panel.tenants_nav'); }
 

@@ -179,6 +179,50 @@ class TenantService
                 WHERE c.document_id = d.id AND c.content_tsv IS NULL
             ");
         } catch (\Throwable $e) {}
+        // analytics_daily: written by AggregateAnalyticsJob, read by the
+        // admin/customer dashboard widgets instead of them aggregating raw
+        // messages/conversations on every page load.
+        try {
+            DB::statement("
+                CREATE TABLE IF NOT EXISTS {$schemaName}.analytics_daily (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    chatbot_id UUID NOT NULL REFERENCES {$schemaName}.chatbots(id) ON DELETE CASCADE,
+                    date DATE NOT NULL,
+                    total_conversations BIGINT NOT NULL DEFAULT 0,
+                    total_messages BIGINT NOT NULL DEFAULT 0,
+                    user_messages BIGINT NOT NULL DEFAULT 0,
+                    assistant_messages BIGINT NOT NULL DEFAULT 0,
+                    total_tokens BIGINT NOT NULL DEFAULT 0,
+                    prompt_tokens BIGINT NOT NULL DEFAULT 0,
+                    completion_tokens BIGINT NOT NULL DEFAULT 0,
+                    cost_toman DECIMAL(14,4) NOT NULL DEFAULT 0,
+                    unique_visitors BIGINT NOT NULL DEFAULT 0,
+                    avg_messages_per_conv DECIMAL(6,2) NOT NULL DEFAULT 0,
+                    avg_response_latency_ms INTEGER,
+                    fallback_count BIGINT NOT NULL DEFAULT 0,
+                    unanswered_count BIGINT NOT NULL DEFAULT 0,
+                    escalation_count BIGINT NOT NULL DEFAULT 0,
+                    positive_feedback BIGINT NOT NULL DEFAULT 0,
+                    negative_feedback BIGINT NOT NULL DEFAULT 0,
+                    products_recommended BIGINT NOT NULL DEFAULT 0,
+                    conversions BIGINT NOT NULL DEFAULT 0,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    UNIQUE(chatbot_id, date)
+                )
+            ");
+            DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_analytics_daily_date ON {$schemaName}.analytics_daily(date)");
+        } catch (\Throwable $e) {}
+        // Pre-existing analytics_daily rows (shouldn't be any yet — the table
+        // never existed until now, and the job was never scheduled — but this
+        // is idempotent/harmless if it ever does need to run twice) get
+        // cost_toman if the column somehow predates this fix.
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.analytics_daily ADD COLUMN IF NOT EXISTS cost_toman DECIMAL(14,4) NOT NULL DEFAULT 0");
+        } catch (\Throwable $e) {}
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.analytics_daily ADD COLUMN IF NOT EXISTS unanswered_count BIGINT NOT NULL DEFAULT 0");
+        } catch (\Throwable $e) {}
     }
 
     private function createTenantTables(string $s): void
@@ -390,6 +434,41 @@ class TenantService
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             )
         ");
+
+        // Written by AggregateAnalyticsJob (routes/console.php's
+        // hamman:aggregate-analytics, scheduled daily) — dashboard widgets
+        // read from here instead of aggregating raw messages/conversations
+        // on every page load. unanswered_count backs the demand-gap /
+        // product-health signal on both the admin and customer dashboards.
+        DB::statement("
+            CREATE TABLE IF NOT EXISTS {$s}.analytics_daily (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                chatbot_id UUID NOT NULL REFERENCES {$s}.chatbots(id) ON DELETE CASCADE,
+                date DATE NOT NULL,
+                total_conversations BIGINT NOT NULL DEFAULT 0,
+                total_messages BIGINT NOT NULL DEFAULT 0,
+                user_messages BIGINT NOT NULL DEFAULT 0,
+                assistant_messages BIGINT NOT NULL DEFAULT 0,
+                total_tokens BIGINT NOT NULL DEFAULT 0,
+                prompt_tokens BIGINT NOT NULL DEFAULT 0,
+                completion_tokens BIGINT NOT NULL DEFAULT 0,
+                cost_toman DECIMAL(14,4) NOT NULL DEFAULT 0,
+                unique_visitors BIGINT NOT NULL DEFAULT 0,
+                avg_messages_per_conv DECIMAL(6,2) NOT NULL DEFAULT 0,
+                avg_response_latency_ms INTEGER,
+                fallback_count BIGINT NOT NULL DEFAULT 0,
+                unanswered_count BIGINT NOT NULL DEFAULT 0,
+                escalation_count BIGINT NOT NULL DEFAULT 0,
+                positive_feedback BIGINT NOT NULL DEFAULT 0,
+                negative_feedback BIGINT NOT NULL DEFAULT 0,
+                products_recommended BIGINT NOT NULL DEFAULT 0,
+                conversions BIGINT NOT NULL DEFAULT 0,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE(chatbot_id, date)
+            )
+        ");
+        DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_analytics_daily_date ON {$s}.analytics_daily(date)");
 
         DB::statement("SET search_path TO public");
     }

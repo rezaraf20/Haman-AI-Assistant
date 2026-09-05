@@ -25,6 +25,7 @@ class ChatbotResource extends Resource {
     protected static ?int $navigationSort = 2;
 
     public static function getNavigationLabel(): string { return __('chatbot.nav'); }
+    public static function getNavigationGroup(): ?string { return __('panel.nav_group_customers'); }
     public static function getModelLabel(): string { return __('chatbot.singular'); }
     public static function getPluralModelLabel(): string { return __('chatbot.nav'); }
 

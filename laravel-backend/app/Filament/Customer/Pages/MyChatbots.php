@@ -26,6 +26,7 @@ class MyChatbots extends Page implements HasTable {
     protected static ?string $navigationIcon = 'heroicon-o-chat-bubble-left-right';
 
     public static function getNavigationLabel(): string { return __('chatbot.my_chatbots_nav'); }
+    public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_chatbots'); }
     public function getTitle(): string { return __('chatbot.my_chatbots_nav'); }
 
     public function table(Table $table): Table {

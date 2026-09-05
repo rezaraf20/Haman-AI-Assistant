@@ -21,6 +21,7 @@ class ApiKeyResource extends Resource {
     protected static ?int $navigationSort = 3;
 
     public static function getNavigationLabel(): string { return __('panel.api_keys_nav'); }
+    public static function getNavigationGroup(): ?string { return __('panel.nav_group_customers'); }
     public static function getModelLabel(): string { return __('panel.api_key_singular'); }
     public static function getPluralModelLabel(): string { return __('panel.api_keys_nav'); }
 

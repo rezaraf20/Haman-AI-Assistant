@@ -24,6 +24,7 @@ class ApiKeys extends Page implements HasTable {
     protected static ?string $navigationIcon = 'heroicon-o-key';
 
     public static function getNavigationLabel(): string { return __('panel.api_keys_nav'); }
+    public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_account'); }
     public function getTitle(): string { return __('panel.my_api_keys_title'); }
 
     public function table(Table $table): Table {
