@@ -1,5 +1,7 @@
 <?php
 return [
+    'account_locked' => 'Your account is temporarily locked.',
+    'invalid_credentials' => 'Invalid email or password.',
     'otp_expired' => 'Code expired. Please request a new one.',
     'otp_incorrect' => 'The code you entered is incorrect.',
     'otp_max_attempts' => 'Maximum attempts reached. Please request a new code.',

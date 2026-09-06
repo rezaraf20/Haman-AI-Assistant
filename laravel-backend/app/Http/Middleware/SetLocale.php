@@ -24,6 +24,19 @@ class SetLocale {
             return $user->locale;
         }
 
+        // Explicit choice from the pre-login page's language switcher
+        // (?lang=fa/en) — persisted in session so it survives the
+        // OTP/email login flow's multiple Livewire-driven steps without
+        // needing the query param on every subsequent request.
+        $queryLocale = $request->query('lang');
+        if (in_array($queryLocale, self::SUPPORTED, true)) {
+            session(['guest_locale' => $queryLocale]);
+            return $queryLocale;
+        }
+        if (in_array(session('guest_locale'), self::SUPPORTED, true)) {
+            return session('guest_locale');
+        }
+
         $preferred = $request->getPreferredLanguage(self::SUPPORTED);
         if ($preferred) {
             return $preferred;

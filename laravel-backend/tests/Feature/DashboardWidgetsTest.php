@@ -113,6 +113,8 @@ class DashboardWidgetsTest extends TestCase
             'password' => bcrypt('irrelevant'), 'password_hash' => bcrypt('irrelevant'),
             'name' => 'Test Admin', 'role' => 'owner', 'email_verified_at' => now(),
         ]);
+        $admin->is_platform_admin = true;
+        $admin->save();
 
         // A couple of real tenants so the per-tenant widgets (FailedSyncsTable)
         // aren't measuring a trivially-empty-table best case.

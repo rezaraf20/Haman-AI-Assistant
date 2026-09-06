@@ -36,15 +36,25 @@ class CustomerOnboarding {
             $firstSyncDone = false;
             $firstConversationDone = false;
             if ($chatbotCreated) {
-                DB::statement("SET search_path TO {$tenant->schema_name}, public");
-                $tenantChecks = DB::selectOne("
-                    SELECT
-                        EXISTS(SELECT 1 FROM sync_jobs WHERE status = 'completed') AS first_sync_done,
-                        EXISTS(SELECT 1 FROM conversations) AS first_conversation_done
-                ");
-                $firstSyncDone = (bool) $tenantChecks->first_sync_done;
-                $firstConversationDone = (bool) $tenantChecks->first_conversation_done;
-                DB::statement('SET search_path TO public');
+                try {
+                    DB::statement("SET search_path TO {$tenant->schema_name}, public");
+                    $tenantChecks = DB::selectOne("
+                        SELECT
+                            EXISTS(SELECT 1 FROM sync_jobs WHERE status = 'completed') AS first_sync_done,
+                            EXISTS(SELECT 1 FROM conversations) AS first_conversation_done
+                    ");
+                    $firstSyncDone = (bool) $tenantChecks->first_sync_done;
+                    $firstConversationDone = (bool) $tenantChecks->first_conversation_done;
+                } catch (\Throwable $e) {
+                    // An incomplete tenant schema (missing sync_jobs/
+                    // conversations) must not 500 the whole dashboard — see
+                    // FailedSyncsTable's identical fix for the real incident
+                    // this traces back to. Falls back to "not done yet",
+                    // which just shows the onboarding checklist.
+                    \Illuminate\Support\Facades\Log::warning("CustomerOnboarding: tenant {$tenant->id} ({$tenant->schema_name}) — {$e->getMessage()}");
+                } finally {
+                    DB::statement('SET search_path TO public');
+                }
             }
 
             return [

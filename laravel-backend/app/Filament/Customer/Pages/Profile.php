@@ -44,10 +44,16 @@ class Profile extends Page implements HasForms {
             TextInput::make('email')->label(__('common.email'))->email()->required()->maxLength(255)
                 ->rule(fn () => Rule::unique('users', 'email')->ignore(auth()->id())),
             Textarea::make('address')->label(__('common.address'))->required()->rows(3),
-            TextInput::make('phone')->label(__('panel.mobile_number'))->disabled()
-                ->helperText(__('panel.phone_not_editable')),
-            TextInput::make('national_id')->label(__('panel.national_id'))->disabled()
-                ->helperText(__('panel.national_id_not_editable')),
+            TextInput::make('phone')->label(__('panel.mobile_number'))
+                ->disabled(fn () => filled(auth()->user()->phone))
+                ->helperText(fn () => filled(auth()->user()->phone) ? __('panel.phone_not_editable') : null),
+            // Collected once at phone-flow signup and then locked (see
+            // helperText) — but an email-flow signup (see EmailLogin) never
+            // collects it at all, so it must stay editable for that account
+            // until they set it themselves, or it could never be set.
+            TextInput::make('national_id')->label(__('panel.national_id'))
+                ->disabled(fn () => filled(auth()->user()->national_id))
+                ->helperText(fn () => filled(auth()->user()->national_id) ? __('panel.national_id_not_editable') : null),
         ])->statePath('data');
     }
 
