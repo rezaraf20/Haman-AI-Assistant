@@ -26,6 +26,14 @@ class AdminPanelProvider extends PanelProvider {
             ->brandName(config('hamman.brand.name'))
             ->login()
             ->colors(['primary' => config('hamman.brand.primary_color')])
+            // Bell icon + dropdown in the topbar, backed by the notifications
+            // table (see its migration). First real use: alerting the
+            // platform admin when an LLM provider auto-disables itself after
+            // repeated failures (hamman:notify-disabled-providers). Polls
+            // every 30s rather than the 60s default so a fresh alert doesn't
+            // sit unnoticed for a full minute on a page already open.
+            ->databaseNotifications()
+            ->databaseNotificationsPolling('30s')
             // Not ->font(): that method's $family parameter is a plain
             // `string`, not `string|Closure` — Filament needs the name eagerly,
             // at boot, to register the font asset, which is before SetLocale

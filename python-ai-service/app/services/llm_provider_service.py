@@ -13,6 +13,14 @@ logger = logging.getLogger(__name__)
 CACHE_KEY = "hamman:llm_provider_profiles:active"
 CACHE_TTL_SECONDS = 45
 
+# A dead provider left active in the failover chain doesn't just do nothing —
+# every request routed to it (before falling through to the next one) pays
+# its full timeout/retry cost first. 5 consecutive *request-level* failures
+# (each already survived _chat_completion's own internal retry) is a solid
+# "this is structural, not a transient blip" signal — found a real profile
+# that had been silently failing 61 times in a row with nothing to catch it.
+AUTO_DISABLE_THRESHOLD = 5
+
 _redis = redis_lib.from_url(settings.REDIS_URL, socket_timeout=2, decode_responses=True)
 
 
@@ -89,11 +97,41 @@ def record_outcome(db: Session, profile_name: str, success: bool) -> None:
                 WHERE name = :name
             """), {"name": profile_name})
         else:
-            db.execute(text("""
+            row = db.execute(text("""
                 UPDATE public.llm_provider_profiles
                 SET last_failure_at = now(), consecutive_failures = consecutive_failures + 1
                 WHERE name = :name
-            """), {"name": profile_name})
+                RETURNING consecutive_failures, is_active
+            """), {"name": profile_name}).mappings().first()
+
+            # >= the threshold, not ==: a profile already past it when this
+            # code first shipped (found one sitting at 61 straight failures)
+            # must still get caught on its very next failure, not only if
+            # the count happened to land exactly on the threshold value.
+            # is_active guards against re-firing on every failure after
+            # that — once disabled, it stays false until someone
+            # re-activates it, so this block only ever runs once per
+            # disable event, keeping disabled_notified_at meaningful as
+            # "this specific event was alerted on" for the Laravel side.
+            if row and row["is_active"] and row["consecutive_failures"] >= AUTO_DISABLE_THRESHOLD:
+                reason = (
+                    f"Auto-disabled after {AUTO_DISABLE_THRESHOLD} consecutive failures "
+                    f"(last error logged separately above)."
+                )
+                db.execute(text("""
+                    UPDATE public.llm_provider_profiles
+                    SET is_active = false, disabled_reason = :reason
+                    WHERE name = :name
+                """), {"name": profile_name, "reason": reason})
+                logger.error(f"LLM provider '{profile_name}' auto-disabled: {reason}")
+                # The in-process failover chain (get_active_profiles) is
+                # Redis-cached for CACHE_TTL_SECONDS — without invalidating
+                # it here, requests would keep routing to a provider this
+                # same function just disabled for up to that long.
+                try:
+                    _redis.delete(CACHE_KEY)
+                except Exception as cache_err:
+                    logger.warning(f"Failed to invalidate provider cache after auto-disable: {cache_err}")
         db.commit()
     except Exception as e:
         logger.warning(f"Failed to record provider outcome for {profile_name}: {e}")

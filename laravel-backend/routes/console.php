@@ -8,3 +8,8 @@ Schedule::command('wallet:reconcile')->dailyAt('02:00');
 // raw messages/conversations on every page load. Runs after midnight since
 // it aggregates "yesterday".
 Schedule::command('hamman:aggregate-analytics')->dailyAt('00:30');
+// A dead LLM provider left silently failing costs real latency on every
+// chat request routed to it first — this should reach the admin fast, not
+// wait for a daily job. everyMinute() is the finest granularity the
+// scheduler container's own 60s poll loop can actually deliver.
+Schedule::command('hamman:notify-disabled-providers')->everyMinute();

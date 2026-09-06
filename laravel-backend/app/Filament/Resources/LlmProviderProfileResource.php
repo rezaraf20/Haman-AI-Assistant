@@ -75,7 +75,8 @@ class LlmProviderProfileResource extends Resource {
                     ->formatStateUsing(fn ($state) => number_format($state) . ' ' . __('common.toman_short'))->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('output_price_per_1m_toman')->label(__('panel.output_price_short'))
                     ->formatStateUsing(fn ($state) => number_format($state) . ' ' . __('common.toman_short'))->toggleable(isToggledHiddenByDefault: true),
-                IconColumn::make('is_active')->boolean()->label(__('common.active')),
+                IconColumn::make('is_active')->boolean()->label(__('common.active'))
+                    ->tooltip(fn (LlmProviderProfile $record) => $record->disabled_reason),
                 TextColumn::make('consecutive_failures')->label(__('panel.consecutive_failures'))
                     ->color(fn (int $state) => $state > 0 ? 'danger' : 'gray'),
                 TextColumn::make('last_success_at')->label(__('panel.last_success'))->formatStateUsing(fn ($state) => Jalali::dateTime($state))->placeholder(__('common.never'))->toggleable(isToggledHiddenByDefault: true),
