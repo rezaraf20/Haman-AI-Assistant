@@ -81,6 +81,22 @@ class ChatController extends BaseApiController
             'started_at'  => now(),
         ]);
 
+        // Only for a genuinely new conversation — the $existing branch above
+        // returns early for a repeat /chat/session call against the same
+        // session_id, which must not log a second conversation_started for
+        // the same conversation.
+        DB::table('conversation_events')->insert([
+            'id'              => (string) \Illuminate\Support\Str::uuid(),
+            'conversation_id' => $conv->id,
+            'chatbot_id'      => $conv->chatbot_id,
+            'event_type'      => 'conversation_started',
+            // Only one channel exists today (the WordPress widget) — a
+            // fixed value rather than an unused parameter, honest about
+            // there being nothing else to distinguish yet.
+            'payload'         => json_encode(['source' => 'widget', 'page_url' => $conv->page_url]),
+            'created_at'      => now(),
+        ]);
+
         return $this->created([
             'conversation_id' => $conv->id,
             'session_id'      => $conv->session_id,
@@ -236,7 +252,34 @@ class ChatController extends BaseApiController
 
     public function submitFeedback(Request $req): JsonResponse
     {
-        $req->validate(['message_id' => 'required|uuid', 'rating' => 'required|in:1,-1']);
+        // Previously validated its input and returned a canned success
+        // response without ever persisting anything — a real 500-answers
+        // silently-discarded bug, not a design choice. Needs chatbot_id
+        // (this route carries no chatbot.domain middleware, unlike every
+        // other /chat/* endpoint, so nothing else resolves the tenant
+        // schema for it) to know which schema message_id even lives in.
+        $d = $req->validate([
+            'chatbot_id' => 'required|uuid',
+            'message_id' => 'required|uuid',
+            'rating'     => 'required|in:1,-1',
+        ]);
+
+        $index = $this->setSchemaFromChatbot($d['chatbot_id']);
+        if (!$index) return $this->notFound('Chatbot not found');
+
+        $message = DB::table('messages')->where('id', $d['message_id'])->first();
+        if (!$message) return $this->notFound('Message not found');
+
+        DB::table('conversation_events')->insert([
+            'id'              => (string) \Illuminate\Support\Str::uuid(),
+            'conversation_id' => $message->conversation_id,
+            'message_id'      => $d['message_id'],
+            'chatbot_id'      => $d['chatbot_id'],
+            'event_type'      => 'feedback',
+            'payload'         => json_encode(['rating' => (int) $d['rating']]),
+            'created_at'      => now(),
+        ]);
+
         return $this->ok(['message' => 'Feedback recorded']);
     }
 }

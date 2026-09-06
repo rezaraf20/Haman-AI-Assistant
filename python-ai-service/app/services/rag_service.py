@@ -283,8 +283,61 @@ def _rerank_llm(db: Session, query: str, candidates: List[dict], top_n: int = RE
     return candidates[:top_n], 0.0, {}
 
 
+def _log_event(
+    db: Session, conversation_id: Optional[str], chatbot_id: str, event_type: str,
+    payload: Optional[dict] = None, message_id: Optional[str] = None,
+    latency_ms: Optional[int] = None,
+) -> None:
+    """Best-effort, same philosophy as record_outcome() — analytics must
+    never break the actual chat response. conversation_id is required
+    (conversation_events.conversation_id is NOT NULL) and is only ever
+    missing for a caller that predates ChatRequest.conversation_id or
+    genuinely has none yet; such an event is simply skipped rather than
+    attempted with a null FK. message_id stays None for every event this
+    module logs (retrieval/response/unanswered/product_mentioned) — they
+    all fire before the assistant Message row exists (that's created back
+    in Laravel's ChatService::finish(), after this whole request returns)."""
+    if not conversation_id:
+        return
+    try:
+        db.execute(text("""
+            INSERT INTO conversation_events (conversation_id, message_id, chatbot_id, event_type, payload, latency_ms)
+            VALUES (:conversation_id, :message_id, :chatbot_id, :event_type, :payload, :latency_ms)
+        """), {
+            "conversation_id": conversation_id,
+            "message_id": message_id,
+            "chatbot_id": chatbot_id,
+            "event_type": event_type,
+            "payload": json.dumps(payload) if payload is not None else None,
+            "latency_ms": latency_ms,
+        })
+        db.commit()
+    except Exception as e:
+        logger.warning(f"Failed to log conversation_event '{event_type}': {e}")
+        db.rollback()
+
+
+def _log_product_mentioned(db: Session, conversation_id: Optional[str], chatbot_id: str, chunks: List[dict]) -> None:
+    """Fires when any retrieved chunk backing this answer came from a
+    product document (metadata.type == 'product', set by SyncService's
+    product upsert). Identifies products by permalink+title rather than a
+    formal products.id — chunk metadata carries whatever was passed to
+    upsertDoc() at sync time (price/permalink/title/type/...), which does
+    not include the products.external_id needed to join back to a real
+    product row; resolving that would mean an extra query per response for
+    a signal this is already good enough to act on (which products come up
+    in conversations at all)."""
+    product_chunks = [c for c in chunks if c.get("metadata", {}).get("type") == "product"]
+    if not product_chunks:
+        return
+    _log_event(db, conversation_id, chatbot_id, "product_mentioned", {
+        "product_ids": [c.get("metadata", {}).get("permalink") or c["id"] for c in product_chunks],
+        "context": [c.get("metadata", {}).get("title") for c in product_chunks if c.get("metadata", {}).get("title")],
+    })
+
+
 def hybrid_retrieve(
-    db: Session, chatbot_id: str, query: str, query_embedding: List[float],
+    db: Session, chatbot_id: str, conversation_id: Optional[str], query: str, query_embedding: List[float],
     top_k: int, threshold: float, language: str,
     rerank_enabled: bool, rerank_threshold: float,
 ) -> dict:
@@ -298,29 +351,65 @@ def hybrid_retrieve(
         one threshold — see the caller's config for both).
       rerank_cost_toman / rerank_usage: 0 / {} when reranking is off or the
         rerank call itself failed and fell back.
+
+    Also logs the 'retrieval' event (query, chunk_ids, scores, strategy,
+    latency) and, when the result is unanswered, the 'unanswered' event
+    (query, best_score, reason) — this is the one place that actually knows
+    which chunks were returned and at what score, the exact data an eval
+    set for the recall gap needs (see scripts/build_low_confidence_eval_set.py).
     """
+    retrieval_start = time.time()
     vec = _vector_search(db, chatbot_id, query_embedding)
     ft = _fulltext_search(db, chatbot_id, query, language)
     fused = _reciprocal_rank_fusion(vec, ft)
+    retrieval_latency_ms = int((time.time() - retrieval_start) * 1000)
 
     if not fused:
+        _log_event(db, conversation_id, chatbot_id, "retrieval", {
+            "query": query, "chunk_ids": [], "scores": [], "strategy": "hybrid-empty",
+        }, latency_ms=retrieval_latency_ms)
+        _log_event(db, conversation_id, chatbot_id, "unanswered", {
+            "query": query, "best_score": None, "reason": "no_candidates",
+        })
         return {"chunks": [], "is_unanswered": True, "rerank_cost_toman": 0.0, "rerank_usage": {}}
 
     if rerank_enabled:
         reranked, cost_toman, usage = _rerank_llm(db, query, fused, top_n=RERANK_TOP_N)
         best_score = reranked[0]["rerank_score"] if reranked else 0.0
+        is_unanswered = best_score < rerank_threshold
+        _log_event(db, conversation_id, chatbot_id, "retrieval", {
+            "query": query,
+            "chunk_ids": [c["id"] for c in reranked],
+            "scores": [round(c.get("rerank_score", 0.0), 4) for c in reranked],
+            "strategy": "hybrid+rerank",
+        }, latency_ms=retrieval_latency_ms)
+        if is_unanswered:
+            _log_event(db, conversation_id, chatbot_id, "unanswered", {
+                "query": query, "best_score": round(best_score, 4), "reason": "below_rerank_threshold",
+            })
         return {
             "chunks": reranked,
-            "is_unanswered": best_score < rerank_threshold,
+            "is_unanswered": is_unanswered,
             "rerank_cost_toman": cost_toman,
             "rerank_usage": usage,
         }
 
     top = fused[:top_k]
     best_similarity = top[0].get("similarity", 0.0) if top else 0.0
+    is_unanswered = best_similarity < threshold
+    _log_event(db, conversation_id, chatbot_id, "retrieval", {
+        "query": query,
+        "chunk_ids": [c["id"] for c in top],
+        "scores": [round(c.get("similarity", 0.0), 4) for c in top],
+        "strategy": "hybrid",
+    }, latency_ms=retrieval_latency_ms)
+    if is_unanswered:
+        _log_event(db, conversation_id, chatbot_id, "unanswered", {
+            "query": query, "best_score": round(best_similarity, 4), "reason": "below_threshold",
+        })
     return {
         "chunks": top,
-        "is_unanswered": best_similarity < threshold,
+        "is_unanswered": is_unanswered,
         "rerank_cost_toman": 0.0,
         "rerank_usage": {},
     }
@@ -554,7 +643,7 @@ async def run_rag_pipeline_stream(
     system_prompt: Optional[str], fallback_resp: Optional[str], llm_model: str,
     top_k: int, threshold: float, temperature: float, max_tokens: int, language: str,
     rerank_enabled: bool = False, rerank_threshold: float = 0.500,
-    business_name: Optional[str] = None,
+    business_name: Optional[str] = None, conversation_id: Optional[str] = None,
 ) -> AsyncGenerator[Tuple[str, object], None]:
     """Streaming counterpart to run_rag_pipeline() — identical retrieval and
     prompt-building, but yields ("delta", str) as the answer is generated
@@ -579,7 +668,7 @@ async def run_rag_pipeline_stream(
         })
         return
 
-    retrieval = hybrid_retrieve(db, chatbot_id, query, query_embedding, top_k, threshold, language, rerank_enabled, rerank_threshold)
+    retrieval = hybrid_retrieve(db, chatbot_id, conversation_id, query, query_embedding, top_k, threshold, language, rerank_enabled, rerank_threshold)
     chunks = retrieval["chunks"]
     is_unanswered = retrieval["is_unanswered"]
     is_fallback = is_unanswered
@@ -659,6 +748,17 @@ async def run_rag_pipeline_stream(
             full_text = fallback_resp or "Sorry, I could not generate a response."
             yield ("delta", full_text)
 
+    total_latency_ms = int((time.time() - start) * 1000)
+    if not stream_failed:
+        _log_event(db, conversation_id, chatbot_id, "response", {
+            "model": model_used,
+            "prompt_tokens": usage.get("prompt_tokens", 0),
+            "completion_tokens": usage.get("completion_tokens", 0),
+            "cost_toman": cost_toman,
+            "citations": sources,
+        }, latency_ms=total_latency_ms)
+        _log_product_mentioned(db, conversation_id, chatbot_id, chunks)
+
     yield ("done", {
         "response": full_text,
         "chunk_ids": [c["id"] for c in chunks],
@@ -681,7 +781,7 @@ async def run_rag_pipeline(
     system_prompt: Optional[str], fallback_resp: Optional[str], llm_model: str,
     top_k: int, threshold: float, temperature: float, max_tokens: int, language: str,
     rerank_enabled: bool = False, rerank_threshold: float = 0.500,
-    business_name: Optional[str] = None,
+    business_name: Optional[str] = None, conversation_id: Optional[str] = None,
 ) -> dict:
 
     start = time.time()
@@ -711,7 +811,7 @@ async def run_rag_pipeline(
     # variable because is_fallback below gets overwritten again on an
     # LLM-call failure, which is a technical failure, not a content gap, and
     # must not be counted as "unanswered" for the demand-gap dashboard.
-    retrieval = hybrid_retrieve(db, chatbot_id, query, query_embedding, top_k, threshold, language, rerank_enabled, rerank_threshold)
+    retrieval = hybrid_retrieve(db, chatbot_id, conversation_id, query, query_embedding, top_k, threshold, language, rerank_enabled, rerank_threshold)
     chunks = retrieval["chunks"]
     is_unanswered = retrieval["is_unanswered"]
     is_fallback = is_unanswered
@@ -767,6 +867,7 @@ async def run_rag_pipeline(
     model_used = "n/a"
     usage = {}
     cost_toman = retrieval_cost_toman
+    llm_call_failed = False
     try:
         answer, model_used, usage, chat_cost_toman = _chat_completion(db, full_prompt, max_tokens, temperature)
         cost_toman += chat_cost_toman
@@ -774,6 +875,7 @@ async def run_rag_pipeline(
         logger.error(f"LLM error (all providers failed): {e}")
         answer = fallback_resp or "Sorry, I could not generate a response."
         is_fallback = True
+        llm_call_failed = True
 
     sources = []
     for c in chunks[:3]:
@@ -783,6 +885,17 @@ async def run_rag_pipeline(
         if m.get("url"): src["url"] = m["url"]
         if m.get("type"): src["type"] = m["type"]
         if src: sources.append(src)
+
+    total_latency_ms = int((time.time() - start) * 1000)
+    if not llm_call_failed:
+        _log_event(db, conversation_id, chatbot_id, "response", {
+            "model": model_used,
+            "prompt_tokens": usage.get("prompt_tokens", 0),
+            "completion_tokens": usage.get("completion_tokens", 0),
+            "cost_toman": cost_toman,
+            "citations": sources,
+        }, latency_ms=total_latency_ms)
+        _log_product_mentioned(db, conversation_id, chatbot_id, chunks)
 
     return {
         "response": answer,

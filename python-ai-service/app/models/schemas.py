@@ -3,6 +3,12 @@ from typing import Optional, List
 
 class ChatRequest(BaseModel):
     chatbot_id: str
+    # Optional only for backward compatibility with any in-flight request
+    # from before this field existed — every real caller (ChatService::
+    # gatewayPayload()) always sends it. Needed to write conversation_events
+    # rows (retrieval/response/unanswered/product_mentioned) with a real
+    # conversation_id instead of none at all.
+    conversation_id: Optional[str] = None
     session_id: str
     query: str
     history: List[dict] = []

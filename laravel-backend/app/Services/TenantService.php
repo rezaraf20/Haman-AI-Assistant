@@ -302,6 +302,25 @@ class TenantService
         try {
             DB::statement("ALTER TABLE {$schemaName}.analytics_daily ADD COLUMN IF NOT EXISTS unanswered_count BIGINT NOT NULL DEFAULT 0");
         } catch (\Throwable $e) {}
+        // Fine-grained per-turn events — see createTenantTables()'s matching
+        // block for the full rationale. Needed here too since this method is
+        // what brings *existing* tenant schemas up to date, not just new
+        // ones created after this feature shipped.
+        try {
+            DB::statement("
+                CREATE TABLE IF NOT EXISTS {$schemaName}.conversation_events (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    conversation_id UUID NOT NULL REFERENCES {$schemaName}.conversations(id) ON DELETE CASCADE,
+                    message_id UUID NULL REFERENCES {$schemaName}.messages(id) ON DELETE SET NULL,
+                    chatbot_id UUID NOT NULL REFERENCES {$schemaName}.chatbots(id) ON DELETE CASCADE,
+                    event_type VARCHAR(50) NOT NULL,
+                    payload JSONB,
+                    latency_ms INTEGER,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+            ");
+            DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_conv_events_lookup ON {$schemaName}.conversation_events(chatbot_id, event_type, created_at)");
+        } catch (\Throwable $e) {}
     }
 
     private function createTenantTables(string $s): void
@@ -562,6 +581,32 @@ class TenantService
             )
         ");
         DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_analytics_daily_date ON {$s}.analytics_daily(date)");
+
+        // Fine-grained per-turn events (conversation_started, retrieval,
+        // response, unanswered, product_mentioned, feedback, and — once
+        // built — lead_captured/escalation) — what AggregateAnalyticsJob
+        // actually rolls up into analytics_daily's escalation_count/
+        // positive_feedback/negative_feedback/products_recommended/
+        // conversions columns, all of which sat permanently at 0 with
+        // nothing ever writing them. payload holds event-specific detail
+        // (query text, chunk_ids, scores, tokens, etc.) as JSONB rather
+        // than a fixed column per event type, since the event set is
+        // still growing; message_id is nullable because retrieval/
+        // response/unanswered events fire from the Python RAG service
+        // before the assistant Message row exists yet.
+        DB::statement("
+            CREATE TABLE IF NOT EXISTS {$s}.conversation_events (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                conversation_id UUID NOT NULL REFERENCES {$s}.conversations(id) ON DELETE CASCADE,
+                message_id UUID NULL REFERENCES {$s}.messages(id) ON DELETE SET NULL,
+                chatbot_id UUID NOT NULL REFERENCES {$s}.chatbots(id) ON DELETE CASCADE,
+                event_type VARCHAR(50) NOT NULL,
+                payload JSONB,
+                latency_ms INTEGER,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+        ");
+        DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_conv_events_lookup ON {$s}.conversation_events(chatbot_id, event_type, created_at)");
 
         DB::statement("SET search_path TO public");
     }

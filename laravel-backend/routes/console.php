@@ -13,3 +13,9 @@ Schedule::command('hamman:aggregate-analytics')->dailyAt('00:30');
 // wait for a daily job. everyMinute() is the finest granularity the
 // scheduler container's own 60s poll loop can actually deliver.
 Schedule::command('hamman:notify-disabled-providers')->everyMinute();
+// conversation_events retention — keeps the event rows (AggregateAnalyticsJob
+// and the eval-set builder need the history), only nulls out payload past 90
+// days. Runs after aggregate-analytics so a day's events are always rolled
+// up into analytics_daily before that day is anywhere near eligible for
+// pruning (90 days apart, no real race, but this keeps the intent explicit).
+Schedule::command('hamman:prune-event-payloads')->dailyAt('03:00');
