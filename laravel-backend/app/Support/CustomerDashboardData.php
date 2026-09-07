@@ -17,17 +17,16 @@ class CustomerDashboardData {
         return [
             'chatbotStatuses' => [], 'dailyRows' => collect(), 'monthQuestions' => 0,
             'monthUnanswered' => 0, 'recentUnanswered' => [], 'topTopics' => [],
-            'maxTokensMonthly' => $maxTokensMonthly,
+            'newLeadsThisWeek' => 0, 'maxTokensMonthly' => $maxTokensMonthly,
         ];
     }
 
     public static function forTenant(Tenant $tenant): array {
         return Cache::remember("dashboard:customer:data:{$tenant->id}", 300, function () use ($tenant) {
             $chatbots = ChatbotIndexEntry::where('tenant_id', $tenant->id)->get();
-            $maxTokensMonthly = $tenant->plan?->max_tokens_monthly;
 
             try {
-                return self::computeForTenant($tenant, $chatbots, $maxTokensMonthly);
+                return self::computeForTenant($tenant, $chatbots);
             } catch (\Throwable $e) {
                 // An incomplete/broken tenant schema must degrade this one
                 // tenant's own dashboard, not throw a 500 — see
@@ -36,7 +35,10 @@ class CustomerDashboardData {
                 // sync_jobs entirely took down the *admin* dashboard for
                 // every admin before that fix).
                 \Illuminate\Support\Facades\Log::warning("CustomerDashboardData: tenant {$tenant->id} ({$tenant->schema_name}) — {$e->getMessage()}");
-                return self::empty($maxTokensMonthly);
+                // Falls back to a direct lazy-load here (1 query) rather
+                // than the combined query below, since that combined query
+                // is exactly the tenant-schema statement that just failed.
+                return self::empty($tenant->plan?->max_tokens_monthly);
             } finally {
                 // Must run even on failure — a query exception would
                 // otherwise leave search_path pointed at this tenant's
@@ -46,8 +48,22 @@ class CustomerDashboardData {
         });
     }
 
-    private static function computeForTenant(Tenant $tenant, $chatbots, ?int $maxTokensMonthly): array {
+    private static function computeForTenant(Tenant $tenant, $chatbots): array {
         DB::statement("SET search_path TO {$tenant->schema_name}, public");
+
+        // Two otherwise-unrelated scalar values combined into one round
+        // trip instead of two separate queries: max_tokens_monthly lives on
+        // the public-schema plans table (still reachable here — search_path
+        // includes public alongside the tenant schema), new_leads_count on
+        // this tenant's own leads table. Neither depends on the other; this
+        // is purely to stay under the dashboard's query budget.
+        $scalars = DB::selectOne('
+            SELECT
+                (SELECT max_tokens_monthly FROM public.plans WHERE id = ?) AS max_tokens_monthly,
+                (SELECT COUNT(*) FROM leads WHERE created_at >= ?) AS new_leads_count
+        ', [$tenant->plan_id, now()->subDays(7)]);
+        $maxTokensMonthly = $scalars->max_tokens_monthly !== null ? (int) $scalars->max_tokens_monthly : null;
+        $newLeadsThisWeek = (int) $scalars->new_leads_count;
 
         $chatbotStatuses = [];
         foreach ($chatbots as $chatbot) {
@@ -128,6 +144,7 @@ class CustomerDashboardData {
             'monthUnanswered',
             'recentUnanswered',
             'topTopics',
+            'newLeadsThisWeek',
             'maxTokensMonthly',
         );
     }

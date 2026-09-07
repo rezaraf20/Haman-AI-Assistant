@@ -70,7 +70,15 @@ COPY phpunit.xml phpunit.xml
 # route — it's API/panel-only). Same removal pattern as the default
 # migrations below.
 RUN rm -f tests/Feature/ExampleTest.php
-COPY .env .env
+# No .env here, deliberately — real secrets belong in the image only long
+# enough to answer a request, not baked into a layer forever (removing the
+# file in a later layer doesn't remove it from the image's history; anyone
+# with the image can still extract it). Config values are injected at
+# container-start time via docker-compose.yml's env_file:, which docker-
+# entrypoint.sh's config:cache picks up from the real process environment —
+# no physical .env file needed at any point in this image's life. This also
+# means a clean checkout (no local .env, e.g. CI) can build this image at
+# all; it previously could not.
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 
 # Publish Sanctum

@@ -38,6 +38,36 @@ class AggregateAnalyticsJob implements ShouldQueue {
                     $costToman       = (float) $msgs->sum('cost_toman');
                     $unansweredCount = $msgs->where('role', 'assistant')->where('is_unanswered', true)->count();
 
+                    // These five columns existed since analytics_daily was
+                    // first created but had nothing writing to them — no
+                    // code anywhere ever recorded a feedback rating, a
+                    // human escalation, a product mention, or a lead/
+                    // conversion. conversation_events (see
+                    // TenantService::createTenantTables()/fixSchema()) is
+                    // what those event types actually get logged into now
+                    // (ChatController::submitFeedback(), rag_service.py's
+                    // _log_product_mentioned(), etc.) — this rolls them up
+                    // the same way messages already are above. escalation
+                    // and lead_captured have no emitter yet (no
+                    // escalation-to-human or lead-capture feature exists
+                    // in the product at all today) — their counts stay 0
+                    // until that ships, honestly reflecting reality rather
+                    // than a hardcoded zero pretending nothing was missed.
+                    $events = DB::table('conversation_events')
+                        ->where('chatbot_id', $chatbot->id)
+                        ->whereDate('created_at', $date)
+                        ->get(['event_type', 'payload']);
+                    $positiveFeedback = 0;
+                    $negativeFeedback = 0;
+                    foreach ($events->where('event_type', 'feedback') as $e) {
+                        $rating = json_decode($e->payload ?? '{}', true)['rating'] ?? null;
+                        if ($rating == 1) $positiveFeedback++;
+                        elseif ($rating == -1) $negativeFeedback++;
+                    }
+                    $escalationCount    = $events->where('event_type', 'escalation')->count();
+                    $productsRecommended = $events->where('event_type', 'product_mentioned')->count();
+                    $conversions        = $events->where('event_type', 'lead_captured')->count();
+
                     AnalyticsDaily::updateOrCreate(['chatbot_id' => $chatbot->id, 'date' => $date], [
                         'total_conversations'     => $convs,
                         'total_messages'          => $msgs->count(),
@@ -58,6 +88,11 @@ class AggregateAnalyticsJob implements ShouldQueue {
                         // product-health signal, pre-aggregated here instead of
                         // scanned from messages on every dashboard load.
                         'unanswered_count'        => $unansweredCount,
+                        'escalation_count'        => $escalationCount,
+                        'positive_feedback'       => $positiveFeedback,
+                        'negative_feedback'       => $negativeFeedback,
+                        'products_recommended'    => $productsRecommended,
+                        'conversions'             => $conversions,
                         'updated_at'              => now(),
                     ]);
 

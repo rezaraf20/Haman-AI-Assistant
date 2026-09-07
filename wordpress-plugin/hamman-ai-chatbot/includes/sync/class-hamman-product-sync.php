@@ -66,6 +66,40 @@ class Hamman_Product_Sync {
             'featured_image'=>get_the_post_thumbnail_url($p->get_id(),'medium')?:null,
             'categories'=>$cats,
             'tags'=>wp_get_post_terms($p->get_id(),'product_tag',['fields'=>'names']),
+            'attachments'=>$this->product_pdf_attachments($p),
         ];
+    }
+
+    /**
+     * The shop's most expensive question type, per the interview this
+     * traces back to, comes from a datasheet — but a datasheet is rarely
+     * "the product description," it's a PDF sitting either as a WordPress
+     * media attachment on the product post, or just linked from inside the
+     * description HTML. wp_strip_all_tags() (used above for the text
+     * fields) already discarded those href attributes, so this scans the
+     * *raw* description/short_description before that stripping happens.
+     * Deduplicated by URL — the same file linked in text and also attached
+     * as media must only be synced once.
+     */
+    private function product_pdf_attachments( \WC_Product $p ): array {
+        $found = []; // url => name
+
+        foreach ( get_attached_media( 'application/pdf', $p->get_id() ) as $attachment ) {
+            $url = wp_get_attachment_url( $attachment->ID );
+            if ( $url ) $found[ $url ] = $attachment->post_title ?: basename( $url );
+        }
+
+        $raw_html = $p->get_description() . ' ' . $p->get_short_description();
+        if ( preg_match_all( '/href=["\']([^"\']+\.pdf)(?:[?#][^"\']*)?["\']/i', $raw_html, $matches ) ) {
+            foreach ( $matches[1] as $url ) {
+                if ( ! isset( $found[ $url ] ) ) $found[ $url ] = basename( parse_url( $url, PHP_URL_PATH ) ?: $url );
+            }
+        }
+
+        $attachments = [];
+        foreach ( $found as $url => $name ) {
+            $attachments[] = [ 'url' => $url, 'name' => $name ];
+        }
+        return $attachments;
     }
 }

@@ -1,0 +1,20 @@
+<?php
+return [
+    'nav' => 'Leads',
+    'dashboard_card_title' => 'New Leads This Week',
+    'view_all' => 'View all',
+    'filter_all' => 'All',
+    'status_new' => 'New',
+    'status_contacted' => 'Contacted',
+    'status_closed' => 'Closed',
+    'col_contact' => 'Contact',
+    'col_question' => 'Question',
+    'col_actions' => 'Actions',
+    'view_conversation' => 'View conversation',
+    'mark_contacted' => 'Mark as contacted',
+    'mark_closed' => 'Close',
+    'marked_contacted' => 'Marked as contacted',
+    'marked_closed' => 'Lead closed',
+    'export_csv' => 'Export CSV',
+    'empty' => 'No leads captured yet.',
+];

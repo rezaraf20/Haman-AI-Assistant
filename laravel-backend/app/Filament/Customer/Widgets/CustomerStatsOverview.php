@@ -30,13 +30,14 @@ class CustomerStatsOverview extends Widget {
         $pct   = $limit ? min(100, round(($used / max($limit, 1)) * 100)) : null;
 
         return [
-            'questions_month' => (int) $data['monthQuestions'],
-            'unanswered'      => (int) $data['monthUnanswered'],
-            'wallet_toman'    => $tenant->wallet_balance_toman,
-            'tokens_used'     => $used,
-            'tokens_limit'    => $limit,
-            'tokens_pct'      => $pct,
-            'bonus_tokens'    => $tenant->bonus_tokens,
+            'questions_month'    => (int) $data['monthQuestions'],
+            'unanswered'         => (int) $data['monthUnanswered'],
+            'wallet_toman'       => $tenant->wallet_balance_toman,
+            'tokens_used'        => $used,
+            'tokens_limit'       => $limit,
+            'tokens_pct'         => $pct,
+            'bonus_tokens'       => $tenant->bonus_tokens,
+            'new_leads_week'     => (int) $data['newLeadsThisWeek'],
         ];
     }
 

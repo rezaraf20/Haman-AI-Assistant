@@ -14,6 +14,12 @@ class Settings(BaseSettings):
     GEMINI_CHAT_MODEL: str = "gemini-2.5-flash"
     GEMINI_EMBEDDING_MODEL: str = "models/gemini-embedding-001"
     GEMINI_EMBEDDING_DIMS: int = 3072
+    # Admin-set, same "unpriced defaults to 0" philosophy as
+    # LlmProviderProfile's per-1M-token prices (see rag_service.py's
+    # _compute_cost_toman()) — a PDF-heavy catalog's embedding cost is
+    # real money (one embedding-API call per chunk), and this is what
+    # lets the customer portal show it instead of silently absorbing it.
+    EMBEDDING_PRICE_PER_1M_TOMAN: float = 0
     GROQ_API_KEY: str = ""
     XAI_API_KEY: str = ""
     XAI_CHAT_MODEL: str = "grok-2-latest"

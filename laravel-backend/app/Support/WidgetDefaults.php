@@ -53,6 +53,12 @@ class WidgetDefaults {
             // above, which are fetch/UI errors the JS itself shows.
             'quota_exceeded_response'   => 'با عرض پوزش، سقف مصرف ماهانه‌ی حساب شما تمام شده است. لطفاً برای ارتقای پلن با پشتیبانی تماس بگیرید.',
             'processing_error_response' => 'با عرض پوزش، امکان پردازش درخواست شما وجود نداشت.',
+            // See LeadCaptureService — only shown when the chatbot's
+            // widget_config.lead_capture_enabled is true; otherwise the
+            // plain fallback_response above still applies unchanged.
+            'lead_capture_prompt'  => 'الان جوابش را ندارم. شماره تماس یا ایمیلتان را بگذارید تا همکاران در اولین فرصت باهاتون تماس بگیرند.',
+            'lead_capture_thanks'  => 'متشکریم! اطلاعات شما ثبت شد و همکاران به‌زودی با شما تماس می‌گیرند.',
+            'lead_capture_invalid' => 'این یک شماره تماس یا ایمیل معتبر به نظر نمی‌رسد. لطفاً دوباره وارد کنید (مثال: ۰۹۱۲۳۴۵۶۷۸۹ یا you@example.com).',
         ];
     }
 
@@ -65,6 +71,9 @@ class WidgetDefaults {
             'connection_error_message' => 'Could not connect to the server. Please try again.',
             'quota_exceeded_response'   => 'Sorry, your account has reached its monthly usage limit. Please contact support to upgrade your plan.',
             'processing_error_response' => 'Sorry, I could not process your request.',
+            'lead_capture_prompt'  => "I don't have an answer for that right now. Leave your phone number or email and our team will get back to you shortly.",
+            'lead_capture_thanks'  => "Thanks! We've got your details and our team will be in touch soon.",
+            'lead_capture_invalid' => "That doesn't look like a valid phone number or email. Please try again (e.g. +1 555 123 4567 or you@example.com).",
         ];
     }
 }

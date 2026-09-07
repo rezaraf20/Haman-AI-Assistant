@@ -12,12 +12,14 @@ class LlmProviderProfile extends Model {
         'input_price_per_1m_toman', 'output_price_per_1m_toman',
         'priority', 'is_active', 'max_tokens_response', 'timeout_seconds',
         'extra_headers', 'last_success_at', 'last_failure_at', 'consecutive_failures',
+        'disabled_reason', 'disabled_notified_at',
     ];
     protected $casts = [
         'is_active'                  => 'boolean',
         'extra_headers'              => 'array',
         'last_success_at'            => 'datetime',
         'last_failure_at'            => 'datetime',
+        'disabled_notified_at'       => 'datetime',
         'input_price_per_1m_toman'   => 'float',
         'output_price_per_1m_toman'  => 'float',
     ];

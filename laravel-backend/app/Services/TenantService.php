@@ -242,6 +242,18 @@ class TenantService
                 END \$\$;
             ");
         } catch (\Throwable $e) {}
+        // Part-number/SKU lookup (App\Support\SkuNormalizer applies the
+        // identical rule at sync time; rag_service.py's SKU-detection path
+        // applies it to whatever token it pulls from the question) — a
+        // vector embedding of an alphanumeric string like "LM358N" carries
+        // almost no useful signal, so an exact/near-exact match on this
+        // column runs *before* falling back to hybrid retrieval.
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.products ADD COLUMN IF NOT EXISTS sku_normalized VARCHAR(255)");
+        } catch (\Throwable $e) {}
+        try {
+            DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_products_sku_normalized ON {$schemaName}.products(chatbot_id, sku_normalized)");
+        } catch (\Throwable $e) {}
         // Backfill: the ADD COLUMN above leaves every pre-existing chunk row
         // at content_tsv=NULL (never matches any full-text query), so hybrid
         // search would silently degrade to vector-only for already-embedded
@@ -302,6 +314,48 @@ class TenantService
         try {
             DB::statement("ALTER TABLE {$schemaName}.analytics_daily ADD COLUMN IF NOT EXISTS unanswered_count BIGINT NOT NULL DEFAULT 0");
         } catch (\Throwable $e) {}
+        // Fine-grained per-turn events — see createTenantTables()'s matching
+        // block for the full rationale. Needed here too since this method is
+        // what brings *existing* tenant schemas up to date, not just new
+        // ones created after this feature shipped.
+        try {
+            DB::statement("
+                CREATE TABLE IF NOT EXISTS {$schemaName}.conversation_events (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    conversation_id UUID NOT NULL REFERENCES {$schemaName}.conversations(id) ON DELETE CASCADE,
+                    message_id UUID NULL REFERENCES {$schemaName}.messages(id) ON DELETE SET NULL,
+                    chatbot_id UUID NOT NULL REFERENCES {$schemaName}.chatbots(id) ON DELETE CASCADE,
+                    event_type VARCHAR(50) NOT NULL,
+                    payload JSONB,
+                    latency_ms INTEGER,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+            ");
+            DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_conv_events_lookup ON {$schemaName}.conversation_events(chatbot_id, event_type, created_at)");
+        } catch (\Throwable $e) {}
+        // Lead capture — see createTenantTables()'s matching block.
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.chatbots ADD COLUMN IF NOT EXISTS notification_settings JSONB NOT NULL DEFAULT '{}'");
+        } catch (\Throwable $e) {}
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.conversations ADD COLUMN IF NOT EXISTS pending_lead_question TEXT");
+        } catch (\Throwable $e) {}
+        try {
+            DB::statement("
+                CREATE TABLE IF NOT EXISTS {$schemaName}.leads (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    conversation_id UUID NOT NULL REFERENCES {$schemaName}.conversations(id) ON DELETE CASCADE,
+                    chatbot_id UUID NOT NULL REFERENCES {$schemaName}.chatbots(id) ON DELETE CASCADE,
+                    name VARCHAR(255),
+                    contact VARCHAR(255) NOT NULL,
+                    contact_type VARCHAR(10) NOT NULL,
+                    question TEXT,
+                    status VARCHAR(20) NOT NULL DEFAULT 'new',
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+            ");
+            DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_leads_lookup ON {$schemaName}.leads(chatbot_id, status, created_at)");
+        } catch (\Throwable $e) {}
     }
 
     private function createTenantTables(string $s): void
@@ -333,6 +387,15 @@ class TenantService
                 rerank_threshold DECIMAL(4,3) NOT NULL DEFAULT 0.500,
                 memory_window SMALLINT NOT NULL DEFAULT 6,
                 widget_config JSONB NOT NULL DEFAULT '{}',
+                -- Per-channel (email/telegram/webhook) alert preferences
+                -- for lead_captured/unanswered events, keyed by channel
+                -- name -- see NotificationService for the exact shape of
+                -- each channel's settings (enabled flag, destination
+                -- address/token, which events, digest mode). A separate
+                -- column from widget_config on purpose: that one is
+                -- client/widget-facing behavior, this is merchant-facing
+                -- alerting config, never sent to the browser.
+                notification_settings JSONB NOT NULL DEFAULT '{}',
                 language VARCHAR(10) NOT NULL DEFAULT 'en',
                 response_language VARCHAR(10) NOT NULL DEFAULT 'auto',
                 is_active BOOLEAN NOT NULL DEFAULT true,
@@ -413,6 +476,12 @@ class TenantService
                 name VARCHAR(500) NOT NULL,
                 slug VARCHAR(500),
                 sku VARCHAR(255),
+                -- App\Support\SkuNormalizer applies the same rule
+                -- (uppercase, strip whitespace/hyphens) that
+                -- rag_service.py's SKU-detection path applies to the token
+                -- it pulls from an incoming question — an exact/near-exact
+                -- match here runs before hybrid retrieval even starts.
+                sku_normalized VARCHAR(255),
                 type VARCHAR(30) DEFAULT 'simple',
                 status VARCHAR(20) DEFAULT 'publish',
                 description TEXT,
@@ -442,6 +511,7 @@ class TenantService
                 UNIQUE(chatbot_id, woo_product_id)
             )
         ");
+        DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_products_sku_normalized ON {$s}.products(chatbot_id, sku_normalized)");
 
         DB::statement("
             CREATE TABLE IF NOT EXISTS {$s}.faqs (
@@ -475,6 +545,14 @@ class TenantService
                 message_count SMALLINT DEFAULT 0,
                 total_tokens INTEGER DEFAULT 0,
                 is_converted BOOLEAN DEFAULT false,
+                -- Set to the user's own question text the moment the bot
+                -- asks them for contact info instead of answering (see
+                -- LeadCaptureService) -- the next incoming message on this
+                -- conversation is then read as a phone/email attempt
+                -- instead of a new question, not run through RAG at all.
+                -- Cleared once resolved (lead captured or an invalid
+                -- attempt exhausted the flow).
+                pending_lead_question TEXT,
                 ended_at TIMESTAMPTZ,
                 started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -562,6 +640,52 @@ class TenantService
             )
         ");
         DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_analytics_daily_date ON {$s}.analytics_daily(date)");
+
+        // Fine-grained per-turn events (conversation_started, retrieval,
+        // response, unanswered, product_mentioned, feedback, lead_captured,
+        // and — once built — escalation) — what AggregateAnalyticsJob
+        // actually rolls up into analytics_daily's escalation_count/
+        // positive_feedback/negative_feedback/products_recommended/
+        // conversions columns, all of which sat permanently at 0 with
+        // nothing ever writing them. payload holds event-specific detail
+        // (query text, chunk_ids, scores, tokens, etc.) as JSONB rather
+        // than a fixed column per event type, since the event set is
+        // still growing; message_id is nullable because retrieval/
+        // response/unanswered events fire from the Python RAG service
+        // before the assistant Message row exists yet.
+        DB::statement("
+            CREATE TABLE IF NOT EXISTS {$s}.conversation_events (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                conversation_id UUID NOT NULL REFERENCES {$s}.conversations(id) ON DELETE CASCADE,
+                message_id UUID NULL REFERENCES {$s}.messages(id) ON DELETE SET NULL,
+                chatbot_id UUID NOT NULL REFERENCES {$s}.chatbots(id) ON DELETE CASCADE,
+                event_type VARCHAR(50) NOT NULL,
+                payload JSONB,
+                latency_ms INTEGER,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+        ");
+        DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_conv_events_lookup ON {$s}.conversation_events(chatbot_id, event_type, created_at)");
+
+        // A missed answer with no way to reach the visitor back is a lost
+        // sale for a B2B/high-ticket shop, not just an unanswered-rate
+        // number on a dashboard — see LeadCaptureService, which is what
+        // actually populates this table when the bot asks for (and gets) a
+        // phone/email instead of just saying "I don't know".
+        DB::statement("
+            CREATE TABLE IF NOT EXISTS {$s}.leads (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                conversation_id UUID NOT NULL REFERENCES {$s}.conversations(id) ON DELETE CASCADE,
+                chatbot_id UUID NOT NULL REFERENCES {$s}.chatbots(id) ON DELETE CASCADE,
+                name VARCHAR(255),
+                contact VARCHAR(255) NOT NULL,
+                contact_type VARCHAR(10) NOT NULL,
+                question TEXT,
+                status VARCHAR(20) NOT NULL DEFAULT 'new',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+        ");
+        DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_leads_lookup ON {$s}.leads(chatbot_id, status, created_at)");
 
         DB::statement("SET search_path TO public");
     }

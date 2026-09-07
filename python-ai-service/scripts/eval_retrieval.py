@@ -153,8 +153,12 @@ def main():
             # real, admin-configured settings — not a forced comparison mode).
             db.execute(text(f"SET search_path TO {item['schema']}, public"))
             db.commit()
+            # conversation_id=None: this is an offline eval run, not a real
+            # conversation — hybrid_retrieve()'s event logging (see
+            # rag_service.py) already no-ops on a missing conversation_id
+            # rather than attempting an insert with a null FK.
             result = hybrid_retrieve(
-                db, item["chatbot_id"], item["question"], emb,
+                db, item["chatbot_id"], None, item["question"], emb,
                 settings["top_k"], settings["threshold"], settings["language"],
                 rerank_enabled=True, rerank_threshold=settings["rerank_threshold"],
             )

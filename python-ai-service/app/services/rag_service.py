@@ -1,6 +1,7 @@
 import time
 import json
 import logging
+import re
 import requests as _requests
 from typing import List, Optional, AsyncGenerator, Tuple
 from sqlalchemy.orm import Session
@@ -35,7 +36,12 @@ GROUNDING_RULES = (
     "If the business's exact name isn't given to you (either below or in the context), "
     "never invent or guess one — say you don't know its exact name rather than naming "
     "any company, including anything that merely looks like a name in the context "
-    "(a theme, template, or internal system label is not the business's name)."
+    "(a theme, template, or internal system label is not the business's name).\n\n"
+    "When a source is marked with a page number (e.g. '[Source 2] Datasheet.pdf "
+    "(page 4)'), this is a technical document — for questions answered from it, name "
+    "the source file and page number in your answer (e.g. 'according to Datasheet.pdf, "
+    "page 4, ...'). For this kind of question, citing exactly where the answer came "
+    "from matters as much as the answer itself."
 )
 DEFAULT_SYSTEM = GROUNDING_RULES
 
@@ -62,7 +68,11 @@ GROUNDING_RULES_FA = (
     "خود این کسب‌وکار ارائه می‌دهد برگردان.\n\n"
     "اگر نام دقیق این کسب‌وکار در ادامه یا در زمینه مشخص نشده، هرگز نام هیچ شرکتی را نساز — حتی اگر "
     "چیزی در زمینه شبیه یک اسم به نظر برسد (نام یک قالب، افزونه یا برچسب داخلی سیستم، نام این "
-    "کسب‌وکار نیست) — به‌جای آن صادقانه بگو نام دقیق آن را نمی‌دانی."
+    "کسب‌وکار نیست) — به‌جای آن صادقانه بگو نام دقیق آن را نمی‌دانی.\n\n"
+    "اگر یک منبع شماره صفحه داشته باشد (مثلاً «[Source 2] Datasheet.pdf (page 4)»)، یعنی یک سند "
+    "فنی است — برای سوالاتی که از آن پاسخ داده می‌شود، نام فایل و شماره صفحه را در پاسخ خودت بیاور "
+    "(مثلاً «طبق Datasheet.pdf، صفحه ۴، ...»). برای این نوع سوال، ارجاع دقیق به منبع به‌اندازه‌ی "
+    "خود پاسخ اهمیت دارد."
 )
 
 
@@ -102,6 +112,182 @@ def _grounding_reminder(is_fa: bool) -> str:
         "company name (a competitor's or anything else) that wasn't explicitly given "
         "above as this business's own name — if you don't know its exact name, say so."
     )
+
+
+# From a real interview at an electronics-parts shop: a customer typing
+# their own part number ("do you have this?") is one of their three most
+# common questions — and a vector embedding of a bare alphanumeric string
+# like "LM358N" carries almost no useful semantic signal, so hybrid
+# retrieval alone handles this case poorly. Matched *before* any retrieval
+# runs; only alphanumeric-with-both-letters-and-digits tokens qualify (a
+# plain word or a pure number is not a plausible part number), 4-20 chars,
+# hyphens allowed within the token (stripped at normalization time, not
+# here — the raw hyphenated form is still worth keeping as the "candidate"
+# shown back to the user on a miss).
+SKU_CANDIDATE_PATTERN = re.compile(
+    r'\b(?=[A-Za-z0-9-]{4,20}\b)(?=[A-Za-z0-9-]*[A-Za-z])(?=[A-Za-z0-9-]*\d)[A-Za-z0-9-]{4,20}\b'
+)
+
+
+def _extract_sku_candidates(query: str) -> List[str]:
+    return SKU_CANDIDATE_PATTERN.findall(query)
+
+
+def _normalize_sku(raw: str) -> str:
+    """Must stay in exact lockstep with App\\Support\\SkuNormalizer (PHP) —
+    that's what populates products.sku_normalized at sync time. Uppercase,
+    strip whitespace/hyphens, nothing fancier: "lm358-n" and "LM358 N" and
+    "LM358N" all normalize to the same "LM358N"."""
+    return re.sub(r'[\s\-]+', '', raw).upper()
+
+
+def _sku_row_to_dict(row) -> dict:
+    return {
+        "id": row.id, "name": row.name, "sku": row.sku,
+        "price": row.price, "currency": row.currency,
+        "stock_status": row.stock_status, "permalink": row.permalink,
+    }
+
+
+def _lookup_by_sku(db: Session, chatbot_id: str, query: str) -> Optional[dict]:
+    """Returns None when the query contains no part-number-like token at
+    all (the normal retrieval path should run, no SKU logic involved).
+    Otherwise returns a dict with match_type 'exact' | 'fuzzy' | 'none' —
+    'none' still means "a candidate token was found but nothing in the
+    catalog is even close", which the caller logs (a real demand-gap
+    signal — a customer typed a part number this catalog doesn't carry)
+    before falling through to normal retrieval, exactly like a real miss.
+    """
+    candidates = _extract_sku_candidates(query)
+    if not candidates:
+        return None
+
+    for candidate in candidates:
+        normalized = _normalize_sku(candidate)
+        # sku_normalized exact match, or the raw candidate showing up
+        # anywhere inside attributes' free-form JSON (there's no fixed key
+        # for "alternate identifiers" today — the WordPress plugin's
+        # product sync doesn't even populate attributes at all currently —
+        # so a plain substring search on its text form is the honest,
+        # dependency-free way to honor "any identifier in attributes"
+        # without inventing a schema convention nothing actually uses yet).
+        row = db.execute(text("""
+            SELECT id::text, name, sku, price, currency, stock_status, permalink
+            FROM products
+            WHERE chatbot_id = CAST(:cid AS uuid)
+              AND (
+                    sku_normalized = :norm
+                 OR attributes::text ILIKE '%' || :raw || '%'
+              )
+            LIMIT 1
+        """), {"cid": chatbot_id, "norm": normalized, "raw": candidate}).fetchone()
+        if row:
+            return {"match_type": "exact", "candidate": candidate, "product": _sku_row_to_dict(row)}
+
+    # No exact hit for any candidate — try a near match (bidirectional
+    # substring on the normalized column) before giving up. A confidently
+    # wrong suggestion is exactly what this must avoid, hence 'fuzzy' is
+    # always presented as an explicit non-match, never silently treated
+    # like a real hit (see _sku_fuzzy_response()).
+    for candidate in candidates:
+        normalized = _normalize_sku(candidate)
+        rows = db.execute(text("""
+            SELECT id::text, name, sku, price, currency, stock_status, permalink
+            FROM products
+            WHERE chatbot_id = CAST(:cid AS uuid)
+              AND sku_normalized IS NOT NULL
+              AND (sku_normalized LIKE '%' || :norm || '%' OR :norm LIKE '%' || sku_normalized || '%')
+            LIMIT 5
+        """), {"cid": chatbot_id, "norm": normalized}).fetchall()
+        if rows:
+            return {"match_type": "fuzzy", "candidate": candidate, "products": [_sku_row_to_dict(r) for r in rows]}
+
+    return {"match_type": "none", "candidate": candidates[0]}
+
+
+def _sku_exact_response(product: dict, is_fa: bool) -> str:
+    price = f"{product['price']:,.0f} {product['currency']}" if product.get('price') is not None else None
+    if is_fa:
+        parts = [f"بله، این محصول را داریم: {product['name']} (کد: {product['sku']})."]
+        if price: parts.append(f"قیمت: {price}.")
+        parts.append("موجود است." if product.get('stock_status') == 'instock' else "در حال حاضر موجود نیست.")
+        if product.get('permalink'): parts.append(product['permalink'])
+        return " ".join(parts)
+    parts = [f"Yes, we have this product: {product['name']} (SKU: {product['sku']})."]
+    if price: parts.append(f"Price: {price}.")
+    parts.append("In stock." if product.get('stock_status') == 'instock' else "Currently out of stock.")
+    if product.get('permalink'): parts.append(product['permalink'])
+    return " ".join(parts)
+
+
+def _sku_fuzzy_response(products: List[dict], candidate: str, is_fa: bool) -> str:
+    names = [f"{p['name']} ({p['sku']})" for p in products[:3]]
+    if is_fa:
+        return (
+            f"دقیقاً کد «{candidate}» را در فهرست نداریم، اما این موارد ممکن است مدنظرتان باشد: "
+            + "، ".join(names)
+            + ". (توجه: این یک تطبیق دقیق نیست، لطفاً کد را با همکاران ما تأیید کنید.)"
+        )
+    return (
+        f"We don't have an exact match for \"{candidate}\", but these might be what you're looking for: "
+        + ", ".join(names)
+        + ". (Note: this is not an exact match — please confirm the part number with our team.)"
+    )
+
+
+def _try_sku_shortcut(db: Session, chatbot_id: str, conversation_id: Optional[str], query: str, start: float) -> Optional[dict]:
+    """Returns a fully-formed run_rag_pipeline()-shaped result dict when the
+    query contains a part-number-like token AND the catalog has an exact or
+    fuzzy match for it — the caller returns/yields this directly, skipping
+    embedding + hybrid_retrieve + the LLM call entirely (cheaper and more
+    reliable than asking an LLM to reason about an opaque alphanumeric
+    string). Returns None when there's nothing to short-circuit on — either
+    no part-number-like token at all, or one was found but the catalog has
+    truly nothing close (that case still gets logged, then falls through to
+    normal retrieval, since a fuzzy/none SKU miss doesn't mean the question
+    itself is unanswerable by the normal pipeline)."""
+    result = _lookup_by_sku(db, chatbot_id, query)
+    if result is None:
+        return None
+
+    _log_event(db, conversation_id, chatbot_id, "sku_lookup", {
+        "query": query, "candidate": result["candidate"], "match_type": result["match_type"],
+    })
+
+    if result["match_type"] == "none":
+        return None
+
+    is_fa_question = _looks_persian(query)
+    if result["match_type"] == "exact":
+        product = result["product"]
+        answer = _sku_exact_response(product, is_fa_question)
+        is_unanswered = False
+        sources = [{"title": product["name"], "url": product["permalink"], "type": "product"}] if product.get("permalink") else []
+    else:
+        products = result["products"]
+        answer = _sku_fuzzy_response(products, result["candidate"], is_fa_question)
+        # An explicit "not exact" hedge is still a real gap for the demand-
+        # gap dashboard and lead-capture (if enabled) to pick up on — the
+        # bot didn't confidently answer what was actually asked.
+        is_unanswered = True
+        sources = [{"title": p["name"], "url": p["permalink"], "type": "product"} for p in products[:3] if p.get("permalink")]
+
+    latency_ms = int((time.time() - start) * 1000)
+    _log_event(db, conversation_id, chatbot_id, "response", {
+        "model": "sku-lookup", "prompt_tokens": 0, "completion_tokens": 0, "cost_toman": 0, "citations": sources,
+    }, latency_ms=latency_ms)
+    if is_unanswered:
+        _log_event(db, conversation_id, chatbot_id, "unanswered", {
+            "query": query, "best_score": None, "reason": "sku_fuzzy_only",
+        })
+
+    return {
+        "response": answer, "chunk_ids": [], "scores": [], "sources": sources,
+        "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost_toman": 0,
+        "model": "sku-lookup", "latency_ms": latency_ms,
+        "is_fallback": is_unanswered, "is_unanswered": is_unanswered,
+        "finish_reason": f"sku_{result['match_type']}",
+    }
 
 
 def retrieve_chunks(db: Session, chatbot_id: str, query_embedding: List[float], top_k: int = 8, threshold: float = 0.60) -> List[dict]:
@@ -283,8 +469,61 @@ def _rerank_llm(db: Session, query: str, candidates: List[dict], top_n: int = RE
     return candidates[:top_n], 0.0, {}
 
 
+def _log_event(
+    db: Session, conversation_id: Optional[str], chatbot_id: str, event_type: str,
+    payload: Optional[dict] = None, message_id: Optional[str] = None,
+    latency_ms: Optional[int] = None,
+) -> None:
+    """Best-effort, same philosophy as record_outcome() — analytics must
+    never break the actual chat response. conversation_id is required
+    (conversation_events.conversation_id is NOT NULL) and is only ever
+    missing for a caller that predates ChatRequest.conversation_id or
+    genuinely has none yet; such an event is simply skipped rather than
+    attempted with a null FK. message_id stays None for every event this
+    module logs (retrieval/response/unanswered/product_mentioned) — they
+    all fire before the assistant Message row exists (that's created back
+    in Laravel's ChatService::finish(), after this whole request returns)."""
+    if not conversation_id:
+        return
+    try:
+        db.execute(text("""
+            INSERT INTO conversation_events (conversation_id, message_id, chatbot_id, event_type, payload, latency_ms)
+            VALUES (:conversation_id, :message_id, :chatbot_id, :event_type, :payload, :latency_ms)
+        """), {
+            "conversation_id": conversation_id,
+            "message_id": message_id,
+            "chatbot_id": chatbot_id,
+            "event_type": event_type,
+            "payload": json.dumps(payload) if payload is not None else None,
+            "latency_ms": latency_ms,
+        })
+        db.commit()
+    except Exception as e:
+        logger.warning(f"Failed to log conversation_event '{event_type}': {e}")
+        db.rollback()
+
+
+def _log_product_mentioned(db: Session, conversation_id: Optional[str], chatbot_id: str, chunks: List[dict]) -> None:
+    """Fires when any retrieved chunk backing this answer came from a
+    product document (metadata.type == 'product', set by SyncService's
+    product upsert). Identifies products by permalink+title rather than a
+    formal products.id — chunk metadata carries whatever was passed to
+    upsertDoc() at sync time (price/permalink/title/type/...), which does
+    not include the products.external_id needed to join back to a real
+    product row; resolving that would mean an extra query per response for
+    a signal this is already good enough to act on (which products come up
+    in conversations at all)."""
+    product_chunks = [c for c in chunks if c.get("metadata", {}).get("type") == "product"]
+    if not product_chunks:
+        return
+    _log_event(db, conversation_id, chatbot_id, "product_mentioned", {
+        "product_ids": [c.get("metadata", {}).get("permalink") or c["id"] for c in product_chunks],
+        "context": [c.get("metadata", {}).get("title") for c in product_chunks if c.get("metadata", {}).get("title")],
+    })
+
+
 def hybrid_retrieve(
-    db: Session, chatbot_id: str, query: str, query_embedding: List[float],
+    db: Session, chatbot_id: str, conversation_id: Optional[str], query: str, query_embedding: List[float],
     top_k: int, threshold: float, language: str,
     rerank_enabled: bool, rerank_threshold: float,
 ) -> dict:
@@ -298,29 +537,65 @@ def hybrid_retrieve(
         one threshold — see the caller's config for both).
       rerank_cost_toman / rerank_usage: 0 / {} when reranking is off or the
         rerank call itself failed and fell back.
+
+    Also logs the 'retrieval' event (query, chunk_ids, scores, strategy,
+    latency) and, when the result is unanswered, the 'unanswered' event
+    (query, best_score, reason) — this is the one place that actually knows
+    which chunks were returned and at what score, the exact data an eval
+    set for the recall gap needs (see scripts/build_low_confidence_eval_set.py).
     """
+    retrieval_start = time.time()
     vec = _vector_search(db, chatbot_id, query_embedding)
     ft = _fulltext_search(db, chatbot_id, query, language)
     fused = _reciprocal_rank_fusion(vec, ft)
+    retrieval_latency_ms = int((time.time() - retrieval_start) * 1000)
 
     if not fused:
+        _log_event(db, conversation_id, chatbot_id, "retrieval", {
+            "query": query, "chunk_ids": [], "scores": [], "strategy": "hybrid-empty",
+        }, latency_ms=retrieval_latency_ms)
+        _log_event(db, conversation_id, chatbot_id, "unanswered", {
+            "query": query, "best_score": None, "reason": "no_candidates",
+        })
         return {"chunks": [], "is_unanswered": True, "rerank_cost_toman": 0.0, "rerank_usage": {}}
 
     if rerank_enabled:
         reranked, cost_toman, usage = _rerank_llm(db, query, fused, top_n=RERANK_TOP_N)
         best_score = reranked[0]["rerank_score"] if reranked else 0.0
+        is_unanswered = best_score < rerank_threshold
+        _log_event(db, conversation_id, chatbot_id, "retrieval", {
+            "query": query,
+            "chunk_ids": [c["id"] for c in reranked],
+            "scores": [round(c.get("rerank_score", 0.0), 4) for c in reranked],
+            "strategy": "hybrid+rerank",
+        }, latency_ms=retrieval_latency_ms)
+        if is_unanswered:
+            _log_event(db, conversation_id, chatbot_id, "unanswered", {
+                "query": query, "best_score": round(best_score, 4), "reason": "below_rerank_threshold",
+            })
         return {
             "chunks": reranked,
-            "is_unanswered": best_score < rerank_threshold,
+            "is_unanswered": is_unanswered,
             "rerank_cost_toman": cost_toman,
             "rerank_usage": usage,
         }
 
     top = fused[:top_k]
     best_similarity = top[0].get("similarity", 0.0) if top else 0.0
+    is_unanswered = best_similarity < threshold
+    _log_event(db, conversation_id, chatbot_id, "retrieval", {
+        "query": query,
+        "chunk_ids": [c["id"] for c in top],
+        "scores": [round(c.get("similarity", 0.0), 4) for c in top],
+        "strategy": "hybrid",
+    }, latency_ms=retrieval_latency_ms)
+    if is_unanswered:
+        _log_event(db, conversation_id, chatbot_id, "unanswered", {
+            "query": query, "best_score": round(best_similarity, 4), "reason": "below_threshold",
+        })
     return {
         "chunks": top,
-        "is_unanswered": best_similarity < threshold,
+        "is_unanswered": is_unanswered,
         "rerank_cost_toman": 0.0,
         "rerank_usage": {},
     }
@@ -554,7 +829,7 @@ async def run_rag_pipeline_stream(
     system_prompt: Optional[str], fallback_resp: Optional[str], llm_model: str,
     top_k: int, threshold: float, temperature: float, max_tokens: int, language: str,
     rerank_enabled: bool = False, rerank_threshold: float = 0.500,
-    business_name: Optional[str] = None,
+    business_name: Optional[str] = None, conversation_id: Optional[str] = None,
 ) -> AsyncGenerator[Tuple[str, object], None]:
     """Streaming counterpart to run_rag_pipeline() — identical retrieval and
     prompt-building, but yields ("delta", str) as the answer is generated
@@ -564,6 +839,12 @@ async def run_rag_pipeline_stream(
     only care about the final persisted record can treat it the same way.
     """
     start = time.time()
+
+    sku_result = _try_sku_shortcut(db, chatbot_id, conversation_id, query, start)
+    if sku_result is not None:
+        yield ("delta", sku_result["response"])
+        yield ("done", sku_result)
+        return
 
     try:
         query_embedding = _embed_query(query)
@@ -579,7 +860,7 @@ async def run_rag_pipeline_stream(
         })
         return
 
-    retrieval = hybrid_retrieve(db, chatbot_id, query, query_embedding, top_k, threshold, language, rerank_enabled, rerank_threshold)
+    retrieval = hybrid_retrieve(db, chatbot_id, conversation_id, query, query_embedding, top_k, threshold, language, rerank_enabled, rerank_threshold)
     chunks = retrieval["chunks"]
     is_unanswered = retrieval["is_unanswered"]
     is_fallback = is_unanswered
@@ -599,7 +880,8 @@ async def run_rag_pipeline_stream(
     for i, chunk in enumerate(chunks, 1):
         meta = chunk.get("metadata", {})
         title = meta.get("title", "")
-        header = f"[Source {i}]" + (f" {title}" if title else "")
+        page = meta.get("page")
+        header = f"[Source {i}]" + (f" {title}" if title else "") + (f" (page {page})" if page else "")
         context_parts.append(f"{header}\n{chunk['content']}")
     context = "\n\n---\n\n".join(context_parts)
 
@@ -636,6 +918,11 @@ async def run_rag_pipeline_stream(
         if m.get("title"): src["title"] = m["title"]
         if m.get("url"): src["url"] = m["url"]
         if m.get("type"): src["type"] = m["type"]
+        # Structured page number — the reliable half of citation. Prose in
+        # the answer may or may not mention it (see the grounding-rules
+        # clause below), but the widget can always show "file, page N" from
+        # this regardless of what the model actually wrote.
+        if m.get("page"): src["page"] = m["page"]
         if src: sources.append(src)
 
     full_text = ""
@@ -659,6 +946,17 @@ async def run_rag_pipeline_stream(
             full_text = fallback_resp or "Sorry, I could not generate a response."
             yield ("delta", full_text)
 
+    total_latency_ms = int((time.time() - start) * 1000)
+    if not stream_failed:
+        _log_event(db, conversation_id, chatbot_id, "response", {
+            "model": model_used,
+            "prompt_tokens": usage.get("prompt_tokens", 0),
+            "completion_tokens": usage.get("completion_tokens", 0),
+            "cost_toman": cost_toman,
+            "citations": sources,
+        }, latency_ms=total_latency_ms)
+        _log_product_mentioned(db, conversation_id, chatbot_id, chunks)
+
     yield ("done", {
         "response": full_text,
         "chunk_ids": [c["id"] for c in chunks],
@@ -681,10 +979,14 @@ async def run_rag_pipeline(
     system_prompt: Optional[str], fallback_resp: Optional[str], llm_model: str,
     top_k: int, threshold: float, temperature: float, max_tokens: int, language: str,
     rerank_enabled: bool = False, rerank_threshold: float = 0.500,
-    business_name: Optional[str] = None,
+    business_name: Optional[str] = None, conversation_id: Optional[str] = None,
 ) -> dict:
 
     start = time.time()
+
+    sku_result = _try_sku_shortcut(db, chatbot_id, conversation_id, query, start)
+    if sku_result is not None:
+        return sku_result
 
     try:
         query_embedding = _embed_query(query)
@@ -711,7 +1013,7 @@ async def run_rag_pipeline(
     # variable because is_fallback below gets overwritten again on an
     # LLM-call failure, which is a technical failure, not a content gap, and
     # must not be counted as "unanswered" for the demand-gap dashboard.
-    retrieval = hybrid_retrieve(db, chatbot_id, query, query_embedding, top_k, threshold, language, rerank_enabled, rerank_threshold)
+    retrieval = hybrid_retrieve(db, chatbot_id, conversation_id, query, query_embedding, top_k, threshold, language, rerank_enabled, rerank_threshold)
     chunks = retrieval["chunks"]
     is_unanswered = retrieval["is_unanswered"]
     is_fallback = is_unanswered
@@ -730,7 +1032,8 @@ async def run_rag_pipeline(
     for i, chunk in enumerate(chunks, 1):
         meta = chunk.get("metadata", {})
         title = meta.get("title", "")
-        header = f"[Source {i}]" + (f" {title}" if title else "")
+        page = meta.get("page")
+        header = f"[Source {i}]" + (f" {title}" if title else "") + (f" (page {page})" if page else "")
         context_parts.append(f"{header}\n{chunk['content']}")
     context = "\n\n---\n\n".join(context_parts)
 
@@ -767,6 +1070,7 @@ async def run_rag_pipeline(
     model_used = "n/a"
     usage = {}
     cost_toman = retrieval_cost_toman
+    llm_call_failed = False
     try:
         answer, model_used, usage, chat_cost_toman = _chat_completion(db, full_prompt, max_tokens, temperature)
         cost_toman += chat_cost_toman
@@ -774,6 +1078,7 @@ async def run_rag_pipeline(
         logger.error(f"LLM error (all providers failed): {e}")
         answer = fallback_resp or "Sorry, I could not generate a response."
         is_fallback = True
+        llm_call_failed = True
 
     sources = []
     for c in chunks[:3]:
@@ -782,7 +1087,23 @@ async def run_rag_pipeline(
         if m.get("title"): src["title"] = m["title"]
         if m.get("url"): src["url"] = m["url"]
         if m.get("type"): src["type"] = m["type"]
+        # Structured page number — the reliable half of citation. Prose in
+        # the answer may or may not mention it (see the grounding-rules
+        # clause below), but the widget can always show "file, page N" from
+        # this regardless of what the model actually wrote.
+        if m.get("page"): src["page"] = m["page"]
         if src: sources.append(src)
+
+    total_latency_ms = int((time.time() - start) * 1000)
+    if not llm_call_failed:
+        _log_event(db, conversation_id, chatbot_id, "response", {
+            "model": model_used,
+            "prompt_tokens": usage.get("prompt_tokens", 0),
+            "completion_tokens": usage.get("completion_tokens", 0),
+            "cost_toman": cost_toman,
+            "citations": sources,
+        }, latency_ms=total_latency_ms)
+        _log_product_mentioned(db, conversation_id, chatbot_id, chunks)
 
     return {
         "response": answer,
