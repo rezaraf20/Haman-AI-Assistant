@@ -1,6 +1,7 @@
 import time
 import json
 import logging
+import re
 import requests as _requests
 from typing import List, Optional, AsyncGenerator, Tuple
 from sqlalchemy.orm import Session
@@ -102,6 +103,182 @@ def _grounding_reminder(is_fa: bool) -> str:
         "company name (a competitor's or anything else) that wasn't explicitly given "
         "above as this business's own name — if you don't know its exact name, say so."
     )
+
+
+# From a real interview at an electronics-parts shop: a customer typing
+# their own part number ("do you have this?") is one of their three most
+# common questions — and a vector embedding of a bare alphanumeric string
+# like "LM358N" carries almost no useful semantic signal, so hybrid
+# retrieval alone handles this case poorly. Matched *before* any retrieval
+# runs; only alphanumeric-with-both-letters-and-digits tokens qualify (a
+# plain word or a pure number is not a plausible part number), 4-20 chars,
+# hyphens allowed within the token (stripped at normalization time, not
+# here — the raw hyphenated form is still worth keeping as the "candidate"
+# shown back to the user on a miss).
+SKU_CANDIDATE_PATTERN = re.compile(
+    r'\b(?=[A-Za-z0-9-]{4,20}\b)(?=[A-Za-z0-9-]*[A-Za-z])(?=[A-Za-z0-9-]*\d)[A-Za-z0-9-]{4,20}\b'
+)
+
+
+def _extract_sku_candidates(query: str) -> List[str]:
+    return SKU_CANDIDATE_PATTERN.findall(query)
+
+
+def _normalize_sku(raw: str) -> str:
+    """Must stay in exact lockstep with App\\Support\\SkuNormalizer (PHP) —
+    that's what populates products.sku_normalized at sync time. Uppercase,
+    strip whitespace/hyphens, nothing fancier: "lm358-n" and "LM358 N" and
+    "LM358N" all normalize to the same "LM358N"."""
+    return re.sub(r'[\s\-]+', '', raw).upper()
+
+
+def _sku_row_to_dict(row) -> dict:
+    return {
+        "id": row.id, "name": row.name, "sku": row.sku,
+        "price": row.price, "currency": row.currency,
+        "stock_status": row.stock_status, "permalink": row.permalink,
+    }
+
+
+def _lookup_by_sku(db: Session, chatbot_id: str, query: str) -> Optional[dict]:
+    """Returns None when the query contains no part-number-like token at
+    all (the normal retrieval path should run, no SKU logic involved).
+    Otherwise returns a dict with match_type 'exact' | 'fuzzy' | 'none' —
+    'none' still means "a candidate token was found but nothing in the
+    catalog is even close", which the caller logs (a real demand-gap
+    signal — a customer typed a part number this catalog doesn't carry)
+    before falling through to normal retrieval, exactly like a real miss.
+    """
+    candidates = _extract_sku_candidates(query)
+    if not candidates:
+        return None
+
+    for candidate in candidates:
+        normalized = _normalize_sku(candidate)
+        # sku_normalized exact match, or the raw candidate showing up
+        # anywhere inside attributes' free-form JSON (there's no fixed key
+        # for "alternate identifiers" today — the WordPress plugin's
+        # product sync doesn't even populate attributes at all currently —
+        # so a plain substring search on its text form is the honest,
+        # dependency-free way to honor "any identifier in attributes"
+        # without inventing a schema convention nothing actually uses yet).
+        row = db.execute(text("""
+            SELECT id::text, name, sku, price, currency, stock_status, permalink
+            FROM products
+            WHERE chatbot_id = CAST(:cid AS uuid)
+              AND (
+                    sku_normalized = :norm
+                 OR attributes::text ILIKE '%' || :raw || '%'
+              )
+            LIMIT 1
+        """), {"cid": chatbot_id, "norm": normalized, "raw": candidate}).fetchone()
+        if row:
+            return {"match_type": "exact", "candidate": candidate, "product": _sku_row_to_dict(row)}
+
+    # No exact hit for any candidate — try a near match (bidirectional
+    # substring on the normalized column) before giving up. A confidently
+    # wrong suggestion is exactly what this must avoid, hence 'fuzzy' is
+    # always presented as an explicit non-match, never silently treated
+    # like a real hit (see _sku_fuzzy_response()).
+    for candidate in candidates:
+        normalized = _normalize_sku(candidate)
+        rows = db.execute(text("""
+            SELECT id::text, name, sku, price, currency, stock_status, permalink
+            FROM products
+            WHERE chatbot_id = CAST(:cid AS uuid)
+              AND sku_normalized IS NOT NULL
+              AND (sku_normalized LIKE '%' || :norm || '%' OR :norm LIKE '%' || sku_normalized || '%')
+            LIMIT 5
+        """), {"cid": chatbot_id, "norm": normalized}).fetchall()
+        if rows:
+            return {"match_type": "fuzzy", "candidate": candidate, "products": [_sku_row_to_dict(r) for r in rows]}
+
+    return {"match_type": "none", "candidate": candidates[0]}
+
+
+def _sku_exact_response(product: dict, is_fa: bool) -> str:
+    price = f"{product['price']:,.0f} {product['currency']}" if product.get('price') is not None else None
+    if is_fa:
+        parts = [f"بله، این محصول را داریم: {product['name']} (کد: {product['sku']})."]
+        if price: parts.append(f"قیمت: {price}.")
+        parts.append("موجود است." if product.get('stock_status') == 'instock' else "در حال حاضر موجود نیست.")
+        if product.get('permalink'): parts.append(product['permalink'])
+        return " ".join(parts)
+    parts = [f"Yes, we have this product: {product['name']} (SKU: {product['sku']})."]
+    if price: parts.append(f"Price: {price}.")
+    parts.append("In stock." if product.get('stock_status') == 'instock' else "Currently out of stock.")
+    if product.get('permalink'): parts.append(product['permalink'])
+    return " ".join(parts)
+
+
+def _sku_fuzzy_response(products: List[dict], candidate: str, is_fa: bool) -> str:
+    names = [f"{p['name']} ({p['sku']})" for p in products[:3]]
+    if is_fa:
+        return (
+            f"دقیقاً کد «{candidate}» را در فهرست نداریم، اما این موارد ممکن است مدنظرتان باشد: "
+            + "، ".join(names)
+            + ". (توجه: این یک تطبیق دقیق نیست، لطفاً کد را با همکاران ما تأیید کنید.)"
+        )
+    return (
+        f"We don't have an exact match for \"{candidate}\", but these might be what you're looking for: "
+        + ", ".join(names)
+        + ". (Note: this is not an exact match — please confirm the part number with our team.)"
+    )
+
+
+def _try_sku_shortcut(db: Session, chatbot_id: str, conversation_id: Optional[str], query: str, start: float) -> Optional[dict]:
+    """Returns a fully-formed run_rag_pipeline()-shaped result dict when the
+    query contains a part-number-like token AND the catalog has an exact or
+    fuzzy match for it — the caller returns/yields this directly, skipping
+    embedding + hybrid_retrieve + the LLM call entirely (cheaper and more
+    reliable than asking an LLM to reason about an opaque alphanumeric
+    string). Returns None when there's nothing to short-circuit on — either
+    no part-number-like token at all, or one was found but the catalog has
+    truly nothing close (that case still gets logged, then falls through to
+    normal retrieval, since a fuzzy/none SKU miss doesn't mean the question
+    itself is unanswerable by the normal pipeline)."""
+    result = _lookup_by_sku(db, chatbot_id, query)
+    if result is None:
+        return None
+
+    _log_event(db, conversation_id, chatbot_id, "sku_lookup", {
+        "query": query, "candidate": result["candidate"], "match_type": result["match_type"],
+    })
+
+    if result["match_type"] == "none":
+        return None
+
+    is_fa_question = _looks_persian(query)
+    if result["match_type"] == "exact":
+        product = result["product"]
+        answer = _sku_exact_response(product, is_fa_question)
+        is_unanswered = False
+        sources = [{"title": product["name"], "url": product["permalink"], "type": "product"}] if product.get("permalink") else []
+    else:
+        products = result["products"]
+        answer = _sku_fuzzy_response(products, result["candidate"], is_fa_question)
+        # An explicit "not exact" hedge is still a real gap for the demand-
+        # gap dashboard and lead-capture (if enabled) to pick up on — the
+        # bot didn't confidently answer what was actually asked.
+        is_unanswered = True
+        sources = [{"title": p["name"], "url": p["permalink"], "type": "product"} for p in products[:3] if p.get("permalink")]
+
+    latency_ms = int((time.time() - start) * 1000)
+    _log_event(db, conversation_id, chatbot_id, "response", {
+        "model": "sku-lookup", "prompt_tokens": 0, "completion_tokens": 0, "cost_toman": 0, "citations": sources,
+    }, latency_ms=latency_ms)
+    if is_unanswered:
+        _log_event(db, conversation_id, chatbot_id, "unanswered", {
+            "query": query, "best_score": None, "reason": "sku_fuzzy_only",
+        })
+
+    return {
+        "response": answer, "chunk_ids": [], "scores": [], "sources": sources,
+        "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost_toman": 0,
+        "model": "sku-lookup", "latency_ms": latency_ms,
+        "is_fallback": is_unanswered, "is_unanswered": is_unanswered,
+        "finish_reason": f"sku_{result['match_type']}",
+    }
 
 
 def retrieve_chunks(db: Session, chatbot_id: str, query_embedding: List[float], top_k: int = 8, threshold: float = 0.60) -> List[dict]:
@@ -654,6 +831,12 @@ async def run_rag_pipeline_stream(
     """
     start = time.time()
 
+    sku_result = _try_sku_shortcut(db, chatbot_id, conversation_id, query, start)
+    if sku_result is not None:
+        yield ("delta", sku_result["response"])
+        yield ("done", sku_result)
+        return
+
     try:
         query_embedding = _embed_query(query)
     except Exception as e:
@@ -785,6 +968,10 @@ async def run_rag_pipeline(
 ) -> dict:
 
     start = time.time()
+
+    sku_result = _try_sku_shortcut(db, chatbot_id, conversation_id, query, start)
+    if sku_result is not None:
+        return sku_result
 
     try:
         query_embedding = _embed_query(query)

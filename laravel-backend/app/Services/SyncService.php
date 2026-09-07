@@ -3,6 +3,7 @@ namespace App\Services;
 
 use App\Models\Tenant\{Document, SyncJob, Product, Faq, Chunk};
 use App\Jobs\EmbedDocumentJob;
+use App\Support\SkuNormalizer;
 
 class SyncService {
 
@@ -42,7 +43,7 @@ class SyncService {
                 ]);
                 Product::updateOrCreate(
                     ['chatbot_id'=>$chatbotId,'woo_product_id'=>$p['id']],
-                    ['name'=>$p['name'],'sku'=>$p['sku']??null,'type'=>$p['type']??'simple','status'=>$p['status']??'publish','description'=>strip_tags($p['description']??''),'price'=>$p['price']??null,'currency'=>$p['currency']??'USD','stock_status'=>$p['stock_status']??'instock','permalink'=>$p['permalink']??null,'featured_image'=>$p['featured_image']??null,'attributes'=>$p['attributes']??[],'tags'=>$p['tags']??[],'embedding_status'=>'pending','synced_at'=>now()]
+                    ['name'=>$p['name'],'sku'=>$p['sku']??null,'sku_normalized'=>SkuNormalizer::normalize($p['sku']??null),'type'=>$p['type']??'simple','status'=>$p['status']??'publish','description'=>strip_tags($p['description']??''),'price'=>$p['price']??null,'currency'=>$p['currency']??'USD','stock_status'=>$p['stock_status']??'instock','permalink'=>$p['permalink']??null,'featured_image'=>$p['featured_image']??null,'attributes'=>$p['attributes']??[],'tags'=>$p['tags']??[],'embedding_status'=>'pending','synced_at'=>now()]
                 );
                 if (in_array($outcome, ['new','updated'], true)) {
                     EmbedDocumentJob::dispatch($doc->id, $chatbotId, $schema);

@@ -242,6 +242,18 @@ class TenantService
                 END \$\$;
             ");
         } catch (\Throwable $e) {}
+        // Part-number/SKU lookup (App\Support\SkuNormalizer applies the
+        // identical rule at sync time; rag_service.py's SKU-detection path
+        // applies it to whatever token it pulls from the question) — a
+        // vector embedding of an alphanumeric string like "LM358N" carries
+        // almost no useful signal, so an exact/near-exact match on this
+        // column runs *before* falling back to hybrid retrieval.
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.products ADD COLUMN IF NOT EXISTS sku_normalized VARCHAR(255)");
+        } catch (\Throwable $e) {}
+        try {
+            DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_products_sku_normalized ON {$schemaName}.products(chatbot_id, sku_normalized)");
+        } catch (\Throwable $e) {}
         // Backfill: the ADD COLUMN above leaves every pre-existing chunk row
         // at content_tsv=NULL (never matches any full-text query), so hybrid
         // search would silently degrade to vector-only for already-embedded
@@ -464,6 +476,12 @@ class TenantService
                 name VARCHAR(500) NOT NULL,
                 slug VARCHAR(500),
                 sku VARCHAR(255),
+                -- App\Support\SkuNormalizer applies the same rule
+                -- (uppercase, strip whitespace/hyphens) that
+                -- rag_service.py's SKU-detection path applies to the token
+                -- it pulls from an incoming question — an exact/near-exact
+                -- match here runs before hybrid retrieval even starts.
+                sku_normalized VARCHAR(255),
                 type VARCHAR(30) DEFAULT 'simple',
                 status VARCHAR(20) DEFAULT 'publish',
                 description TEXT,
@@ -493,6 +511,7 @@ class TenantService
                 UNIQUE(chatbot_id, woo_product_id)
             )
         ");
+        DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_products_sku_normalized ON {$s}.products(chatbot_id, sku_normalized)");
 
         DB::statement("
             CREATE TABLE IF NOT EXISTS {$s}.faqs (
