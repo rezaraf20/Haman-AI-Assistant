@@ -3,7 +3,7 @@ namespace App\Filament\Customer\Pages;
 
 use Filament\Pages\Page;
 use Filament\Notifications\Notification;
-use Illuminate\Support\Facades\{DB, Cache};
+use Illuminate\Support\Facades\DB;
 
 /**
  * "If we leave someone unanswered in live chat, we lose access to them" —
@@ -26,20 +26,14 @@ class Leads extends Page {
     public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_chatbots'); }
     public function getTitle(): string { return __('leads.nav'); }
 
-    public static function getNavigationBadge(): ?string {
-        $tenant = auth()->user()?->tenant;
-        if (!$tenant) return null;
-        // Filament renders the badge more than once per request (desktop +
-        // mobile nav) — same reasoning/pattern as Tickets::getNavigationBadge().
-        $count = Cache::remember("nav-badge:leads-new:{$tenant->id}", 60, function () use ($tenant) {
-            DB::statement("SET search_path TO {$tenant->schema_name}, public");
-            $c = DB::table('leads')->where('status', 'new')->count();
-            DB::statement('SET search_path TO public');
-            return $c;
-        });
-        return $count > 0 ? (string) $count : null;
-    }
-    public static function getNavigationBadgeColor(): ?string { return 'danger'; }
+    // Deliberately no getNavigationBadge() here, unlike Tickets/TenantResource
+    // — Filament renders the nav on every customer-portal page, not just this
+    // one, so a badge here would mean 3 extra queries (schema switch + count
+    // + reset) on every single page load platform-wide just to show a
+    // number nobody explicitly asked for. The dashboard's own "new leads
+    // this week" card (CustomerStatsOverview) already surfaces this without
+    // that per-page cost, reusing CustomerDashboardData's single shared
+    // schema switch instead of a standalone one.
 
     public function getLeads(): array {
         $tenant = auth()->user()->tenant;
@@ -62,7 +56,6 @@ class Leads extends Page {
         DB::statement("SET search_path TO {$tenant->schema_name}, public");
         DB::table('leads')->where('id', $leadId)->update(['status' => 'contacted']);
         DB::statement('SET search_path TO public');
-        Cache::forget("nav-badge:leads-new:{$tenant->id}");
         Notification::make()->title(__('leads.marked_contacted'))->success()->send();
     }
 
@@ -71,7 +64,6 @@ class Leads extends Page {
         DB::statement("SET search_path TO {$tenant->schema_name}, public");
         DB::table('leads')->where('id', $leadId)->update(['status' => 'closed']);
         DB::statement('SET search_path TO public');
-        Cache::forget("nav-badge:leads-new:{$tenant->id}");
         Notification::make()->title(__('leads.marked_closed'))->success()->send();
     }
 
