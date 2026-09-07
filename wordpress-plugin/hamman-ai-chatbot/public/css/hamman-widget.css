@@ -336,7 +336,14 @@
 
 /* ── Mobile: full-screen sheet below 480px ─────────────────────────── */
 @media (max-width: 480px) {
-    :host {
+    /* Scoped to .hm-mobile-open (set on the host itself by openWidget()/
+     * closeWidget() in hamman-widget.js) — NOT a bare :host. An
+     * unconditional :host here would size the shadow host to the full
+     * viewport at all times below 480px, and since a plain box (no
+     * pointer-events:none) captures clicks across its whole bounding
+     * rect regardless of visible content, that silently made the entire
+     * page unclickable on mobile even while the widget was closed. */
+    :host(.hm-mobile-open) {
         bottom: 0;
         inset-inline-end: 0;
         inset-inline-start: 0;

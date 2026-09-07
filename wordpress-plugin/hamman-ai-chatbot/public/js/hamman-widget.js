@@ -476,6 +476,13 @@
         box.classList.add('hm-open');
         box.setAttribute('aria-hidden', 'false');
         w.classList.add('hm-mobile-open');
+        // Also on the shadow *host* itself, not just the inner #hm-w — the
+        // mobile full-viewport :host(.hm-mobile-open) rule in
+        // hamman-widget.css keys off this class directly on the host so the
+        // full-screen override only applies while actually open. Without
+        // it, the invisible host div would cover (and click-block) the
+        // entire page any time the viewport is narrow, even closed.
+        hostEl.classList.add('hm-mobile-open');
         openBtn.setAttribute('aria-expanded', 'true');
         unreadDot.classList.remove('hm-visible');
         lockBodyScroll(true);
@@ -489,6 +496,7 @@
         box.classList.remove('hm-open');
         box.setAttribute('aria-hidden', 'true');
         w.classList.remove('hm-mobile-open');
+        hostEl.classList.remove('hm-mobile-open');
         openBtn.setAttribute('aria-expanded', 'false');
         lockBodyScroll(false);
         box.style.height = '';
