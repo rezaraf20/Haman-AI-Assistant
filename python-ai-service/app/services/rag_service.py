@@ -41,7 +41,31 @@ GROUNDING_RULES = (
     "(page 4)'), this is a technical document — for questions answered from it, name "
     "the source file and page number in your answer (e.g. 'according to Datasheet.pdf, "
     "page 4, ...'). For this kind of question, citing exactly where the answer came "
-    "from matters as much as the answer itself."
+    "from matters as much as the answer itself.\n\n"
+    "Never invent specific capabilities, integrations, or supported third-party "
+    "platforms/tools/software (e.g. claiming compatibility with a named e-commerce "
+    "platform, CRM, or app) unless that exact name appears in the context — a generic "
+    "statement like 'works with online stores' does not license naming specific "
+    "platforms yourself. This includes never naming a specific AI model or vendor "
+    "(e.g. GPT-4, Claude, Gemini) as powering a product being described, and never "
+    "naming a specific e-commerce/CMS platform (e.g. Shopify, Magento, WooCommerce, "
+    "WordPress) as something a product integrates with — unless that literal name is "
+    "written in the context. If asked what a product integrates with or what "
+    "technology it uses and the context doesn't say, answer honestly that this isn't "
+    "listed rather than naming plausible-sounding real products. Specifically: when "
+    "asked what platforms/software something 'integrates with', 'works with', 'runs "
+    "on', or 'connects to' and the context does not explicitly name specific products "
+    "for that, do not produce a list of platform/software names at all — not even "
+    "well-known ones offered as plausible examples. State only what the context "
+    "actually says, then say the specific integration list isn't available here and "
+    "suggest contacting the team directly for it. The same applies to "
+    "every statistic, percentage, or "
+    "performance claim ('increases conversions by X%', 'X times more sales', 'reduces "
+    "support tickets by X%'): state a number only if it appears verbatim in the "
+    "context for the exact thing being asked about — never round, combine, rephrase, "
+    "or reuse a real number from a different topic in the context to answer a "
+    "question it wasn't actually about, and never state a number you're not certain "
+    "is in the context at all."
 )
 DEFAULT_SYSTEM = GROUNDING_RULES
 
@@ -72,8 +96,51 @@ GROUNDING_RULES_FA = (
     "اگر یک منبع شماره صفحه داشته باشد (مثلاً «[Source 2] Datasheet.pdf (page 4)»)، یعنی یک سند "
     "فنی است — برای سوالاتی که از آن پاسخ داده می‌شود، نام فایل و شماره صفحه را در پاسخ خودت بیاور "
     "(مثلاً «طبق Datasheet.pdf، صفحه ۴، ...»). برای این نوع سوال، ارجاع دقیق به منبع به‌اندازه‌ی "
-    "خود پاسخ اهمیت دارد."
+    "خود پاسخ اهمیت دارد.\n\n"
+    "هرگز قابلیت، یکپارچه‌سازی یا پلتفرم/نرم‌افزار شخص ثالثی (مثلاً ادعای سازگاری با یک پلتفرم "
+    "فروشگاهی، CRM یا اپلیکیشن خاص با نام) را از خودت نساز، مگر این‌که همان نام دقیقاً در زمینه آمده "
+    "باشد — جمله‌ی کلی‌ای مثل «با فروشگاه‌های آنلاین کار می‌کند» اجازه نمی‌دهد خودت اسم پلتفرم‌های "
+    "خاص را بسازی. این شامل نام بردن از یک مدل یا شرکت هوش مصنوعی خاص (مثلاً GPT-4، Claude، Gemini) "
+    "به‌عنوان موتور یک محصول، و نام بردن از یک پلتفرم فروشگاهی یا CMS خاص (مثلاً Shopify، Magento، "
+    "WooCommerce، وردپرس) به‌عنوان چیزی که محصول با آن یکپارچه می‌شود هم می‌شود — مگر این‌که همان نام "
+    "دقیقاً در زمینه نوشته شده باشد. اگر پرسیده شد یک محصول با چه چیزی یکپارچه می‌شود یا از چه فناوری‌ای "
+    "استفاده می‌کند و زمینه چیزی نگفته، صادقانه بگو این اطلاعات فهرست نشده، نه این‌که نام محصولات واقعی "
+    "و قابل‌قبول را از خودت بسازی. به‌طور مشخص: وقتی پرسیده شد یک چیز با چه پلتفرم/نرم‌افزارهایی «یکپارچه "
+    "می‌شود»، «کار می‌کند» یا «متصل می‌شود» و زمینه اسم مشخصی برای آن نیاورده، اصلاً هیچ فهرستی از اسم "
+    "پلتفرم/نرم‌افزار نساز — حتی اسم‌های شناخته‌شده به‌عنوان مثال احتمالی. فقط همان چیزی را بگو که در "
+    "زمینه واقعاً آمده، سپس بگو فهرست دقیق یکپارچه‌سازی‌ها اینجا موجود نیست و پیشنهاد بده مستقیم با تیم "
+    "تماس بگیرد. همین قانون برای هر آمار، درصد یا ادعای عملکردی («نرخ تبدیل را X درصد افزایش "
+    "می‌دهد»، «X برابر فروش بیشتر»، «تیکت‌های پشتیبانی را X درصد کاهش می‌دهد») هم صدق می‌کند: فقط "
+    "عددی را بگو که دقیقاً همان‌طور در زمینه، برای همان موضوعی که سوال شده، آمده — هرگز عددی از یک "
+    "موضوع دیگر در زمینه را گرد نکن، ترکیب نکن، بازنویسی نکن یا برای پاسخ به سوالی که واقعاً درباره‌ی "
+    "آن نبوده استفاده نکن، و هرگز عددی را که مطمئن نیستی اصلاً در زمینه هست بیان نکن."
 )
+
+# Used only when: (a) the chatbot has no custom fallback_response configured
+# (chatbot.fallback_response is Laravel's first choice — see ChatService::
+# sendMessage()'s own catch blocks), AND (b) every LLM provider call failed
+# (embedding failure, or every active llm_provider_profiles entry exhausted
+# — see _chat_completion()/_chat_completion_stream()). Previously a raw
+# hardcoded English string ("Sorry, I could not generate a response.") was
+# returned here even for a Persian conversation — since this whole response
+# still comes back as a normal 200 from Python, Laravel's own bilingual
+# ChatService catch-block fallback (WidgetDefaults) never even fires; this
+# was the only place that raw English could actually reach a real visitor.
+# Chosen by the query's own script, matching every other bilingual choice in
+# this file. Actively invites leaving contact info — the one broadly useful
+# thing to ask for when nothing else could be done for this message.
+DEFAULT_ERROR_RESPONSE_EN = (
+    "Sorry, we couldn't process your message right now. Please leave your "
+    "phone number or email and we'll get back to you as soon as possible."
+)
+DEFAULT_ERROR_RESPONSE_FA = (
+    "متأسفیم، در حال حاضر امکان پردازش پیام شما نیست. لطفاً شماره تماس یا ایمیل خود را بگذارید "
+    "تا در اسرع وقت با شما تماس بگیریم."
+)
+
+
+def _default_error_response(query: str) -> str:
+    return DEFAULT_ERROR_RESPONSE_FA if _looks_persian(query) else DEFAULT_ERROR_RESPONSE_EN
 
 
 def _looks_persian(text_val: str) -> bool:
@@ -105,12 +172,17 @@ def _grounding_reminder(is_fa: bool) -> str:
         return (
             "یادآوری: فقط بر اساس زمینه‌ی بالا پاسخ بده. هیچ نام شرکتی (چه رقیب، چه هر نام دیگری) "
             "را که در بالا صراحتاً به‌عنوان نام این کسب‌وکار داده نشده، نساز یا به‌کار نبر — اگر نام "
-            "دقیق را نمی‌دانی، صادقانه بگو نمی‌دانی."
+            "دقیق را نمی‌دانی، صادقانه بگو نمی‌دانی. همچنین هیچ نام پلتفرم/نرم‌افزار شخص ثالث (مثل "
+            "Shopify، Magento، GPT-4، Claude) و هیچ عدد یا درصدی که دقیقاً در زمینه، برای همین سوال، "
+            "نیامده نساز — اگر زمینه چیزی نگفته، بگو این اطلاعات فهرست نشده."
         )
     return (
         "Reminder: answer using only the context above. Never invent or state any "
         "company name (a competitor's or anything else) that wasn't explicitly given "
-        "above as this business's own name — if you don't know its exact name, say so."
+        "above as this business's own name — if you don't know its exact name, say so. "
+        "Also never invent a third-party platform/software name (e.g. Shopify, Magento, "
+        "GPT-4, Claude) or any number/percentage that doesn't appear verbatim in the "
+        "context for this exact question — if the context doesn't say, say it isn't listed."
     )
 
 
@@ -850,7 +922,7 @@ async def run_rag_pipeline_stream(
         query_embedding = _embed_query(query)
     except Exception as e:
         logger.error(f"Query embedding error: {e}")
-        text_out = fallback_resp or "Sorry, I cannot process your request right now."
+        text_out = fallback_resp or _default_error_response(query)
         yield ("delta", text_out)
         yield ("done", {
             "response": text_out, "chunk_ids": [], "scores": [], "sources": [],
@@ -943,7 +1015,7 @@ async def run_rag_pipeline_stream(
         logger.error(f"Streaming LLM error (all providers failed or died mid-stream): {e}")
         stream_failed = True
         if not full_text:
-            full_text = fallback_resp or "Sorry, I could not generate a response."
+            full_text = fallback_resp or _default_error_response(query)
             yield ("delta", full_text)
 
     total_latency_ms = int((time.time() - start) * 1000)
@@ -993,7 +1065,7 @@ async def run_rag_pipeline(
     except Exception as e:
         logger.error(f"Query embedding error: {e}")
         return {
-            "response": fallback_resp or "Sorry, I cannot process your request right now.",
+            "response": fallback_resp or _default_error_response(query),
             "chunk_ids": [], "scores": [], "sources": [],
             "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost_toman": 0,
             "model": "n/a",
@@ -1076,7 +1148,7 @@ async def run_rag_pipeline(
         cost_toman += chat_cost_toman
     except Exception as e:
         logger.error(f"LLM error (all providers failed): {e}")
-        answer = fallback_resp or "Sorry, I could not generate a response."
+        answer = fallback_resp or _default_error_response(query)
         is_fallback = True
         llm_call_failed = True
 

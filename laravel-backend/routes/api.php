@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\AnalyticsController;
 use App\Http\Controllers\Api\V1\TenantController;
 use App\Http\Controllers\Api\V1\FaqController;
 use App\Http\Controllers\Api\V1\DocumentController;
+use App\Http\Controllers\Api\V1\HealthController;
 
 Route::prefix('v1')->group(function () {
 
@@ -16,6 +17,11 @@ Route::prefix('v1')->group(function () {
         Route::post('register', [AuthController::class, 'register']);
         Route::post('login',    [AuthController::class, 'login']);
     });
+
+    // Public, unauthenticated — the WordPress plugin's settings page
+    // polls this (before necessarily having a valid API key entered) to
+    // show an "update available" notice.
+    Route::get('wp-plugin/latest-version', [HealthController::class, 'wpPluginVersion']);
 
     // ── Chat Widget (Public, but domain- and rate-limited) ─
     Route::prefix('chat')->group(function () {
@@ -43,6 +49,8 @@ Route::prefix('v1')->group(function () {
         Route::get('chatbots',       [ChatbotController::class, 'index']);
         Route::get('chatbots/{id}',  [ChatbotController::class, 'show']);
         Route::put('chatbots/{id}/widget-settings', [ChatbotController::class, 'updateWidgetSettings']);
+        Route::get('tenant/webhook-secret', [TenantController::class, 'webhookSecret']);
+        Route::post('tenant/webhook-secret/regenerate', [TenantController::class, 'regenerateWebhookSecret']);
     });
 
     // ── Dashboard (Sanctum) ────────────────────────────

@@ -82,6 +82,8 @@ class Hamman_Product_Sync {
      * as media must only be synced once.
      */
     private function product_pdf_attachments( \WC_Product $p ): array {
+        if ( get_option( 'hamman_sync_pdfs', '1' ) !== '1' ) return [];
+
         $found = []; // url => name
 
         foreach ( get_attached_media( 'application/pdf', $p->get_id() ) as $attachment ) {

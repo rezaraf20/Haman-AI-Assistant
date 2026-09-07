@@ -1,126 +1,189 @@
 <?php if (!defined('ABSPATH')) exit;
-$qq = get_option('hamman_quick_questions', []);
-if (!is_array($qq)) $qq = [];
+$log = get_option(Hamman_Admin::LOG_OPTION, []);
+if (!is_array($log)) $log = [];
 ?>
-<div class="wrap">
+<div class="wrap hm-settings-wrap">
 <h1>🤖 Hamman AI Chatbot — شرکت هامان فناوران پیشرو</h1>
-<?php if(isset($_GET['saved'])): ?><div class="notice notice-success"><p>✅ تنظیمات ذخیره شد.</p></div><?php endif; ?>
-<?php if(isset($_GET['sync_warning'])): ?><div class="notice notice-warning"><p>⚠️ تنظیمات محلی ذخیره شد اما ارسال به سرور هامان با خطا مواجه شد: <?php echo esc_html(get_transient('hamman_settings_push_error')); ?></p></div><?php endif; ?>
-<?php if(isset($_GET['synced'])): ?><div class="notice notice-success"><p>✅ Sync completed.</p></div><?php endif; ?>
+<p id="hm-version-check-result" class="hm-version-check"></p>
+<?php if(isset($_GET['saved'])): ?><div class="notice notice-success"><p>✅ تنظیمات ذخیره شد. / Settings saved.</p></div><?php endif; ?>
+<?php if(isset($_GET['synced'])): ?><div class="notice notice-success"><p>✅ همگام‌سازی انجام شد. / Sync completed.</p></div><?php endif; ?>
+
+<h2 class="nav-tab-wrapper">
+    <a href="#" class="nav-tab hm-tab-link" data-tab="connection">اتصال <span class="hm-tab-en">Connection</span></a>
+    <a href="#" class="nav-tab hm-tab-link" data-tab="sync">همگام‌سازی <span class="hm-tab-en">Sync</span></a>
+    <a href="#" class="nav-tab hm-tab-link" data-tab="appearance">ظاهر و متن‌ها <span class="hm-tab-en">Appearance &amp; Texts</span></a>
+    <a href="#" class="nav-tab hm-tab-link" data-tab="advanced">پیشرفته <span class="hm-tab-en">Advanced</span></a>
+</h2>
 
 <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
 <input type="hidden" name="action" value="hamman_save_settings">
+<input type="hidden" name="hamman_active_tab" id="hamman_active_tab_input" value="connection">
 <?php wp_nonce_field('hamman_save_settings'); ?>
 
-<h2>اتصال به هامان</h2>
-<table class="form-table">
-<tr><th>API Key</th><td>
-    <input type="password" name="hamman_api_key" value="<?php echo esc_attr(get_option('hamman_api_key','')); ?>" class="regular-text">
-    <p class="description">From Hamman dashboard (starts with hfp_)</p>
-</td></tr>
-<tr><th>Chatbot ID</th><td>
-    <input type="text" name="hamman_chatbot_id" value="<?php echo esc_attr(get_option('hamman_chatbot_id','')); ?>" class="regular-text" placeholder="UUID">
-</td></tr>
-<tr><th>Webhook Secret</th><td>
-    <input type="password" name="hamman_webhook_secret" value="<?php echo esc_attr(get_option('hamman_webhook_secret','')); ?>" class="regular-text">
-</td></tr>
-<tr><th>API URL</th><td>
-    <input type="url" name="hamman_api_url" value="<?php echo esc_attr(get_option('hamman_api_url',HAMMAN_API_BASE)); ?>" class="regular-text">
-</td></tr>
-<tr><th>Enable Widget</th><td>
-    <label><input type="checkbox" name="hamman_enabled" value="1" <?php checked(get_option('hamman_enabled','1'),'1'); ?>> Show chatbot on frontend</label>
-</td></tr>
-</table>
+<div class="hm-tab-panel" data-tab-panel="connection">
+    <p class="description hm-tab-desc">
+        کلید API و شناسه چت‌بات را از داشبورد هامان دریافت و اینجا وارد کنید، سپس اتصال را تست کنید.<br>
+        <em>Enter the API key and chatbot ID from your Hamman dashboard, then test the connection.</em>
+    </p>
+    <table class="form-table">
+    <tr><th>API Key</th><td>
+        <input type="password" name="hamman_api_key" value="<?php echo esc_attr(get_option('hamman_api_key','')); ?>" class="regular-text">
+        <p class="description">از داشبورد هامان (با hfp_ شروع می‌شود) / From Hamman dashboard (starts with hfp_)</p>
+    </td></tr>
+    <tr><th>Chatbot ID</th><td>
+        <input type="text" name="hamman_chatbot_id" value="<?php echo esc_attr(get_option('hamman_chatbot_id','')); ?>" class="regular-text" placeholder="UUID">
+    </td></tr>
+    <tr><th>API URL</th><td>
+        <input type="url" name="hamman_api_url" value="<?php echo esc_attr(get_option('hamman_api_url',HAMMAN_API_BASE)); ?>" class="regular-text">
+    </td></tr>
+    <tr><th>فعال‌سازی ویجت / Enable Widget</th><td>
+        <label><input type="checkbox" name="hamman_enabled" value="1" <?php checked(get_option('hamman_enabled','1'),'1'); ?>> نمایش چت‌بات در سایت / Show chatbot on frontend</label>
+    </td></tr>
+    <tr><th>تست اتصال / Test Connection</th><td>
+        <button type="button" id="hm-test-connection" class="button">تست اتصال / Test Connection</button>
+        <span id="hm-test-connection-result"></span>
+        <p class="description">با استفاده از کلید و آدرسی که در حال حاضر ذخیره شده — اگر همین الان تغییرشان دادید، اول تنظیمات را ذخیره کنید. / Uses the currently *saved* key/URL — save first if you just changed them. یک تست موفق نام واقعی چت‌بات متصل‌شده را نشان می‌دهد. / A successful test shows the real name of the connected chatbot.</p>
+    </td></tr>
+    <tr><th>Webhook Secret</th><td>
+        <input type="password" id="hm-webhook-secret-field" value="••••••••••••" class="regular-text" readonly>
+        <button type="button" id="hm-webhook-secret-show" class="button">نمایش / Show</button>
+        <button type="button" id="hm-webhook-secret-regenerate" class="button">تولید مجدد / Regenerate</button>
+        <span id="hm-webhook-secret-result"></span>
+        <p class="description">این مقدار روی سرور نگهداری می‌شود، نه محلی — همیشه واقعی است. / This is stored on the server, not locally — always the real, current value.</p>
+    </td></tr>
+    </table>
+</div>
 
-<hr>
-<h2>سیستم پاسخ‌دهی خودکار هوش مصنوعی</h2>
-<table class="form-table">
-<tr><th>فعال کردن پاسخ‌دهی خودکار</th><td>
-    <label><input type="checkbox" name="hamman_auto_reply_enabled" value="1" <?php checked(get_option('hamman_auto_reply_enabled','1'),'1'); ?>> هوش مصنوعی به‌صورت خودکار به پیام‌های کاربران پاسخ بدهد</label>
-</td></tr>
-<tr><th>نام هوش مصنوعی</th><td>
-    <input type="text" name="hamman_ai_name" value="<?php echo esc_attr(get_option('hamman_ai_name','AI BOT')); ?>" class="regular-text" placeholder="AI BOT">
-    <p class="description">با چه نامی گفتگو انجام شود؟ برای مثال: دستیار سایت (پیش‌فرض: AI BOT)</p>
-</td></tr>
-<tr><th>عنوان ابتدای گفتگو</th><td>
-    <input type="text" name="hamman_chat_title" value="<?php echo esc_attr(get_option('hamman_chat_title','پشتیبانی آنلاین')); ?>" class="regular-text" placeholder="پشتیبانی آنلاین">
-    <p class="description">عنوانی که بالای صفحه گفتگو نمایش داده می‌شود</p>
-</td></tr>
-<tr><th>متن پیش‌فرض در صفحه گفتگو</th><td>
-    <textarea name="hamman_welcome_text" rows="3" class="large-text" placeholder="سلام! چطور می‌توانم کمکتان کنم؟"><?php echo esc_textarea(get_option('hamman_welcome_text','')); ?></textarea>
-    <p class="description">متنی که هنگام باز شدن گفتگو، قبل از هر پیامی نمایش داده می‌شود</p>
-</td></tr>
-<tr><th>متن اینپوت ورودی</th><td>
-    <input type="text" name="hamman_input_placeholder" value="<?php echo esc_attr(get_option('hamman_input_placeholder','پیام خود را بنویسید...')); ?>" class="regular-text" placeholder="پیام خود را بنویسید...">
-</td></tr>
-<tr><th>دستور العمل و قوانین سیستم (system instruction)</th><td>
-    <textarea name="hamman_system_instruction" rows="5" class="large-text" placeholder="مثلاً: لحن دوستانه و مودبانه داشته باش..."><?php echo esc_textarea(get_option('hamman_system_instruction','')); ?></textarea>
-    <p class="description">این قوانین همراه با اطلاعات سایت برای هوش مصنوعی ارسال می‌شود</p>
-</td></tr>
-</table>
+<div class="hm-tab-panel" data-tab-panel="sync">
+    <p class="description hm-tab-desc">
+        مشخص کنید چه محتوایی همگام‌سازی شود، و همگام‌سازی را به‌صورت دستی اجرا کنید.<br>
+        <em>Choose what content gets synced, and trigger a manual sync.</em>
+    </p>
+    <table class="form-table">
+    <tr><th>چه چیزی همگام‌سازی شود / What to sync</th><td>
+        <label><input type="checkbox" name="hamman_sync_products" value="1" <?php checked(get_option('hamman_sync_products','1'),'1'); ?>> محصولات (WooCommerce) / Products</label><br>
+        <label><input type="checkbox" name="hamman_sync_pages" value="1" <?php checked(get_option('hamman_sync_pages','1'),'1'); ?>> صفحات و نوشته‌ها / Pages &amp; posts</label><br>
+        <label><input type="checkbox" name="hamman_sync_pdfs" value="1" <?php checked(get_option('hamman_sync_pdfs','1'),'1'); ?>> فایل‌های PDF ضمیمه‌ی محصول (دیتاشیت) / PDF attachments (datasheets)</label>
+    </td></tr>
+    </table>
+</div>
 
-<hr>
-<h2>محدودیت‌های ارسال پیام</h2>
-<p class="description">این محدودیت‌ها بر روی IP کاربر ثبت می‌شود.</p>
-<table class="form-table">
-<tr><th>چند پیام برای هر IP</th><td>
-    <input type="number" min="1" name="hamman_rate_limit_max_messages" value="<?php echo esc_attr(get_option('hamman_rate_limit_max_messages','50')); ?>" class="small-text"> پیام
-</td></tr>
-<tr><th>مدت زمان بلاک برای هر IP</th><td>
-    <input type="number" min="1" name="hamman_rate_limit_block_minutes" value="<?php echo esc_attr(get_option('hamman_rate_limit_block_minutes','15')); ?>" class="small-text"> دقیقه
-    <p class="description">بعد از رسیدن به سقف پیام مجاز، کاربر تا این مدت زمان بلاک می‌شود</p>
-</td></tr>
-</table>
+<div class="hm-tab-panel" data-tab-panel="advanced">
+    <p class="description hm-tab-desc">
+        محدودیت پیام، پاک کردن کش، لاگ، و حذف داده هنگام حذف افزونه.<br>
+        <em>Rate limiting, cache clearing, logs, and uninstall data-deletion setting.</em>
+    </p>
 
-<hr>
-<h2>سوالات آماده</h2>
-<p class="description">سوالاتی که به کاربر پیشنهاد می‌شود؛ با کلیک روی هرکدام، همان جواب از پیش نوشته‌شده نمایش داده می‌شود (بدون تماس با هوش مصنوعی).</p>
-<table class="widefat" id="hm-qq-table" style="max-width:900px">
-<thead><tr><th style="width:35%">سوال</th><th>جواب</th><th style="width:60px"></th></tr></thead>
-<tbody>
-<?php if (empty($qq)): $qq = [['question'=>'','answer'=>'']]; endif; ?>
-<?php foreach ($qq as $row): ?>
-<tr>
-    <td><input type="text" name="hamman_qq_question[]" value="<?php echo esc_attr($row['question'] ?? ''); ?>" class="regular-text" style="width:100%"></td>
-    <td><input type="text" name="hamman_qq_answer[]" value="<?php echo esc_attr($row['answer'] ?? ''); ?>" class="regular-text" style="width:100%"></td>
-    <td><button type="button" class="button hm-qq-remove">حذف</button></td>
-</tr>
-<?php endforeach; ?>
-</tbody>
-</table>
-<p><button type="button" id="hm-qq-add" class="button">+ افزودن سوال</button></p>
-<script>
-(function(){
-    document.getElementById('hm-qq-add').addEventListener('click', function(){
-        var tbody = document.querySelector('#hm-qq-table tbody');
-        var tr = document.createElement('tr');
-        tr.innerHTML = '<td><input type="text" name="hamman_qq_question[]" class="regular-text" style="width:100%"></td>'
-                     + '<td><input type="text" name="hamman_qq_answer[]" class="regular-text" style="width:100%"></td>'
-                     + '<td><button type="button" class="button hm-qq-remove">حذف</button></td>';
-        tbody.appendChild(tr);
-    });
-    document.querySelector('#hm-qq-table').addEventListener('click', function(e){
-        if (e.target.classList.contains('hm-qq-remove')) {
-            var rows = document.querySelectorAll('#hm-qq-table tbody tr');
-            if (rows.length > 1) e.target.closest('tr').remove();
-            else e.target.closest('tr').querySelectorAll('input').forEach(function(i){ i.value=''; });
-        }
-    });
-})();
-</script>
+    <h3>محدودیت‌های ارسال پیام / Rate Limits</h3>
+    <p class="description">این محدودیت‌ها محلی‌اند (روی همین سایت) و بر روی IP کاربر ثبت می‌شوند. / These are local to this site and apply per visitor IP.</p>
+    <table class="form-table">
+    <tr><th>چند پیام برای هر IP</th><td>
+        <input type="number" min="1" name="hamman_rate_limit_max_messages" value="<?php echo esc_attr(get_option('hamman_rate_limit_max_messages','50')); ?>" class="small-text"> پیام
+    </td></tr>
+    <tr><th>مدت زمان بلاک برای هر IP</th><td>
+        <input type="number" min="1" name="hamman_rate_limit_block_minutes" value="<?php echo esc_attr(get_option('hamman_rate_limit_block_minutes','15')); ?>" class="small-text"> دقیقه
+    </td></tr>
+    <tr><th>حذف اطلاعات هنگام حذف افزونه / Delete Data on Uninstall</th><td>
+        <label><input type="checkbox" name="hamman_delete_data_on_uninstall" value="1" <?php checked(get_option('hamman_delete_data_on_uninstall','0'),'1'); ?>>
+            همه‌ی تنظیمات محلی این افزونه را هنگام حذف پاک کن / Delete all of this plugin's local settings when it's uninstalled
+        </label>
+        <p class="description">فقط تنظیمات وردپرس را پاک می‌کند؛ داده‌های سمت سرور هامان تحت تأثیر قرار نمی‌گیرند. / Only clears WordPress-side settings — data on the Hamman server is unaffected.</p>
+    </td></tr>
+    </table>
 
-<?php submit_button('ذخیره تنظیمات'); ?>
+    <?php submit_button('ذخیره تنظیمات / Save Settings'); ?>
+</div>
 </form>
 
-<hr>
-<h2>Data Sync</h2>
-<p>Last sync: <?php echo get_option('hamman_last_full_sync') ? date('Y-m-d H:i',get_option('hamman_last_full_sync')) : 'Never'; ?></p>
-<form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
-<input type="hidden" name="action" value="hamman_manual_sync">
-<?php wp_nonce_field('hamman_manual_sync'); ?>
-<?php submit_button('Run Full Sync Now','secondary'); ?>
-</form>
-<?php $r = get_transient('hamman_sync_results'); if($r): ?>
-<div class="notice notice-info"><pre><?php echo esc_html(json_encode($r,JSON_PRETTY_PRINT)); ?></pre></div>
-<?php endif; ?>
+<div class="hm-tab-panel" data-tab-panel="sync">
+    <hr>
+    <h3>وضعیت همگام‌سازی / Sync Status</h3>
+    <p>آخرین همگام‌سازی کامل / Last full sync: <strong><?php echo get_option('hamman_last_full_sync') ? esc_html(date_i18n('Y-m-d H:i',get_option('hamman_last_full_sync'))) : 'هرگز / Never'; ?></strong></p>
+    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+    <input type="hidden" name="action" value="hamman_manual_sync">
+    <?php wp_nonce_field('hamman_manual_sync'); ?>
+    <?php submit_button('اجرای همگام‌سازی کامل / Run Full Sync Now','secondary'); ?>
+    </form>
+    <?php $r = get_transient('hamman_sync_results'); if($r): ?>
+        <table class="widefat" style="max-width:700px">
+        <thead><tr><th>نوع / Type</th><th>جدید / New</th><th>به‌روزشده / Updated</th><th>بدون تغییر / Skipped</th><th>حذف‌شده / Deleted</th><th>ناموفق / Failed</th></tr></thead>
+        <tbody>
+        <?php
+        $labels = ['products' => 'محصولات / Products', 'pages' => 'صفحات / Pages', 'faqs' => 'سوالات متداول / FAQs'];
+        foreach ($labels as $key => $label):
+            if (empty($r[$key])) continue;
+            $row = $r[$key];
+        ?>
+            <tr>
+                <td><?php echo esc_html($label); ?></td>
+                <td><?php echo esc_html($row['new'] ?? 0); ?></td>
+                <td><?php echo esc_html($row['updated'] ?? 0); ?></td>
+                <td><?php echo esc_html($row['skipped'] ?? 0); ?></td>
+                <td><?php echo esc_html($row['deleted'] ?? 0); ?></td>
+                <td><?php echo esc_html($row['failed'] ?? 0); ?></td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody>
+        </table>
+        <?php if (!empty($r['error'])): ?>
+            <div class="notice notice-error inline"><p><?php echo esc_html($r['error']); ?></p></div>
+        <?php endif; ?>
+    <?php endif; ?>
+</div>
+
+<div class="hm-tab-panel" data-tab-panel="appearance">
+    <p class="description hm-tab-desc">
+        این فیلدها فقط نمایشی هستند و از سرور خوانده می‌شوند — برای تغییر، از پنل مشتری هامان‌تک استفاده کنید. این تنظیمات آنجا نگهداری می‌شوند تا در همه‌ی سایت‌های شما یکسان بمانند.<br>
+        <em>These fields are read-only, fetched from the server — to edit them, use the HamanTech customer portal. They're kept there so they stay consistent across all your sites.</em>
+    </p>
+    <?php
+        // rtrim($url, '/api/v1') would be wrong here — rtrim's second
+        // argument is a character mask (strips any of /,a,p,i,v,1 from the
+        // end), not a literal suffix — hence the explicit regex.
+        $portal_base = preg_replace('#/api/v1/?$#', '', get_option('hamman_api_url', HAMMAN_API_BASE));
+        $portal_url = $portal_base . '/portal';
+    ?>
+    <p>
+        <a href="<?php echo esc_url($portal_url); ?>" target="_blank" rel="noopener" class="button button-primary">
+            ✏️ ویرایش در پنل هامان‌تک / Edit in the HamanTech portal
+        </a>
+    </p>
+    <div id="hm-widget-settings-display">در حال بارگذاری... / Loading...</div>
+
+    <hr>
+    <h3>انتقال تنظیمات محلی به سرور (یک‌بار) / Migrate Local Settings to Server (once)</h3>
+    <p class="description">
+        اگر قبلاً این مقادیر را در همین صفحه‌ی وردپرس تنظیم کرده بودید (نسخه‌های قدیمی‌تر افزونه)، با این دکمه یک‌بار آن‌ها را به سرور بفرستید تا در پنل هامان‌تک هم قابل مشاهده و ویرایش باشند.<br>
+        <em>If you'd previously set these values on this WordPress page (older plugin versions), use this to push them to the server once so they're visible and editable in the HamanTech portal too.</em>
+    </p>
+    <button type="button" id="hm-migrate-to-server" class="button">انتقال به سرور / Migrate to Server</button>
+    <span id="hm-migrate-result"></span>
+</div>
+
+<div class="hm-tab-panel" data-tab-panel="advanced">
+    <hr>
+    <h3>پاک کردن کش / Clear Cache</h3>
+    <button type="button" id="hm-clear-cache" class="button">پاک کردن کش / Clear Cache</button>
+    <span id="hm-clear-cache-result"></span>
+
+    <hr>
+    <h3>نسخه‌ی افزونه / Plugin Version</h3>
+    <p>نسخه‌ی فعلی / Current version: <strong><?php echo esc_html(HAMMAN_VERSION); ?></strong></p>
+
+    <hr>
+    <h3>لاگ اخیر ارتباط با API / Recent API Log</h3>
+    <?php if (empty($log)): ?>
+        <p class="description">هنوز لاگی ثبت نشده / No log entries yet.</p>
+    <?php else: ?>
+        <div class="hm-log-box">
+        <?php foreach ($log as $entry): ?>
+            <div class="hm-log-entry">
+                <span class="hm-log-time"><?php echo esc_html(date_i18n('Y-m-d H:i:s', $entry['time'] ?? time())); ?></span>
+                <span class="hm-log-message"><?php echo esc_html($entry['message'] ?? ''); ?></span>
+            </div>
+        <?php endforeach; ?>
+        </div>
+    <?php endif; ?>
+</div>
+
 </div>

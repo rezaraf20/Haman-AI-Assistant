@@ -20,6 +20,13 @@ class Hamman_Loader {
         $this->add_action( 'admin_enqueue_scripts', $admin,  'enqueue_assets' );
         $this->add_action( 'admin_post_hamman_save_settings', $admin, 'save_settings' );
         $this->add_action( 'admin_post_hamman_manual_sync',   $admin, 'manual_sync' );
+        $this->add_action( 'wp_ajax_hamman_test_connection',  $admin, 'ajax_test_connection' );
+        $this->add_action( 'wp_ajax_hamman_clear_cache',      $admin, 'ajax_clear_cache' );
+        $this->add_action( 'wp_ajax_hamman_get_webhook_secret',        $admin, 'ajax_get_webhook_secret' );
+        $this->add_action( 'wp_ajax_hamman_regenerate_webhook_secret', $admin, 'ajax_regenerate_webhook_secret' );
+        $this->add_action( 'wp_ajax_hamman_get_widget_settings',       $admin, 'ajax_get_widget_settings' );
+        $this->add_action( 'wp_ajax_hamman_migrate_to_server',         $admin, 'ajax_migrate_to_server' );
+        $this->add_action( 'wp_ajax_hamman_check_version',             $admin, 'ajax_check_version' );
         $this->add_action( 'wp_enqueue_scripts',   $public, 'enqueue_assets' );
         $this->add_action( 'hamman_hourly_sync',   $sync,   'run_incremental_sync' );
         $this->add_action( 'rest_api_init',        new Hamman_Webhook_Handler(), 'register_routes' );

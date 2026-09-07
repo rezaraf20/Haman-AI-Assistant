@@ -2,17 +2,14 @@
 namespace App\Filament\Customer\Pages;
 
 use App\Models\ChatbotIndexEntry;
-use App\Models\Tenant\Chatbot;
 use App\Models\Tenant\SyncJob;
 use App\Services\WalletService;
-use App\Support\WidgetDefaults;
 use Filament\Pages\Page;
 use Filament\Tables\Table;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Columns\{TextColumn, IconColumn};
 use Filament\Tables\Actions\Action;
-use Filament\Forms\Components\{ColorPicker, Toggle, Select};
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
 use App\Support\Jalali;
@@ -48,27 +45,18 @@ class MyChatbots extends Page implements HasTable {
                     ->wrap(),
             ])
             ->actions([
-                Action::make('appearance')
-                    ->label(__('chatbot.appearance_action'))
+                // Superseded the old "appearance" modal (color/position/
+                // powered-by only) — this is now the one place for every
+                // content/appearance field (welcome message, chat title, AI
+                // name, avatar, quick questions, system instruction), with
+                // a live preview. See WidgetSettings.php's docblock for why
+                // this moved server-side instead of staying split across
+                // the WordPress plugin's own local options.
+                Action::make('widget_settings')
+                    ->label(__('chatbot.widget_settings_action'))
                     ->icon('heroicon-o-swatch')
                     ->color('gray')
-                    ->form([
-                        ColorPicker::make('primary_color')
-                            ->label(__('chatbot.primary_color_label')),
-                        Select::make('position')
-                            ->label(__('chatbot.widget_position_label'))
-                            ->options([
-                                'bottom-right' => __('chatbot.widget_position_bottom_right'),
-                                'bottom-left'  => __('chatbot.widget_position_bottom_left'),
-                            ])
-                            ->default('bottom-right')
-                            ->required(),
-                        Toggle::make('powered_by_enabled')
-                            ->label(__('chatbot.powered_by_toggle_label'))
-                            ->default(true),
-                    ])
-                    ->fillForm(fn (ChatbotIndexEntry $record) => $this->loadWidgetConfig($record))
-                    ->action(fn (ChatbotIndexEntry $record, array $data) => $this->saveWidgetConfig($record, $data)),
+                    ->url(fn (ChatbotIndexEntry $record) => WidgetSettings::getUrl(['chatbot' => $record->chatbot_id])),
                 Action::make('renew')
                     ->label(__('chatbot.renew_action'))
                     ->icon('heroicon-o-arrow-path')
@@ -78,40 +66,6 @@ class MyChatbots extends Page implements HasTable {
                     ->modalDescription(fn (ChatbotIndexEntry $record) => __('chatbot.renew_confirm_description', ['amount' => Money::toman($record->monthly_price_toman)]))
                     ->action(fn (ChatbotIndexEntry $record) => $this->renew($record)),
             ]);
-    }
-
-    // widget_config lives on the tenant-schema Chatbot row, not the
-    // public-schema ChatbotIndexEntry this page's table is backed by — same
-    // schema-switch pattern BuyChatbot.php already uses for the same reason.
-    private function loadWidgetConfig(ChatbotIndexEntry $record): array {
-        DB::statement("SET search_path TO {$record->schema_name}, public");
-        $chatbot = Chatbot::find($record->chatbot_id);
-        $defaults = WidgetDefaults::forLanguage($chatbot?->language);
-        $config = array_merge($defaults, $chatbot?->widget_config ?? []);
-        DB::statement('SET search_path TO public');
-
-        return [
-            'primary_color'      => $config['primary_color'],
-            'position'           => $config['position'],
-            'powered_by_enabled' => $config['powered_by_enabled'],
-        ];
-    }
-
-    private function saveWidgetConfig(ChatbotIndexEntry $record, array $data): void {
-        DB::statement("SET search_path TO {$record->schema_name}, public");
-        $chatbot = Chatbot::find($record->chatbot_id);
-        if ($chatbot) {
-            $chatbot->update([
-                'widget_config' => array_merge($chatbot->widget_config ?? [], [
-                    'primary_color'      => $data['primary_color'],
-                    'position'           => $data['position'],
-                    'powered_by_enabled' => (bool) $data['powered_by_enabled'],
-                ]),
-            ]);
-        }
-        DB::statement('SET search_path TO public');
-
-        Notification::make()->title(__('chatbot.appearance_saved'))->success()->send();
     }
 
     // Sums the most recent sync job of each content type (products, pages,

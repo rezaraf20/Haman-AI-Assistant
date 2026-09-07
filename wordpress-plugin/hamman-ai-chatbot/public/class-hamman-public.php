@@ -32,17 +32,17 @@ class Hamman_Public {
     private function build_config(string $chatbot_id): array {
         $api_url = rtrim(get_option('hamman_api_url', HAMMAN_API_BASE), '/');
 
-        $qq = get_option('hamman_quick_questions', []);
-        if (!is_array($qq)) $qq = [];
-
-        // First-paint-only fallback, before /chat/session has responded with
-        // this chatbot's own widget_config (see ChatController::
-        // mergedWidgetConfig() and App\Support\WidgetDefaults on the backend)
-        // — that response, once it lands, always wins: a chatbot configured
-        // for English by its owner reads English even on a Persian WP site,
-        // and vice versa (see applyWidgetConfig() in hamman-widget.js). This
-        // is only what a visitor sees for the fraction of a second before
-        // that happens.
+        // Content/appearance settings (welcome message, chat title, AI
+        // name, quick questions, avatar, color, position) are no longer
+        // editable locally at all — the customer portal (WidgetSettings
+        // page) is the single source of truth for them now; see
+        // ChatController::mergedWidgetConfig() / App\Support\WidgetDefaults
+        // on the backend. What follows is a generic, hardcoded first-paint
+        // fallback only, replaced within a fraction of a second by the real
+        // values once /chat/session responds (applyWidgetConfig() in
+        // hamman-widget.js) — a chatbot configured for English reads
+        // English even on a Persian WP site, and vice versa, since that's
+        // driven by the chatbot's own `language` column, not get_locale().
         $is_fa = strpos(get_locale(), 'fa') === 0;
         $dir   = $is_fa ? 'rtl' : 'ltr';
         $l10n_defaults = $is_fa ? [
@@ -79,26 +79,22 @@ class Hamman_Public {
             'apiUrl'      => $api_url,
             'cssUrl'      => HAMMAN_PLUGIN_URL . 'public/css/hamman-widget.css',
             'dir'         => $dir,
-            // First-paint-only fallback (see comment above) — real value
-            // comes from the chatbot's own widget_config once /chat/session
-            // responds. Must not be derived from $dir: the widget's on-page
-            // corner and the chatbot's text direction are independent
-            // settings (see hamman-widget.css's :host/data-position rules).
+            // Every field below this point is a generic first-paint-only
+            // fallback — see the comment above. Must not derive `position`
+            // from `$dir`: the widget's on-page corner and the chatbot's
+            // text direction are independent settings (hamman-widget.css's
+            // :host/data-position rules).
             'position'    => 'bottom-right',
-            'aiName'      => get_option('hamman_ai_name','AI BOT'),
-            'chatTitle'   => get_option('hamman_chat_title','') ?: get_option('hamman_ai_name','AI BOT'),
-            'placeholder' => get_option('hamman_input_placeholder','') ?: $l10n_defaults['placeholder'],
+            'aiName'      => $is_fa ? 'دستیار هوشمند' : 'AI Assistant',
+            'chatTitle'   => $is_fa ? 'پشتیبانی آنلاین' : 'Online Support',
+            'placeholder' => $l10n_defaults['placeholder'],
             'sendButtonLabel'        => $l10n_defaults['sendButtonLabel'],
             'unavailableMessage'     => $l10n_defaults['unavailableMessage'],
             'genericErrorMessage'    => $l10n_defaults['genericErrorMessage'],
             'connectionErrorMessage' => $l10n_defaults['connectionErrorMessage'],
-            'quickQuestions' => $qq,
-            // Overridden as soon as /chat/session responds with this
-            // chatbot's real widget_config (App\Support\WidgetDefaults on the
-            // backend) — not hardcoded, so a customer's color-picker choice
-            // and, later, a white-label plan's branding toggle both actually
-            // take effect. These are only the pre-response fallback.
+            'quickQuestions' => [],
             'primaryColor'     => '#1B3A6B',
+            'avatarUrl'        => '',
             'poweredByEnabled' => true,
             'poweredByName'    => 'HamanTech',
             'poweredByUrl'     => 'https://hamantech.ir',

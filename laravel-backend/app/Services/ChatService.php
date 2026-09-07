@@ -31,6 +31,19 @@ class ChatService {
             return $this->finish($conv, $chatbot, $tenant, $result);
         }
 
+        // A customer volunteering their number/email unprompted — "ثبت کن،
+        // تماس بگیرید 0937..." — is the warmest lead possible, and a real
+        // production incident showed it silently reaching RAG instead: the
+        // bot answered "that number isn't in our information". Checked
+        // regardless of pending_lead_question (this is a *different*
+        // trigger, not the two-turn flow above) and, like that flow, never
+        // reaches RAG.
+        if (($volunteered = $this->leadCaptureVolunteeredIfApplicable($conv, $chatbot, $msg, $history))) {
+            $result = $this->leadResultShape($volunteered);
+            $this->onLeadCaptureOutcome($conv, $chatbot, $volunteered);
+            return $this->finish($conv, $chatbot, $tenant, $result);
+        }
+
         if ($tenant->isTokenQuotaExceeded()) {
             // Skip the AI Gateway call entirely — no cost incurred once a
             // tenant is over their plan's monthly token allowance.
@@ -68,6 +81,13 @@ class ChatService {
             $onDelta($lead['response']);
             $result = $this->leadResultShape($lead);
             $this->onLeadCaptureOutcome($conv, $chatbot, $lead);
+            return $this->finish($conv, $chatbot, $tenant, $result);
+        }
+
+        if (($volunteered = $this->leadCaptureVolunteeredIfApplicable($conv, $chatbot, $msg, $history))) {
+            $onDelta($volunteered['response']);
+            $result = $this->leadResultShape($volunteered);
+            $this->onLeadCaptureOutcome($conv, $chatbot, $volunteered);
             return $this->finish($conv, $chatbot, $tenant, $result);
         }
 
@@ -119,6 +139,20 @@ class ChatService {
 
     private function gatewayPayload(Conversation $conv, string $msg, Chatbot $chatbot, object $tenant, array $history): array {
         return ['chatbot_id'=>$conv->chatbot_id,'conversation_id'=>$conv->id,'session_id'=>$conv->session_id,'query'=>$msg,'history'=>$history,'schema_name'=>$tenant->schema_name,'top_k'=>$chatbot->retrieval_top_k,'threshold'=>$chatbot->retrieval_threshold,'temperature'=>$chatbot->temperature,'max_tokens'=>$chatbot->max_tokens_response,'llm_model'=>$chatbot->llm_model,'language'=>$chatbot->response_language??'auto','system_prompt'=>$chatbot->system_prompt,'fallback_response'=>$chatbot->fallback_response,'rerank_enabled'=>$chatbot->reranker_enabled,'rerank_threshold'=>$chatbot->rerank_threshold,'business_name'=>$chatbot->business_name];
+    }
+
+    /** Returns a handleVolunteeredContact()-shaped lead result if $msg
+     * contains contact info the customer volunteered unprompted, or null
+     * if it doesn't apply (lead capture isn't enabled for this chatbot, or
+     * no phone/email was found in the message at all). Gated behind the
+     * same opt-in flag as the rest of lead capture — a chatbot that never
+     * turned this feature on shouldn't start silently intercepting any
+     * message that happens to contain a phone number. */
+    private function leadCaptureVolunteeredIfApplicable(Conversation $conv, Chatbot $chatbot, string $msg, array $history): ?array {
+        if (!LeadCaptureService::isEnabled($chatbot)) return null;
+        $parsed = $this->leadCapture->extractContact($msg);
+        if (!$parsed) return null;
+        return $this->leadCapture->handleVolunteeredContact($conv, $chatbot, $msg, $parsed, $history);
     }
 
     /** Returns the lead-capture prompt text if this response should trigger
