@@ -1,6 +1,6 @@
 @php $d = $this->getData(); @endphp
 <x-filament-widgets::widget>
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <x-filament::section>
             <div class="text-sm text-gray-500">{{ __('dashboard.customer_stats_questions_month') }}</div>
             <div class="text-2xl font-bold mt-1">{{ $this->fmt($d['questions_month']) }}</div>
@@ -30,6 +30,14 @@
         <x-filament::section>
             <div class="text-sm text-gray-500">{{ __('dashboard.customer_stats_wallet_balance') }}</div>
             <div class="text-2xl font-bold mt-1">{{ $this->toman($d['wallet_toman']) }}</div>
+        </x-filament::section>
+
+        <x-filament::section>
+            <div class="text-sm text-gray-500">{{ __('leads.dashboard_card_title') }}</div>
+            <div class="text-2xl font-bold mt-1 {{ $d['new_leads_week'] > 0 ? 'text-success-600' : '' }}">{{ $this->fmt($d['new_leads_week']) }}</div>
+            @if ($d['new_leads_week'] > 0)
+                <a href="{{ \App\Filament\Customer\Pages\Leads::getUrl() }}" class="text-xs text-primary-600 hover:underline">{{ __('leads.view_all') }}</a>
+            @endif
         </x-filament::section>
     </div>
 </x-filament-widgets::widget>

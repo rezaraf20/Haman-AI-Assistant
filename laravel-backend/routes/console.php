@@ -19,3 +19,7 @@ Schedule::command('hamman:notify-disabled-providers')->everyMinute();
 // up into analytics_daily before that day is anywhere near eligible for
 // pruning (90 days apart, no real race, but this keeps the intent explicit).
 Schedule::command('hamman:prune-event-payloads')->dailyAt('03:00');
+// Rollup for merchants who opted a notification channel into digest mode
+// instead of an alert per lead/unanswered occurrence — reads the last 24h
+// of conversation_events directly, no separate queue table.
+Schedule::command('hamman:send-notification-digests')->dailyAt('08:00');

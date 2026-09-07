@@ -1,0 +1,20 @@
+<?php
+return [
+    'nav' => 'لیدها',
+    'dashboard_card_title' => 'لید جدید این هفته',
+    'view_all' => 'مشاهده همه',
+    'filter_all' => 'همه',
+    'status_new' => 'جدید',
+    'status_contacted' => 'تماس گرفته شده',
+    'status_closed' => 'بسته شده',
+    'col_contact' => 'اطلاعات تماس',
+    'col_question' => 'سوال',
+    'col_actions' => 'عملیات',
+    'view_conversation' => 'مشاهده مکالمه',
+    'mark_contacted' => 'علامت به‌عنوان تماس‌گرفته‌شده',
+    'mark_closed' => 'بستن',
+    'marked_contacted' => 'به‌عنوان تماس‌گرفته‌شده علامت خورد',
+    'marked_closed' => 'لید بسته شد',
+    'export_csv' => 'خروجی CSV',
+    'empty' => 'هنوز لیدی ثبت نشده است.',
+];

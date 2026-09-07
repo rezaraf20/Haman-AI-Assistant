@@ -321,6 +321,29 @@ class TenantService
             ");
             DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_conv_events_lookup ON {$schemaName}.conversation_events(chatbot_id, event_type, created_at)");
         } catch (\Throwable $e) {}
+        // Lead capture — see createTenantTables()'s matching block.
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.chatbots ADD COLUMN IF NOT EXISTS notification_settings JSONB NOT NULL DEFAULT '{}'");
+        } catch (\Throwable $e) {}
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.conversations ADD COLUMN IF NOT EXISTS pending_lead_question TEXT");
+        } catch (\Throwable $e) {}
+        try {
+            DB::statement("
+                CREATE TABLE IF NOT EXISTS {$schemaName}.leads (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    conversation_id UUID NOT NULL REFERENCES {$schemaName}.conversations(id) ON DELETE CASCADE,
+                    chatbot_id UUID NOT NULL REFERENCES {$schemaName}.chatbots(id) ON DELETE CASCADE,
+                    name VARCHAR(255),
+                    contact VARCHAR(255) NOT NULL,
+                    contact_type VARCHAR(10) NOT NULL,
+                    question TEXT,
+                    status VARCHAR(20) NOT NULL DEFAULT 'new',
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+            ");
+            DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_leads_lookup ON {$schemaName}.leads(chatbot_id, status, created_at)");
+        } catch (\Throwable $e) {}
     }
 
     private function createTenantTables(string $s): void
@@ -352,6 +375,15 @@ class TenantService
                 rerank_threshold DECIMAL(4,3) NOT NULL DEFAULT 0.500,
                 memory_window SMALLINT NOT NULL DEFAULT 6,
                 widget_config JSONB NOT NULL DEFAULT '{}',
+                -- Per-channel (email/telegram/webhook) alert preferences
+                -- for lead_captured/unanswered events, keyed by channel
+                -- name -- see NotificationService for the exact shape of
+                -- each channel's settings (enabled flag, destination
+                -- address/token, which events, digest mode). A separate
+                -- column from widget_config on purpose: that one is
+                -- client/widget-facing behavior, this is merchant-facing
+                -- alerting config, never sent to the browser.
+                notification_settings JSONB NOT NULL DEFAULT '{}',
                 language VARCHAR(10) NOT NULL DEFAULT 'en',
                 response_language VARCHAR(10) NOT NULL DEFAULT 'auto',
                 is_active BOOLEAN NOT NULL DEFAULT true,
@@ -494,6 +526,14 @@ class TenantService
                 message_count SMALLINT DEFAULT 0,
                 total_tokens INTEGER DEFAULT 0,
                 is_converted BOOLEAN DEFAULT false,
+                -- Set to the user's own question text the moment the bot
+                -- asks them for contact info instead of answering (see
+                -- LeadCaptureService) -- the next incoming message on this
+                -- conversation is then read as a phone/email attempt
+                -- instead of a new question, not run through RAG at all.
+                -- Cleared once resolved (lead captured or an invalid
+                -- attempt exhausted the flow).
+                pending_lead_question TEXT,
                 ended_at TIMESTAMPTZ,
                 started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -583,8 +623,8 @@ class TenantService
         DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_analytics_daily_date ON {$s}.analytics_daily(date)");
 
         // Fine-grained per-turn events (conversation_started, retrieval,
-        // response, unanswered, product_mentioned, feedback, and — once
-        // built — lead_captured/escalation) — what AggregateAnalyticsJob
+        // response, unanswered, product_mentioned, feedback, lead_captured,
+        // and — once built — escalation) — what AggregateAnalyticsJob
         // actually rolls up into analytics_daily's escalation_count/
         // positive_feedback/negative_feedback/products_recommended/
         // conversions columns, all of which sat permanently at 0 with
@@ -607,6 +647,26 @@ class TenantService
             )
         ");
         DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_conv_events_lookup ON {$s}.conversation_events(chatbot_id, event_type, created_at)");
+
+        // A missed answer with no way to reach the visitor back is a lost
+        // sale for a B2B/high-ticket shop, not just an unanswered-rate
+        // number on a dashboard — see LeadCaptureService, which is what
+        // actually populates this table when the bot asks for (and gets) a
+        // phone/email instead of just saying "I don't know".
+        DB::statement("
+            CREATE TABLE IF NOT EXISTS {$s}.leads (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                conversation_id UUID NOT NULL REFERENCES {$s}.conversations(id) ON DELETE CASCADE,
+                chatbot_id UUID NOT NULL REFERENCES {$s}.chatbots(id) ON DELETE CASCADE,
+                name VARCHAR(255),
+                contact VARCHAR(255) NOT NULL,
+                contact_type VARCHAR(10) NOT NULL,
+                question TEXT,
+                status VARCHAR(20) NOT NULL DEFAULT 'new',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )
+        ");
+        DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_leads_lookup ON {$s}.leads(chatbot_id, status, created_at)");
 
         DB::statement("SET search_path TO public");
     }

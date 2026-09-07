@@ -2,9 +2,16 @@
 namespace App\Services;
 use App\Models\Tenant\{Conversation, Message, Chatbot};
 use App\Support\WidgetDefaults;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class ChatService {
-    public function __construct(private AiGatewayService $ai, private TenantService $tenantSvc) {}
+    public function __construct(
+        private AiGatewayService $ai,
+        private TenantService $tenantSvc,
+        private LeadCaptureService $leadCapture,
+        private NotificationService $notifications,
+    ) {}
 
     public function createSession(array $data): Conversation {
         return Conversation::create(['chatbot_id'=>$data['chatbot_id'],'session_id'=>$data['session_id'],'visitor_id'=>$data['visitor_id']??null,'page_url'=>$data['page_url']??null,'language'=>$data['language']??'en','device_type'=>$data['device_type']??'desktop','status'=>'active','started_at'=>now()]);
@@ -12,6 +19,17 @@ class ChatService {
 
     public function sendMessage(Conversation $conv, string $msg): array {
         [$chatbot, $tenant, $history] = $this->prepare($conv, $msg);
+
+        // A conversation the bot already asked for contact info on — this
+        // message is that attempt, not a new question. Never reaches RAG
+        // (a phone number isn't something to retrieve chunks for) and
+        // costs nothing.
+        if ($this->leadCapture->isAwaitingContact($conv)) {
+            $lead = $this->leadCapture->handleContactAttempt($conv, $chatbot, $msg);
+            $result = $this->leadResultShape($lead);
+            $this->onLeadCaptureOutcome($conv, $chatbot, $lead);
+            return $this->finish($conv, $chatbot, $tenant, $result);
+        }
 
         if ($tenant->isTokenQuotaExceeded()) {
             // Skip the AI Gateway call entirely — no cost incurred once a
@@ -24,6 +42,12 @@ class ChatService {
                 $result = ['response'=>$chatbot->fallback_response??WidgetDefaults::forLanguage($chatbot->language)['processing_error_response'],'chunk_ids'=>[],'scores'=>[],'sources'=>[],'prompt_tokens'=>0,'completion_tokens'=>0,'total_tokens'=>0,'model'=>$chatbot->llm_model,'latency_ms'=>0,'is_fallback'=>true,'is_unanswered'=>false,'finish_reason'=>'error'];
             }
         }
+
+        if ($promptText = $this->leadCapturePromptIfApplicable($conv, $chatbot, $result, $msg)) {
+            $result['response'] = $promptText;
+            $result['finish_reason'] = 'lead_capture_prompt';
+        }
+        $this->notifyIfUnanswered($chatbot, $result, $msg);
 
         return $this->finish($conv, $chatbot, $tenant, $result);
     }
@@ -38,6 +62,14 @@ class ChatService {
      */
     public function sendMessageStream(Conversation $conv, string $msg, callable $onDelta): array {
         [$chatbot, $tenant, $history] = $this->prepare($conv, $msg);
+
+        if ($this->leadCapture->isAwaitingContact($conv)) {
+            $lead = $this->leadCapture->handleContactAttempt($conv, $chatbot, $msg);
+            $onDelta($lead['response']);
+            $result = $this->leadResultShape($lead);
+            $this->onLeadCaptureOutcome($conv, $chatbot, $lead);
+            return $this->finish($conv, $chatbot, $tenant, $result);
+        }
 
         if ($tenant->isTokenQuotaExceeded()) {
             $text = $chatbot->fallback_response ?? WidgetDefaults::forLanguage($chatbot->language)['quota_exceeded_response'];
@@ -59,6 +91,19 @@ class ChatService {
             }
         }
 
+        // By the time is_unanswered is known here, whatever text the AI
+        // gateway already streamed via $onDelta is already flushed to the
+        // client — there's no un-sending it. The lead-capture prompt can
+        // only be *appended* as a second chunk, not swapped in as a
+        // replacement the way sendMessage() can do before anything's been
+        // sent at all.
+        if ($promptText = $this->leadCapturePromptIfApplicable($conv, $chatbot, $result, $msg)) {
+            $onDelta("\n\n" . $promptText);
+            $result['response'] .= "\n\n" . $promptText;
+            $result['finish_reason'] = 'lead_capture_prompt';
+        }
+        $this->notifyIfUnanswered($chatbot, $result, $msg);
+
         return $this->finish($conv, $chatbot, $tenant, $result);
     }
 
@@ -74,6 +119,50 @@ class ChatService {
 
     private function gatewayPayload(Conversation $conv, string $msg, Chatbot $chatbot, object $tenant, array $history): array {
         return ['chatbot_id'=>$conv->chatbot_id,'conversation_id'=>$conv->id,'session_id'=>$conv->session_id,'query'=>$msg,'history'=>$history,'schema_name'=>$tenant->schema_name,'top_k'=>$chatbot->retrieval_top_k,'threshold'=>$chatbot->retrieval_threshold,'temperature'=>$chatbot->temperature,'max_tokens'=>$chatbot->max_tokens_response,'llm_model'=>$chatbot->llm_model,'language'=>$chatbot->response_language??'auto','system_prompt'=>$chatbot->system_prompt,'fallback_response'=>$chatbot->fallback_response,'rerank_enabled'=>$chatbot->reranker_enabled,'rerank_threshold'=>$chatbot->rerank_threshold,'business_name'=>$chatbot->business_name];
+    }
+
+    /** Returns the lead-capture prompt text if this response should trigger
+     * asking for contact info (chatbot has lead capture enabled AND the
+     * result came back unanswered), or null if it doesn't apply — the
+     * caller decides whether to replace (non-streaming) or append
+     * (streaming) the response text with it. */
+    private function leadCapturePromptIfApplicable(Conversation $conv, Chatbot $chatbot, array $result, string $question): ?string {
+        if (!($result['is_unanswered'] ?? false)) return null;
+        if (!LeadCaptureService::isEnabled($chatbot)) return null;
+        return $this->leadCapture->promptForContact($conv, $chatbot, $question);
+    }
+
+    /** @return array{response:string,chunk_ids:array,scores:array,prompt_tokens:int,completion_tokens:int,total_tokens:int,cost_toman:int,model:string,latency_ms:int,is_fallback:bool,is_unanswered:bool,finish_reason:string} */
+    private function leadResultShape(array $lead): array {
+        return ['response'=>$lead['response'],'chunk_ids'=>[],'scores'=>[],'sources'=>[],'prompt_tokens'=>0,'completion_tokens'=>0,'total_tokens'=>0,'cost_toman'=>0,'model'=>'n/a','latency_ms'=>0,'is_fallback'=>false,'is_unanswered'=>false,'finish_reason'=>$lead['finish_reason']];
+    }
+
+    /** Logs the lead_captured event and fires notifications once a contact
+     * attempt actually resulted in a saved Lead row — not on an invalid
+     * attempt, which just re-prompts and produces neither. */
+    private function onLeadCaptureOutcome(Conversation $conv, Chatbot $chatbot, array $lead): void {
+        if (($lead['finish_reason'] ?? null) !== 'lead_captured' || empty($lead['lead'])) return;
+        $record = $lead['lead'];
+
+        DB::table('conversation_events')->insert([
+            'id'              => (string) Str::uuid(),
+            'conversation_id' => $conv->id,
+            'chatbot_id'      => $conv->chatbot_id,
+            'event_type'      => 'lead_captured',
+            'payload'         => json_encode(['contact' => $record->contact, 'contact_type' => $record->contact_type, 'reason' => $record->question]),
+            'created_at'      => now(),
+        ]);
+
+        $this->notifications->send($chatbot, 'lead_captured', [
+            'contact'      => $record->contact,
+            'contact_type' => $record->contact_type,
+            'question'     => $record->question,
+        ]);
+    }
+
+    private function notifyIfUnanswered(Chatbot $chatbot, array $result, string $query): void {
+        if (!($result['is_unanswered'] ?? false)) return;
+        $this->notifications->send($chatbot, 'unanswered', ['query' => $query]);
     }
 
     private function finish(Conversation $conv, Chatbot $chatbot, object $tenant, array $result): array {

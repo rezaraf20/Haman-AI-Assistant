@@ -17,7 +17,7 @@ class CustomerDashboardData {
         return [
             'chatbotStatuses' => [], 'dailyRows' => collect(), 'monthQuestions' => 0,
             'monthUnanswered' => 0, 'recentUnanswered' => [], 'topTopics' => [],
-            'maxTokensMonthly' => $maxTokensMonthly,
+            'newLeadsThisWeek' => 0, 'maxTokensMonthly' => $maxTokensMonthly,
         ];
     }
 
@@ -121,6 +121,10 @@ class CustomerDashboardData {
             ->get()
             ->toArray();
 
+        $newLeadsThisWeek = DB::table('leads')
+            ->where('created_at', '>=', now()->subDays(7))
+            ->count();
+
         return compact(
             'chatbotStatuses',
             'dailyRows',
@@ -128,6 +132,7 @@ class CustomerDashboardData {
             'monthUnanswered',
             'recentUnanswered',
             'topTopics',
+            'newLeadsThisWeek',
             'maxTokensMonthly',
         );
     }

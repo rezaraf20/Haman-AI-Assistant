@@ -22,7 +22,7 @@ class TranslationCompletenessTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const DOMAINS = ['common', 'panel', 'chatbot', 'wallet', 'ticket', 'plan', 'validation', 'dashboard'];
+    private const DOMAINS = ['common', 'panel', 'chatbot', 'wallet', 'ticket', 'plan', 'validation', 'dashboard', 'leads'];
 
     public function test_fa_and_en_locale_files_have_matching_keys(): void
     {
