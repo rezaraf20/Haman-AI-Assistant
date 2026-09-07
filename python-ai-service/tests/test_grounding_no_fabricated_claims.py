@@ -82,12 +82,18 @@ class PromptBuildsWithFabricationBanTest(unittest.IsolatedAsyncioTestCase):
         prompt = captured["prompt"]
         self.assertIn("هرگز قابلیت، یکپارچه‌سازی یا پلتفرم/نرم‌افزار شخص ثالثی", prompt)
         self.assertIn("فقط عددی را بگو که دقیقاً همان‌طور در زمینه", prompt)
-        # The retrieved chunk itself never mentions Shopify/Magento/3x —
-        # confirming those words aren't smuggled in via the context either.
-        self.assertNotIn("شاپیفای", prompt)
-        self.assertNotIn("مجنتو", prompt)
-        self.assertNotIn("Shopify", prompt)
-        self.assertNotIn("Magento", prompt)
+        # Shopify/Magento now legitimately appear in the rules themselves
+        # (added as concrete named examples to reinforce the ban — see
+        # rag_service.py) — what must stay true is that they only ever
+        # appear inside the rules/reminder text, never inside the actual
+        # === CONTEXT === block, since the retrieved chunk itself never
+        # mentions them. A model hallucinating them would be pattern-
+        # completing from its own training, not echoing the context.
+        context_block = prompt.split("=== CONTEXT ===")[1].split("=== END CONTEXT ===")[0]
+        self.assertNotIn("شاپیفای", context_block)
+        self.assertNotIn("مجنتو", context_block)
+        self.assertNotIn("Shopify", context_block)
+        self.assertNotIn("Magento", context_block)
 
 
 if __name__ == "__main__":
