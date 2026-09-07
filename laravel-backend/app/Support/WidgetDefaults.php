@@ -1,6 +1,8 @@
 <?php
 namespace App\Support;
 
+use App\Models\Tenant\Chatbot;
+
 /**
  * Default chat-widget UI text (send button, placeholder, error/unavailable
  * messages), keyed by the owning chatbot's own `language` column — not the
@@ -20,6 +22,24 @@ class WidgetDefaults {
         return array_merge(self::common(), $language === 'en' ? self::english() : self::persian());
     }
 
+    /**
+     * The single place that produces a chatbot's complete, always-defaulted
+     * widget config — used by both ChatController (what the widget actually
+     * receives) and ChatbotController (what the WordPress plugin's
+     * read-only display and the customer portal's WidgetSettings page read
+     * back). welcome_message/system_instruction also have their own
+     * top-level chatbots.welcome_message/system_prompt columns — the real,
+     * RAG-pipeline-facing source of truth for the latter (see ChatService::
+     * gatewayPayload()) — which always win here over both the generic
+     * default and anything stale left in widget_config for the same key.
+     */
+    public static function merge(Chatbot $chatbot): array {
+        $merged = array_merge(self::forLanguage($chatbot->language), $chatbot->widget_config ?? []);
+        if (filled($chatbot->welcome_message)) $merged['welcome_message'] = $chatbot->welcome_message;
+        if (filled($chatbot->system_prompt)) $merged['system_instruction'] = $chatbot->system_prompt;
+        return $merged;
+    }
+
     // Language-independent — not fa/en text, so both branches merge the same
     // values. primary_color/powered_by_enabled are admin-settable per chatbot
     // (see the customer portal's MyChatbots "appearance" action, which writes
@@ -37,11 +57,29 @@ class WidgetDefaults {
             // most competitors' convention); admin/customer-settable, same
             // override path as primary_color above.
             'position'            => 'bottom-right',
+            // No sensible generic default beyond "nothing extra/none" — a
+            // made-up quick question or avatar image would be worse than
+            // none at all. system_instruction here is only ever surfaced
+            // for display (the customer portal reading back what's
+            // configured); the actual grounding rules are always applied
+            // server-side by rag_service.py regardless of this value.
+            'quick_questions'     => [],
+            'system_instruction'  => '',
+            'avatar_url'          => '',
         ];
     }
 
     private static function persian(): array {
         return [
+            // The actual root cause of a real reported bug: a chatbot
+            // created (or never re-saved) without an explicit welcome
+            // message had NO fallback at all — createSession() read the
+            // raw chatbots.welcome_message column directly, bypassing this
+            // whole default-merge pattern that every other widget string
+            // already goes through. See ChatController::createSession().
+            'welcome_message'        => 'سلام! چطور می‌توانم کمکتان کنم؟',
+            'chat_title'             => 'پشتیبانی آنلاین',
+            'ai_name'                => 'دستیار هوشمند',
             'send_button_label'      => 'ارسال',
             'input_placeholder'      => 'پیام خود را بنویسید...',
             'unavailable_message'    => 'چت‌بات در حال حاضر در دسترس نیست. لطفاً بعداً دوباره تلاش کنید.',
@@ -64,6 +102,9 @@ class WidgetDefaults {
 
     private static function english(): array {
         return [
+            'welcome_message'        => 'Hi! How can I help you?',
+            'chat_title'             => 'Online Support',
+            'ai_name'                => 'AI Assistant',
             'send_button_label'      => 'Send',
             'input_placeholder'      => 'Write your message...',
             'unavailable_message'    => "The chatbot isn't available right now. Please try again later.",

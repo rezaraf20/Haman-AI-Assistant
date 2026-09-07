@@ -31,3 +31,4 @@ foreach ( $options as $option ) {
 
 delete_transient( 'hamman_sync_results' );
 delete_transient( 'hamman_settings_push_error' );
+delete_transient( 'hamman_webhook_secret_cache' );

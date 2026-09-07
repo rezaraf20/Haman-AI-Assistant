@@ -3,6 +3,7 @@ use App\Models\Tenant\{Chatbot, ChatbotDomain, Document, Product};
 use Illuminate\Http\{Request, JsonResponse};
 use Illuminate\Support\Facades\DB;
 use App\Support\DomainNormalizer;
+use App\Support\WidgetDefaults;
 
 class ChatbotController extends BaseApiController {
 
@@ -27,7 +28,16 @@ class ChatbotController extends BaseApiController {
     }
 
     public function show(string $id): JsonResponse {
-        return $this->ok(Chatbot::with(['domains'])->findOrFail($id));
+        $chatbot = Chatbot::with(['domains'])->findOrFail($id);
+        // widget_config_merged: the complete, always-defaulted config (see
+        // WidgetDefaults::merge()) — what the WordPress plugin's read-only
+        // display and the customer portal's WidgetSettings page both read,
+        // as opposed to the raw (possibly null/unset) widget_config column
+        // above it, which is kept for backward compatibility with any
+        // existing caller of this endpoint.
+        return $this->ok(array_merge($chatbot->toArray(), [
+            'widget_config_merged' => WidgetDefaults::merge($chatbot),
+        ]));
     }
 
     public function update(Request $req, string $id): JsonResponse {

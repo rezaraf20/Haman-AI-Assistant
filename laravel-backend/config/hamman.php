@@ -38,4 +38,13 @@ return [
         'url'           => 'https://hamantech.ir',
         'primary_color' => '#1B3A6B',
     ],
+    // What the WordPress plugin's Advanced tab compares its own HAMMAN_VERSION
+    // against to show an "update available" notice — bump this by hand
+    // (env var, no dedicated UI yet) whenever a new plugin zip is actually
+    // published for customers to install. No infra exists to auto-detect
+    // this from the plugin source itself, so it's a manual value on purpose
+    // rather than something that could silently drift from reality.
+    'wp_plugin' => [
+        'latest_version' => env('HAMMAN_WP_PLUGIN_LATEST_VERSION', '1.6.1'),
+    ],
 ];

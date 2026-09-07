@@ -30,14 +30,17 @@ class ChatController extends BaseApiController
         return $index;
     }
 
-    // Widget UI text (send button, placeholder, error messages) defaults per
-    // the chatbot's own `language` column — see App\Support\WidgetDefaults —
-    // with anything the admin explicitly set via updateWidgetSettings()
-    // taking priority. The WordPress plugin applies this once it receives it;
-    // it has its own get_locale()-based fallback for the very first paint,
-    // before this response exists.
+    // Widget UI text (send button, placeholder, error messages, welcome
+    // message, chat title, AI name, quick questions, system instruction,
+    // avatar) — see App\Support\WidgetDefaults::merge(), the single place
+    // that produces this, shared with ChatbotController (WordPress plugin's
+    // read-only display / customer portal's WidgetSettings page). Previously
+    // createSession() read chatbots.welcome_message directly with no
+    // fallback at all when it was empty — a chatbot that had never had it
+    // set (e.g. created directly in the customer portal, no WordPress
+    // plugin push yet) showed no welcome message whatsoever.
     private function mergedWidgetConfig(Chatbot $chatbot): array {
-        return array_merge(WidgetDefaults::forLanguage($chatbot->language), $chatbot->widget_config ?? []);
+        return WidgetDefaults::merge($chatbot);
     }
 
     public function createSession(Request $req): JsonResponse
@@ -60,12 +63,13 @@ class ChatController extends BaseApiController
             ->where('session_id', $d['session_id'])
             ->first();
         if ($existing) {
+            $merged = $this->mergedWidgetConfig($chatbot);
             return $this->ok([
                 'conversation_id' => $existing->id,
                 'session_id'      => $existing->session_id,
-                'welcome_message' => $chatbot->welcome_message,
+                'welcome_message' => $merged['welcome_message'],
                 'language'        => $chatbot->language,
-                'widget_config'   => $this->mergedWidgetConfig($chatbot),
+                'widget_config'   => $merged,
             ]);
         }
 
@@ -97,12 +101,19 @@ class ChatController extends BaseApiController
             'created_at'      => now(),
         ]);
 
+        // The bigger half of the same bug as the $existing branch above: this
+        // path (a genuinely new conversation — the common case for any
+        // first-time visitor) returned the *raw, unmerged* widget_config —
+        // not even the defaults every other field already had a fallback
+        // for (primary_color, position, send_button_label, ...), let alone
+        // welcome_message.
+        $merged = $this->mergedWidgetConfig($chatbot);
         return $this->created([
             'conversation_id' => $conv->id,
             'session_id'      => $conv->session_id,
-            'welcome_message' => $chatbot->welcome_message,
+            'welcome_message' => $merged['welcome_message'],
             'language'        => $chatbot->language,
-            'widget_config'   => $chatbot->widget_config,
+            'widget_config'   => $merged,
         ]);
     }
 

@@ -300,6 +300,46 @@
         if (wc.powered_by_name) CFG.poweredByName = wc.powered_by_name;
         if (wc.powered_by_url) CFG.poweredByUrl = wc.powered_by_url;
         renderPoweredBy();
+
+        // chat_title/ai_name/quick_questions: the server (customer portal)
+        // is the source of truth for these now — the PHP-side CFG values
+        // (from WordPress's own local options) are only a first-paint
+        // fallback before this response exists. A merchant changing these
+        // in the portal must see the new text with zero WordPress-side
+        // changes, exactly like welcome_message already does.
+        if (wc.chat_title) {
+            CFG.chatTitle = wc.chat_title;
+            var titleEl = root.querySelector('#hm-hdr h3');
+            if (titleEl) titleEl.textContent = wc.chat_title;
+        }
+        if (wc.ai_name) {
+            CFG.aiName = wc.ai_name;
+            var nameEl = root.querySelector('#hm-hdr span');
+            if (nameEl) nameEl.textContent = wc.ai_name;
+        }
+        if (wc.quick_questions) {
+            CFG.quickQuestions = wc.quick_questions;
+            renderQuickQuestions();
+        }
+    }
+
+    function renderQuickQuestions() {
+        var list = CFG.quickQuestions || [];
+        if (!list.length) {
+            if (qqBox) qqBox.remove();
+            qqBox = null;
+            return;
+        }
+        var html = list.map(function (q, i) {
+            return '<button type="button" data-i="' + i + '">' + esc(q.question) + '</button>';
+        }).join('');
+        if (!qqBox) {
+            qqBox = document.createElement('div');
+            qqBox.id = 'hm-qq';
+            bindQuickQuestionClicks(qqBox);
+            msgs.insertAdjacentElement('afterend', qqBox);
+        }
+        qqBox.innerHTML = html;
     }
 
     function loadHistory(id) {
@@ -444,8 +484,8 @@
         return pump();
     }
 
-    if (qqBox) {
-        qqBox.addEventListener('click', function (e) {
+    function bindQuickQuestionClicks(el) {
+        el.addEventListener('click', function (e) {
             var btn = e.target.closest('button[data-i]');
             if (!btn) return;
             var q = CFG.quickQuestions[parseInt(btn.getAttribute('data-i'), 10)];
@@ -457,6 +497,7 @@
             send(q.question);
         });
     }
+    if (qqBox) bindQuickQuestionClicks(qqBox);
 
     // ── Textarea auto-grow (up to 4 lines) ────────────────────────────
     function autoResize() {

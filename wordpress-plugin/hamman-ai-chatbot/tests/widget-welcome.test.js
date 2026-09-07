@@ -94,7 +94,7 @@ function createWidget(opts) {
           data: {
             conversation_id: opts.sessionConvId,
             welcome_message: 'Welcome! How can I help?',
-            widget_config: {},
+            widget_config: opts.widgetConfig || {},
             language: 'en',
           },
         }),
@@ -109,7 +109,12 @@ function createWidget(opts) {
     return Promise.resolve({ ok: true, json: () => Promise.resolve({ data: {} }) });
   };
 
-  window.HammanWidgetConfig = BASE_CONFIG;
+  // A fresh clone per test — the widget mutates CFG in place (e.g.
+  // applyWidgetConfig() reassigns CFG.quickQuestions/chatTitle/aiName), and
+  // reusing the same BASE_CONFIG object reference across tests would leak
+  // one test's server-response state into the next test's "first paint,
+  // before any response" assertions.
+  window.HammanWidgetConfig = JSON.parse(JSON.stringify(BASE_CONFIG));
   // window.eval() from outside a jsdom window does not bind `window` as a
   // real global inside the evaluated code (a documented jsdom quirk) — a
   // <script> tag with runScripts:"dangerously" is jsdom's actual supported
@@ -178,4 +183,56 @@ test('opening the widget twice does not call /chat/session twice (init only runs
 
   const sessionCalls = fetchCalls.filter((u) => String(u).indexOf('/chat/session') !== -1);
   assert.equal(sessionCalls.length, 1);
+});
+
+test('server-provided chat_title, ai_name and quick_questions override the local first-paint fallback', async () => {
+  // Root-cause-adjacent fix in the same area: content/appearance settings
+  // are now server-owned (customer portal), and the WordPress-side CFG
+  // values are only a first-paint fallback — applyWidgetConfig() must
+  // actually apply what the server sends, not just welcome_message.
+  const { root } = createWidget({
+    persistedConv: null,
+    sessionConvId: 'conv-new-3',
+    historyMessages: [],
+    widgetConfig: {
+      chat_title: 'Server Chat Title',
+      ai_name: 'Server AI Name',
+      quick_questions: [{ question: 'Do you ship internationally?', answer: 'Yes.' }],
+    },
+  });
+
+  root.getElementById('hm-btn').click();
+  await flush();
+
+  assert.equal(root.querySelector('#hm-hdr h3').textContent, 'Server Chat Title');
+  assert.equal(root.querySelector('#hm-hdr span').textContent, 'Server AI Name');
+
+  const qqButtons = Array.from(root.querySelectorAll('#hm-qq button[data-i]'));
+  assert.equal(qqButtons.length, 1);
+  assert.equal(qqButtons[0].textContent, 'Do you ship internationally?');
+});
+
+test('quick_questions container is created fresh when the site had none configured locally', async () => {
+  // The #hm-qq container only exists in the initial HTML when the
+  // PHP-side first-paint CFG.quickQuestions is non-empty — for a site with
+  // none configured locally (the new normal, since these moved
+  // server-side), renderQuickQuestions() must create the container itself
+  // rather than assuming it already exists.
+  const { root } = createWidget({
+    persistedConv: null,
+    sessionConvId: 'conv-new-4',
+    historyMessages: [],
+    widgetConfig: {
+      quick_questions: [{ question: 'What are your hours?', answer: '9-5.' }],
+    },
+  });
+
+  assert.equal(root.getElementById('hm-qq'), null, 'no #hm-qq should exist before the server response lands');
+
+  root.getElementById('hm-btn').click();
+  await flush();
+
+  const qqBox = root.getElementById('hm-qq');
+  assert.ok(qqBox, '#hm-qq should be created once the server sends quick_questions');
+  assert.equal(qqBox.querySelectorAll('button[data-i]').length, 1);
 });

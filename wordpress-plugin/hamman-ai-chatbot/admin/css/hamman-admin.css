@@ -45,3 +45,21 @@
     color: #666;
     margin-inline-end: 10px;
 }
+
+.hm-version-check {
+    font-size: 13px;
+    color: #1a7a1a;
+}
+
+.hm-version-check.hm-version-update-available {
+    color: #b45309;
+}
+
+#hm-webhook-secret-result,
+#hm-migrate-result {
+    margin-inline-start: 8px;
+}
+
+#hm-widget-settings-display table.widefat th {
+    padding: 8px 10px;
+}

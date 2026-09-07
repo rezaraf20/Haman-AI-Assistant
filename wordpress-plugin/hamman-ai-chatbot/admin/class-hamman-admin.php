@@ -1,10 +1,17 @@
 <?php
 if ( ! defined( 'ABSPATH' ) ) exit;
 
+/**
+ * Settings page: connection + sync only now — content/appearance settings
+ * (welcome message, chat title, AI name, quick questions, avatar, color,
+ * position, system instruction, lead-capture text) moved server-side (the
+ * customer portal's WidgetSettings page is the one place to edit them now;
+ * see class-hamman-public.php's build_config() docblock). This class keeps
+ * only what's genuinely local to this WordPress install: the API
+ * connection itself, what content types get synced, rate limiting (applies
+ * per-visitor-IP on this specific site), and local housekeeping.
+ */
 class Hamman_Admin {
-    // Capped rolling log for the "پیشرفته" (Advanced) tab — not a real
-    // logging library, just enough for a site admin to see recent sync/
-    // connection failures without SSH access. Newest first.
     const LOG_OPTION = 'hamman_debug_log';
     const LOG_MAX_ENTRIES = 100;
 
@@ -40,77 +47,19 @@ class Hamman_Admin {
         // اتصال / Connection
         update_option('hamman_api_key',       sanitize_text_field($_POST['hamman_api_key']??''));
         update_option('hamman_chatbot_id',    sanitize_text_field($_POST['hamman_chatbot_id']??''));
-        update_option('hamman_webhook_secret',sanitize_text_field($_POST['hamman_webhook_secret']??''));
         update_option('hamman_api_url',       esc_url_raw($_POST['hamman_api_url']??HAMMAN_API_BASE));
         update_option('hamman_enabled',       isset($_POST['hamman_enabled'])?'1':'0');
-
-        // ظاهر / Appearance
-        update_option('hamman_primary_color',    sanitize_hex_color($_POST['hamman_primary_color']??'') ?: '#1B3A6B');
-        update_option('hamman_widget_position',  in_array($_POST['hamman_widget_position']??'', ['bottom-left','bottom-right'], true) ? $_POST['hamman_widget_position'] : 'bottom-right');
-        update_option('hamman_avatar_url',       esc_url_raw($_POST['hamman_avatar_url']??''));
-
-        // متن‌ها / Texts
-        update_option('hamman_auto_reply_enabled', isset($_POST['hamman_auto_reply_enabled'])?'1':'0');
-        update_option('hamman_ai_name',            sanitize_text_field($_POST['hamman_ai_name']??'AI BOT'));
-        update_option('hamman_chat_title',         sanitize_text_field($_POST['hamman_chat_title']??''));
-        update_option('hamman_welcome_text',       sanitize_textarea_field($_POST['hamman_welcome_text']??''));
-        update_option('hamman_input_placeholder',  sanitize_text_field($_POST['hamman_input_placeholder']??''));
-        update_option('hamman_system_instruction', sanitize_textarea_field($_POST['hamman_system_instruction']??''));
-        update_option('hamman_fallback_response',  sanitize_textarea_field($_POST['hamman_fallback_response']??''));
-        update_option('hamman_rate_limit_max_messages',  max(1,(int)($_POST['hamman_rate_limit_max_messages']??50)));
-        update_option('hamman_rate_limit_block_minutes', max(1,(int)($_POST['hamman_rate_limit_block_minutes']??15)));
-        update_option('hamman_lead_capture_enabled', isset($_POST['hamman_lead_capture_enabled'])?'1':'0');
-        update_option('hamman_lead_capture_prompt',  sanitize_textarea_field($_POST['hamman_lead_capture_prompt']??''));
-        update_option('hamman_lead_capture_thanks',  sanitize_textarea_field($_POST['hamman_lead_capture_thanks']??''));
-        update_option('hamman_lead_capture_invalid', sanitize_textarea_field($_POST['hamman_lead_capture_invalid']??''));
-
-        $questions = $_POST['hamman_qq_question'] ?? [];
-        $answers   = $_POST['hamman_qq_answer'] ?? [];
-        $qq = [];
-        foreach ($questions as $i => $q) {
-            $q = sanitize_text_field($q);
-            $a = sanitize_text_field($answers[$i] ?? '');
-            if ($q !== '' && $a !== '') $qq[] = ['question'=>$q,'answer'=>$a];
-        }
-        update_option('hamman_quick_questions', $qq);
 
         // همگام‌سازی / Sync scope
         update_option('hamman_sync_products', isset($_POST['hamman_sync_products'])?'1':'0');
         update_option('hamman_sync_pages',    isset($_POST['hamman_sync_pages'])?'1':'0');
         update_option('hamman_sync_pdfs',     isset($_POST['hamman_sync_pdfs'])?'1':'0');
 
-        // پیشرفته / Advanced
+        // پیشرفته / Advanced (rate limiting stays local — it's per-visitor-IP
+        // on this specific site, not a server-side/content setting)
+        update_option('hamman_rate_limit_max_messages',  max(1,(int)($_POST['hamman_rate_limit_max_messages']??50)));
+        update_option('hamman_rate_limit_block_minutes', max(1,(int)($_POST['hamman_rate_limit_block_minutes']??15)));
         update_option('hamman_delete_data_on_uninstall', isset($_POST['hamman_delete_data_on_uninstall'])?'1':'0');
-
-        $chatbot_id = get_option('hamman_chatbot_id','');
-        if (!empty($chatbot_id) && !empty(get_option('hamman_api_key',''))) {
-            $client = new Hamman_Api_Client();
-            $r = $client->update_widget_settings($chatbot_id, [
-                'auto_reply_enabled'       => get_option('hamman_auto_reply_enabled','1') === '1',
-                'ai_name'                  => get_option('hamman_ai_name','AI BOT'),
-                'system_instruction'       => get_option('hamman_system_instruction',''),
-                'chat_title'               => get_option('hamman_chat_title',''),
-                'welcome_text'             => get_option('hamman_welcome_text',''),
-                'input_placeholder'        => get_option('hamman_input_placeholder',''),
-                'fallback_response'        => get_option('hamman_fallback_response',''),
-                'rate_limit_max_messages'  => (int) get_option('hamman_rate_limit_max_messages',50),
-                'rate_limit_block_minutes' => (int) get_option('hamman_rate_limit_block_minutes',15),
-                'quick_questions'          => $qq,
-                'primary_color'            => get_option('hamman_primary_color','#1B3A6B'),
-                'position'                 => get_option('hamman_widget_position','bottom-right'),
-                'avatar_url'               => get_option('hamman_avatar_url',''),
-                'lead_capture_enabled'     => get_option('hamman_lead_capture_enabled','0') === '1',
-                'lead_capture_prompt'      => get_option('hamman_lead_capture_prompt',''),
-                'lead_capture_thanks'      => get_option('hamman_lead_capture_thanks',''),
-                'lead_capture_invalid'     => get_option('hamman_lead_capture_invalid',''),
-            ]);
-            if (is_wp_error($r)) {
-                self::log('Settings push to Hamman failed: ' . $r->get_error_message());
-                set_transient('hamman_settings_push_error', $r->get_error_message(), 60);
-                wp_redirect(admin_url('admin.php?page=hamman-ai-chatbot&saved=1&sync_warning=1&tab=' . ($_POST['hamman_active_tab'] ?? 'connection')));
-                exit;
-            }
-        }
 
         wp_redirect(admin_url('admin.php?page=hamman-ai-chatbot&saved=1&tab=' . ($_POST['hamman_active_tab'] ?? 'connection')));
         exit;
@@ -120,7 +69,7 @@ class Hamman_Admin {
         if (!current_user_can('manage_options')) wp_die('No permission');
         check_admin_referer('hamman_manual_sync');
         $results = (new Hamman_Sync_Manager())->run_full_sync();
-        set_transient('hamman_sync_results',$results,60);
+        set_transient('hamman_sync_results',$results,3600);
         if (!empty($results['error'])) {
             self::log('Manual sync failed: ' . $results['error']);
         } else {
@@ -133,39 +82,133 @@ class Hamman_Admin {
         exit;
     }
 
-    /** AJAX: "تست اتصال" button in the Connection tab — uses whatever key/
-     * URL is currently saved (the form must be saved first if the admin
-     * just typed a new key), calling the same verify_connection() the rest
-     * of the plugin relies on, so a green check here means sync will
-     * actually work, not just that the request format is accepted. */
+    /** AJAX: "تست اتصال" — resolves and shows the actually-connected
+     * chatbot's real name, not just a generic pass/fail, so a mistyped-but-
+     * technically-valid-looking chatbot ID doesn't read as "success". */
     public function ajax_test_connection(): void {
         check_ajax_referer('hamman_admin_ajax','nonce');
-        if (!current_user_can('manage_options')) wp_send_json_error(['message'=>'No permission'], 403);
+        if (!current_user_can('manage_options')) wp_send_json_error(['message'=>'دسترسی ندارید / No permission'], 403);
 
-        $client = new Hamman_Api_Client();
-        $ok = $client->verify_connection();
-        if ($ok) {
-            self::log('Connection test: success');
-            wp_send_json_success(['message'=>'OK']);
-        } else {
-            self::log('Connection test: failed');
-            wp_send_json_error(['message'=>'Failed']);
+        $name = (new Hamman_Api_Client())->get_connected_chatbot_name();
+        if (is_wp_error($name)) {
+            self::log('Connection test failed: ' . $name->get_error_message());
+            wp_send_json_error(['message' => $name->get_error_message()]);
         }
+        self::log("Connection test succeeded: connected to '{$name}'");
+        wp_send_json_success(['name' => $name]);
     }
 
-    /** AJAX: "پاک کردن کش" — clears the transients this plugin itself sets
-     * (sync results/errors) plus any object-cache entries under its group.
-     * There's no dedicated persistent query/response cache in this plugin
-     * beyond these transients, so this is the complete, honest scope of
-     * "clear cache" for it today. */
     public function ajax_clear_cache(): void {
         check_ajax_referer('hamman_admin_ajax','nonce');
-        if (!current_user_can('manage_options')) wp_send_json_error(['message'=>'No permission'], 403);
+        if (!current_user_can('manage_options')) wp_send_json_error(['message'=>'دسترسی ندارید / No permission'], 403);
 
         delete_transient('hamman_sync_results');
         delete_transient('hamman_settings_push_error');
+        delete_transient('hamman_webhook_secret_cache');
         wp_cache_flush_group('hamman');
         self::log('Cache cleared by admin');
         wp_send_json_success(['message'=>'OK']);
+    }
+
+    /** AJAX: fetches this chatbot's real webhook secret from the server
+     * (public schema tenants.settings — not stored locally at all anymore,
+     * so a customer can never see a stale copy). */
+    public function ajax_get_webhook_secret(): void {
+        check_ajax_referer('hamman_admin_ajax','nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error(['message'=>'دسترسی ندارید / No permission'], 403);
+
+        $secret = (new Hamman_Api_Client())->get_webhook_secret();
+        if (is_wp_error($secret)) wp_send_json_error(['message' => $secret->get_error_message()]);
+        wp_send_json_success(['secret' => $secret]);
+    }
+
+    /** AJAX: "تولید مجدد" — the old secret stops verifying immediately;
+     * requires explicit confirmation client-side since it can break
+     * in-flight webhook deliveries signed with the previous value. */
+    public function ajax_regenerate_webhook_secret(): void {
+        check_ajax_referer('hamman_admin_ajax','nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error(['message'=>'دسترسی ندارید / No permission'], 403);
+
+        $secret = (new Hamman_Api_Client())->regenerate_webhook_secret();
+        if (is_wp_error($secret)) wp_send_json_error(['message' => $secret->get_error_message()]);
+        // Otherwise the next outgoing product/page webhook would still sign
+        // with the now-invalid old secret for up to an hour — see
+        // send_webhook()'s transient cache.
+        delete_transient('hamman_webhook_secret_cache');
+        self::log('Webhook secret regenerated');
+        wp_send_json_success(['secret' => $secret]);
+    }
+
+    /** AJAX: fetches the current content/appearance settings from the
+     * server for the read-only display in the "ظاهر و متن‌ها" tab. */
+    public function ajax_get_widget_settings(): void {
+        check_ajax_referer('hamman_admin_ajax','nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error(['message'=>'دسترسی ندارید / No permission'], 403);
+
+        $chatbot_id = get_option('hamman_chatbot_id','');
+        if (empty($chatbot_id)) {
+            wp_send_json_error(['message' => 'ابتدا شناسه‌ی چت‌بات را در تب اتصال تنظیم کنید / Set the Chatbot ID in the Connection tab first']);
+        }
+        $client = new Hamman_Api_Client();
+        $r = $client->get_widget_settings_for_display($chatbot_id);
+        if (is_wp_error($r)) wp_send_json_error(['message' => $r->get_error_message()]);
+        wp_send_json_success($r);
+    }
+
+    /** AJAX: one-time push of this site's local content settings to the
+     * server — only relevant for a site that was on an older plugin
+     * version where these fields were still stored/edited locally.
+     * Requires the admin's explicit confirmation client-side since it can
+     * overwrite whatever's currently configured in the customer portal. */
+    public function ajax_migrate_to_server(): void {
+        check_ajax_referer('hamman_admin_ajax','nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error(['message'=>'دسترسی ندارید / No permission'], 403);
+
+        $chatbot_id = get_option('hamman_chatbot_id','');
+        if (empty($chatbot_id)) {
+            wp_send_json_error(['message' => 'ابتدا شناسه‌ی چت‌بات را در تب اتصال تنظیم کنید / Set the Chatbot ID in the Connection tab first']);
+        }
+
+        $payload = array_filter([
+            'ai_name'            => get_option('hamman_ai_name', null),
+            'chat_title'         => get_option('hamman_chat_title', null),
+            'welcome_text'       => get_option('hamman_welcome_text', null),
+            'input_placeholder'  => get_option('hamman_input_placeholder', null),
+            'system_instruction' => get_option('hamman_system_instruction', null),
+            'primary_color'      => get_option('hamman_primary_color', null),
+            'position'           => get_option('hamman_widget_position', null),
+            'avatar_url'         => get_option('hamman_avatar_url', null),
+        ], fn ($v) => $v !== null && $v !== '');
+        $qq = get_option('hamman_quick_questions', []);
+        if (is_array($qq) && !empty($qq)) $payload['quick_questions'] = $qq;
+
+        if (empty($payload)) {
+            wp_send_json_error(['message' => 'هیچ تنظیمات محلی‌ای برای انتقال پیدا نشد / No local settings found to migrate']);
+        }
+
+        $r = (new Hamman_Api_Client())->update_widget_settings($chatbot_id, $payload);
+        if (is_wp_error($r)) {
+            self::log('Migrate-to-server failed: ' . $r->get_error_message());
+            wp_send_json_error(['message' => $r->get_error_message()]);
+        }
+        self::log('Local content settings migrated to server');
+        wp_send_json_success(['message' => 'OK']);
+    }
+
+    /** AJAX: compares HAMMAN_VERSION against the server's advertised
+     * latest version (see config('hamman.wp_plugin.latest_version') on
+     * the Laravel side) — public endpoint, no API key required. */
+    public function ajax_check_version(): void {
+        check_ajax_referer('hamman_admin_ajax','nonce');
+        $api_url = rtrim(get_option('hamman_api_url', HAMMAN_API_BASE), '/');
+        $response = wp_remote_get($api_url . '/wp-plugin/latest-version', ['timeout' => 10]);
+        if (is_wp_error($response)) wp_send_json_error(['message' => $response->get_error_message()]);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+        $latest = $body['latest_version'] ?? null;
+        wp_send_json_success([
+            'current'         => HAMMAN_VERSION,
+            'latest'          => $latest,
+            'update_available' => $latest && version_compare($latest, HAMMAN_VERSION, '>'),
+        ]);
     }
 }
