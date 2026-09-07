@@ -19,6 +19,11 @@ python-ai-service/**/__pycache__/
 python-ai-service/**/*.pyc
 python-ai-service/.venv/
 
+# Node — only used for the WordPress plugin's widget test harness
+# (wordpress-plugin/hamman-ai-chatbot/tests/), installed fresh via `npm
+# install`, never a runtime dependency of the plugin itself.
+node_modules/
+
 # Editors / OS
 .DS_Store
 .idea/

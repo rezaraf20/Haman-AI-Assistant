@@ -84,7 +84,7 @@ class Hamman_Public {
             // responds. Must not be derived from $dir: the widget's on-page
             // corner and the chatbot's text direction are independent
             // settings (see hamman-widget.css's :host/data-position rules).
-            'position'    => 'bottom-right',
+            'position'    => get_option('hamman_widget_position','bottom-right'),
             'aiName'      => get_option('hamman_ai_name','AI BOT'),
             'chatTitle'   => get_option('hamman_chat_title','') ?: get_option('hamman_ai_name','AI BOT'),
             'placeholder' => get_option('hamman_input_placeholder','') ?: $l10n_defaults['placeholder'],
@@ -98,7 +98,8 @@ class Hamman_Public {
             // backend) — not hardcoded, so a customer's color-picker choice
             // and, later, a white-label plan's branding toggle both actually
             // take effect. These are only the pre-response fallback.
-            'primaryColor'     => '#1B3A6B',
+            'primaryColor'     => get_option('hamman_primary_color','#1B3A6B') ?: '#1B3A6B',
+            'avatarUrl'        => get_option('hamman_avatar_url',''),
             'poweredByEnabled' => true,
             'poweredByName'    => 'HamanTech',
             'poweredByUrl'     => 'https://hamantech.ir',

@@ -8,8 +8,12 @@ class Hamman_Sync_Manager {
 
     public function run_incremental_sync(): void {
         if (!$this->isReady()) return;
-        (new Hamman_Product_Sync($this->api()))->sync_recent($this->chatbotId());
-        (new Hamman_Page_Sync($this->api()))->sync_recent($this->chatbotId());
+        if (get_option('hamman_sync_products','1') === '1') {
+            (new Hamman_Product_Sync($this->api()))->sync_recent($this->chatbotId());
+        }
+        if (get_option('hamman_sync_pages','1') === '1') {
+            (new Hamman_Page_Sync($this->api()))->sync_recent($this->chatbotId());
+        }
     }
 
     public function run_full_sync(): array {
@@ -17,9 +21,17 @@ class Hamman_Sync_Manager {
         $cid     = $this->chatbotId();
         $api     = $this->api();
         $results = [];
-        $results['products'] = (new Hamman_Product_Sync($api))->sync_all($cid);
-        $results['pages']    = (new Hamman_Page_Sync($api))->sync_all($cid);
-        $results['faqs']     = (new Hamman_Faq_Sync($api))->sync_all($cid);
+        // Each type independently opt-out-able from the "همگام‌سازی" tab —
+        // a merchant with no WooCommerce products, or who doesn't want
+        // page content indexed, shouldn't have to sit through (and pay
+        // the embedding cost of) syncing it anyway.
+        if (get_option('hamman_sync_products','1') === '1') {
+            $results['products'] = (new Hamman_Product_Sync($api))->sync_all($cid);
+        }
+        if (get_option('hamman_sync_pages','1') === '1') {
+            $results['pages'] = (new Hamman_Page_Sync($api))->sync_all($cid);
+            $results['faqs']  = (new Hamman_Faq_Sync($api))->sync_all($cid);
+        }
         update_option( 'hamman_last_full_sync', time() );
         return $results;
     }

@@ -102,9 +102,18 @@
         }).join('') + '</div>';
     }
 
+    // Avatar is optional per chatbot (Appearance settings) — falls back to
+    // the plain emoji glyph on both the header and the floating button
+    // when unset, exactly like before this existed.
+    var avatarHeaderHtml = CFG.avatarUrl ? '<img id="hm-avatar-hdr" src="' + esc(CFG.avatarUrl) + '" alt="">' : '';
+    var avatarBtnHtml = CFG.avatarUrl
+        ? '<img id="hm-avatar-btn" src="' + esc(CFG.avatarUrl) + '" alt="">'
+        : '<span aria-hidden="true">💬</span>';
+
     w.innerHTML =
         '<div id="hm-box" role="dialog" aria-modal="true" aria-label="' + esc(CFG.i18n.dialogLabel) + '" aria-hidden="true">' +
             '<div id="hm-hdr">' +
+                avatarHeaderHtml +
                 '<div><h3>' + esc(CFG.chatTitle) + '</h3><span>' + esc(CFG.aiName) + '</span></div>' +
                 '<button id="hm-close" type="button" aria-label="' + esc(CFG.i18n.closeLabel) + '">✕</button>' +
             '</div>' +
@@ -117,7 +126,7 @@
             '<div id="hm-powered"></div>' +
         '</div>' +
         '<button id="hm-btn" type="button" aria-label="' + esc(CFG.i18n.openLabel) + '" aria-expanded="false">' +
-            '<span aria-hidden="true">💬</span>' +
+            avatarBtnHtml +
             '<span id="hm-unread-dot" aria-hidden="true"></span>' +
         '</button>';
 
@@ -144,6 +153,16 @@
     var isOpen = false;
     var unavailable = false;
     var historyLoaded = false;
+    // Whether init() has been called yet THIS page load — deliberately
+    // separate from convId. convId starts non-null the moment a returning
+    // visitor's persisted conversation is loaded from storage (see
+    // `var convId = persistedConvId` above), well before the widget is
+    // ever opened — a `!convId` guard on calling init() therefore skipped
+    // init() (and with it, both history loading AND the welcome message)
+    // for every returning visitor, since convId already looked "set" even
+    // though nothing had actually been fetched or rendered yet this
+    // pageview. This flag tracks the real thing that must only happen once.
+    var sessionInitStarted = false;
     var typingEl = null;
 
     // ── Scroll-to-bottom affordance ───────────────────────────────────
@@ -270,6 +289,13 @@
         if (wc.connection_error_message) CFG.connectionErrorMessage = wc.connection_error_message;
         if (wc.primary_color) { CFG.primaryColor = wc.primary_color; setThemeVars(wc.primary_color, w.getAttribute('dir')); }
         if (wc.position) { CFG.position = wc.position; hostEl.setAttribute('data-position', wc.position); }
+        if (wc.avatar_url && wc.avatar_url !== CFG.avatarUrl) {
+            CFG.avatarUrl = wc.avatar_url;
+            var hdrAvatar = root.getElementById('hm-avatar-hdr');
+            if (hdrAvatar) hdrAvatar.src = wc.avatar_url;
+            var btnAvatar = root.getElementById('hm-avatar-btn');
+            if (btnAvatar) btnAvatar.src = wc.avatar_url;
+        }
         if (typeof wc.powered_by_enabled !== 'undefined') CFG.poweredByEnabled = wc.powered_by_enabled;
         if (wc.powered_by_name) CFG.poweredByName = wc.powered_by_name;
         if (wc.powered_by_url) CFG.poweredByUrl = wc.powered_by_url;
@@ -284,6 +310,7 @@
     }
 
     function init() {
+        sessionInitStarted = true;
         fetch(H.apiUrl + '/chat/session', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -487,7 +514,7 @@
         unreadDot.classList.remove('hm-visible');
         lockBodyScroll(true);
         lastFocused = document.activeElement;
-        if (!convId && !unavailable) init();
+        if (!sessionInitStarted && !unavailable) init();
         setTimeout(function () { inp.focus(); handleViewportResize(); }, 0);
     }
     function closeWidget() {

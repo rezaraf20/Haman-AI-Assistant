@@ -39,6 +39,11 @@ class ChatbotController extends BaseApiController {
 
     public function updateWidgetSettings(Request $req, string $id): JsonResponse {
         $chatbot = Chatbot::findOrFail($id);
+        // Every field this method's caller (the WordPress plugin's settings
+        // page) can send must be listed here with a rule — $request->
+        // validate() silently drops anything that isn't (see SyncController
+        // ::syncProducts()'s identical fix for the real incident this
+        // caused there).
         $d = $req->validate([
             'auto_reply_enabled'        => 'sometimes|boolean',
             'ai_name'                   => 'sometimes|nullable|string|max:100',
@@ -51,6 +56,14 @@ class ChatbotController extends BaseApiController {
             'quick_questions'           => 'sometimes|array|max:200',
             'quick_questions.*.question'=> 'required_with:quick_questions|string|max:300',
             'quick_questions.*.answer'  => 'required_with:quick_questions|string|max:3000',
+            'fallback_response'         => 'sometimes|nullable|string|max:2000',
+            'primary_color'             => 'sometimes|nullable|string|max:20',
+            'position'                  => 'sometimes|nullable|in:bottom-left,bottom-right',
+            'avatar_url'                => 'sometimes|nullable|string|max:1000',
+            'lead_capture_enabled'      => 'sometimes|boolean',
+            'lead_capture_prompt'       => 'sometimes|nullable|string|max:1000',
+            'lead_capture_thanks'       => 'sometimes|nullable|string|max:1000',
+            'lead_capture_invalid'      => 'sometimes|nullable|string|max:1000',
         ]);
 
         $widgetConfig = array_merge($chatbot->widget_config ?? [], array_filter([
@@ -59,15 +72,25 @@ class ChatbotController extends BaseApiController {
             'input_placeholder'         => $d['input_placeholder'] ?? null,
             'rate_limit_max_messages'   => $d['rate_limit_max_messages'] ?? null,
             'rate_limit_block_minutes'  => $d['rate_limit_block_minutes'] ?? null,
+            'primary_color'             => $d['primary_color'] ?? null,
+            'position'                  => $d['position'] ?? null,
+            'avatar_url'                => $d['avatar_url'] ?? null,
+            'lead_capture_prompt'       => $d['lead_capture_prompt'] ?? null,
+            'lead_capture_thanks'       => $d['lead_capture_thanks'] ?? null,
+            'lead_capture_invalid'      => $d['lead_capture_invalid'] ?? null,
         ], fn($v) => $v !== null));
         if (array_key_exists('quick_questions', $d)) {
             $widgetConfig['quick_questions'] = $d['quick_questions'];
+        }
+        if (array_key_exists('lead_capture_enabled', $d)) {
+            $widgetConfig['lead_capture_enabled'] = $d['lead_capture_enabled'];
         }
 
         $update = ['widget_config' => $widgetConfig];
         if (array_key_exists('auto_reply_enabled', $d)) $update['is_active'] = $d['auto_reply_enabled'];
         if (array_key_exists('system_instruction', $d)) $update['system_prompt'] = $d['system_instruction'];
         if (array_key_exists('welcome_text', $d))        $update['welcome_message'] = $d['welcome_text'];
+        if (array_key_exists('fallback_response', $d))   $update['fallback_response'] = $d['fallback_response'];
 
         $chatbot->update($update);
         return $this->ok($chatbot->fresh());

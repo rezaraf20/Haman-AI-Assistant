@@ -1,1 +1,47 @@
 .wrap h1 { color: #1B3A6B; }
+
+.hm-settings-wrap .hm-tab-en {
+    font-size: 11px;
+    opacity: .6;
+    display: block;
+}
+
+.hm-settings-wrap .hm-tab-desc {
+    max-width: 700px;
+    margin: 16px 0;
+}
+
+.hm-settings-wrap .hm-tab-panel {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-top: none;
+    padding: 20px;
+}
+
+.hm-color-field {
+    width: 120px;
+}
+
+#hm-test-connection-result.hm-test-ok { color: #1a7a1a; margin-inline-start: 8px; }
+#hm-test-connection-result.hm-test-fail { color: #c00; margin-inline-start: 8px; }
+#hm-clear-cache-result { margin-inline-start: 8px; }
+
+.hm-log-box {
+    max-height: 400px;
+    overflow-y: auto;
+    background: #f6f7f7;
+    border: 1px solid #ccd0d4;
+    padding: 8px;
+    font-family: monospace;
+    font-size: 12px;
+}
+
+.hm-log-entry {
+    padding: 4px 0;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.hm-log-time {
+    color: #666;
+    margin-inline-end: 10px;
+}

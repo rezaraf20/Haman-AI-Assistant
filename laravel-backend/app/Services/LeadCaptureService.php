@@ -77,6 +77,10 @@ class LeadCaptureService {
      * (including a plain question re-asked instead of contact info, which
      * is exactly the case that must fall through to lead_capture_invalid
      * rather than silently being treated as a valid contact).
+     *
+     * Only for the two-turn flow's second turn, where the *entire* message
+     * is expected to be contact info — see extractContact() for scanning a
+     * free-form message that merely contains one.
      */
     public function parseContact(string $input): ?array {
         $input = trim($input);
@@ -98,5 +102,88 @@ class LeadCaptureService {
         }
 
         return null;
+    }
+
+    /**
+     * Scans a free-form message for a phone number or email ANYWHERE
+     * within it — a customer volunteering "شمارمو ثبت کن، تماس بگیرید
+     * 09371234567" mid-sentence, never having been asked, is the strongest
+     * lead signal there is; letting that sentence fall through to RAG
+     * instead (which is what happened before this existed — the bot
+     * literally answered "the number ... isn't in our information") is
+     * exactly the bug this fixes.
+     *
+     * Deliberately stricter than parseContact() on the Iranian-mobile
+     * pattern: an explicit prefix (0 / +98 / 0098) is required here, since
+     * scanning arbitrary free text for a bare 9-digit run starting with 9
+     * risks matching an unrelated number (an order code, a price) inside
+     * an otherwise ordinary sentence — a risk parseContact() doesn't have,
+     * because there the *entire* message is already expected to be contact
+     * info by the time it's called.
+     */
+    public function extractContact(string $message): ?array {
+        if (preg_match('/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/', $message, $m)) {
+            return ['contact' => $m[0], 'contact_type' => 'email'];
+        }
+
+        if (preg_match('/(?:\+98|0098|0)[\s\-]?9(?:[\s\-]?\d){9}/', $message, $m)) {
+            $digits = preg_replace('/[\s\-]/', '', $m[0]);
+            $normalized = '0' . preg_replace('/^(?:\+98|0098|0)/', '', $digits);
+            return ['contact' => $normalized, 'contact_type' => 'phone'];
+        }
+
+        if (preg_match('/\+[1-9]\d{7,14}/', $message, $m)) {
+            return ['contact' => $m[0], 'contact_type' => 'phone'];
+        }
+
+        return null;
+    }
+
+    /**
+     * The customer volunteers contact info without ever being asked
+     * (pending_lead_question was never set) — captured immediately,
+     * never routed through RAG. Unlike handleContactAttempt(), there's no
+     * pending_lead_question to reuse as the sales-relevant "question", so
+     * $recentHistory (the conversation history already built by
+     * ChatService::prepare(), current message included) is used to build
+     * one instead.
+     *
+     * @return array{response: string, finish_reason: string, lead: ?Lead}
+     */
+    public function handleVolunteeredContact(Conversation $conv, Chatbot $chatbot, string $message, array $parsed, array $recentHistory): array {
+        $texts = array_merge(WidgetDefaults::forLanguage($chatbot->language), $chatbot->widget_config ?? []);
+
+        $lead = Lead::create([
+            'conversation_id' => $conv->id,
+            'chatbot_id'      => $conv->chatbot_id,
+            'contact'         => $parsed['contact'],
+            'contact_type'    => $parsed['contact_type'],
+            'question'        => $this->summarizeRecentHistory($recentHistory) ?? $message,
+            'status'          => 'new',
+        ]);
+
+        return [
+            'response'      => $texts['lead_capture_thanks'],
+            'finish_reason' => 'lead_captured',
+            'lead'          => $lead,
+        ];
+    }
+
+    /**
+     * Best-effort context for whoever follows up on the lead, when there's
+     * no pending_lead_question to attach — the last few prior *user* turns,
+     * concatenated. Not an LLM summary: this class has no Python/LLM
+     * involvement by design (see the class docstring), and a cheap,
+     * synchronous concatenation is good enough to tell a salesperson what
+     * the conversation was about. Excludes the current message itself
+     * (already stored verbatim as $message / the fallback below it).
+     */
+    private function summarizeRecentHistory(array $history): ?string {
+        $userTurns = array_values(array_filter($history, fn ($h) => ($h['role'] ?? null) === 'user'));
+        array_pop($userTurns); // the just-created current message — not "prior" context
+        $recent = array_slice($userTurns, -3);
+        $texts = array_filter(array_map(fn ($h) => trim($h['content'] ?? ''), $recent));
+        $joined = trim(implode(' / ', $texts));
+        return $joined !== '' ? $joined : null;
     }
 }

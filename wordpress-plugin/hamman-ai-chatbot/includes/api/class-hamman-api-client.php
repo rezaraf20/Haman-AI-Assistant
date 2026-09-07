@@ -72,7 +72,10 @@ class Hamman_Api_Client {
         }
 
         $response = wp_remote_request( $this->base_url . $path, $args );
-        if ( is_wp_error( $response ) ) return $response;
+        if ( is_wp_error( $response ) ) {
+            if ( class_exists( 'Hamman_Admin' ) ) Hamman_Admin::log( "{$method} {$path} failed: " . $response->get_error_message() );
+            return $response;
+        }
 
         $code = wp_remote_retrieve_response_code( $response );
         $body = json_decode( wp_remote_retrieve_body( $response ), true );
@@ -81,6 +84,7 @@ class Hamman_Api_Client {
             if ( ! empty( $body['errors'] ) && is_array( $body['errors'] ) ) {
                 $msg .= ': ' . wp_json_encode( $body['errors'] );
             }
+            if ( class_exists( 'Hamman_Admin' ) ) Hamman_Admin::log( "{$method} {$path} failed: {$msg}" );
             return new WP_Error( "api_{$code}", $msg );
         }
         return $body ?? [];
