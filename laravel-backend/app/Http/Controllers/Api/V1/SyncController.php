@@ -40,6 +40,9 @@ class SyncController extends BaseApiController {
             'products.*.categories.*.name'  => 'nullable|string',
             'products.*.tags'               => 'nullable|array',
             'products.*.attributes'         => 'nullable|array',
+            'products.*.attachments'        => 'nullable|array|max:20',
+            'products.*.attachments.*.url'  => 'required_with:products.*.attachments|string',
+            'products.*.attachments.*.name' => 'nullable|string',
         ]);
         $t = app('current_tenant');
         return $this->accepted($this->jobArr($this->svc->syncProducts($d['chatbot_id'], $d['products'], $t->schema_name)));

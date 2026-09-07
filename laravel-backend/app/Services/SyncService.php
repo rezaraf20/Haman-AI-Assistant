@@ -48,6 +48,7 @@ class SyncService {
                 if (in_array($outcome, ['new','updated'], true)) {
                     EmbedDocumentJob::dispatch($doc->id, $chatbotId, $schema);
                 }
+                $this->syncAttachments($chatbotId, (int)$p['id'], $p['name'], $p['attachments']??[], $schema);
                 $counts[$outcome]++;
             } catch (\Throwable $e) {
                 $counts['failed']++;
@@ -56,6 +57,51 @@ class SyncService {
         }
         $job->update(['status'=>$counts['failed']>0&&($counts['new']+$counts['updated']+$counts['skipped'])===0?'failed':'completed','items_processed'=>$counts['new']+$counts['updated']+$counts['skipped'],'items_failed'=>$counts['failed'],'error_log'=>$errors,'completed_at'=>now(),'result'=>$counts]);
         return $job;
+    }
+
+    /**
+     * Each PDF attachment (a WordPress media file attached to the product
+     * post, or a PDF link found inside its description — see
+     * class-hamman-product-sync.php's product_to_array()) becomes its own
+     * document, one per distinct URL. raw_content is deliberately left
+     * empty here: pdf_service.py (Python) downloads and extracts the
+     * actual text at embed time, since that's where the extraction
+     * library lives — this method only registers "this file exists and
+     * belongs to this product" and dispatches the same EmbedDocumentJob
+     * every other document type uses.
+     *
+     * Known limitation: because raw_content never changes, upsertDoc()'s
+     * unchanged-content-hash skip means a file replaced at the *same* URL
+     * is never re-embedded — re-syncing only picks up a genuinely new URL.
+     * Not solved here; out of scope for what was asked.
+     */
+    private function syncAttachments(string $chatbotId, int $productId, string $productName, array $attachments, string $schema): void {
+        foreach ($attachments as $att) {
+            $url = $att['url'] ?? null;
+            if (!$url) continue;
+            try {
+                ['document'=>$doc, 'outcome'=>$outcome] = $this->upsertDoc([
+                    'chatbot_id'  => $chatbotId,
+                    'source_type' => 'product_attachment',
+                    'external_id' => 'pdf_'.md5($url),
+                    'title'       => $att['name'] ?? (basename(parse_url($url, PHP_URL_PATH) ?: '') ?: $url),
+                    'source_url'  => $url,
+                    'raw_content' => '',
+                    'metadata'    => [
+                        'url'          => $url,
+                        'product_id'   => $productId,
+                        'product_name' => $productName,
+                        'type'         => 'attachment',
+                    ],
+                ]);
+                if (in_array($outcome, ['new','updated'], true)) {
+                    EmbedDocumentJob::dispatch($doc->id, $chatbotId, $schema);
+                }
+            } catch (\Throwable $e) {
+                // Best-effort per attachment — one bad URL must not fail
+                // the product sync it's attached to.
+            }
+        }
     }
 
     public function syncPages(string $chatbotId, array $pages, string $schema): SyncJob {

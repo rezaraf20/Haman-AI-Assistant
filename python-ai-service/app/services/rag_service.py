@@ -36,7 +36,12 @@ GROUNDING_RULES = (
     "If the business's exact name isn't given to you (either below or in the context), "
     "never invent or guess one — say you don't know its exact name rather than naming "
     "any company, including anything that merely looks like a name in the context "
-    "(a theme, template, or internal system label is not the business's name)."
+    "(a theme, template, or internal system label is not the business's name).\n\n"
+    "When a source is marked with a page number (e.g. '[Source 2] Datasheet.pdf "
+    "(page 4)'), this is a technical document — for questions answered from it, name "
+    "the source file and page number in your answer (e.g. 'according to Datasheet.pdf, "
+    "page 4, ...'). For this kind of question, citing exactly where the answer came "
+    "from matters as much as the answer itself."
 )
 DEFAULT_SYSTEM = GROUNDING_RULES
 
@@ -63,7 +68,11 @@ GROUNDING_RULES_FA = (
     "خود این کسب‌وکار ارائه می‌دهد برگردان.\n\n"
     "اگر نام دقیق این کسب‌وکار در ادامه یا در زمینه مشخص نشده، هرگز نام هیچ شرکتی را نساز — حتی اگر "
     "چیزی در زمینه شبیه یک اسم به نظر برسد (نام یک قالب، افزونه یا برچسب داخلی سیستم، نام این "
-    "کسب‌وکار نیست) — به‌جای آن صادقانه بگو نام دقیق آن را نمی‌دانی."
+    "کسب‌وکار نیست) — به‌جای آن صادقانه بگو نام دقیق آن را نمی‌دانی.\n\n"
+    "اگر یک منبع شماره صفحه داشته باشد (مثلاً «[Source 2] Datasheet.pdf (page 4)»)، یعنی یک سند "
+    "فنی است — برای سوالاتی که از آن پاسخ داده می‌شود، نام فایل و شماره صفحه را در پاسخ خودت بیاور "
+    "(مثلاً «طبق Datasheet.pdf، صفحه ۴، ...»). برای این نوع سوال، ارجاع دقیق به منبع به‌اندازه‌ی "
+    "خود پاسخ اهمیت دارد."
 )
 
 
@@ -871,7 +880,8 @@ async def run_rag_pipeline_stream(
     for i, chunk in enumerate(chunks, 1):
         meta = chunk.get("metadata", {})
         title = meta.get("title", "")
-        header = f"[Source {i}]" + (f" {title}" if title else "")
+        page = meta.get("page")
+        header = f"[Source {i}]" + (f" {title}" if title else "") + (f" (page {page})" if page else "")
         context_parts.append(f"{header}\n{chunk['content']}")
     context = "\n\n---\n\n".join(context_parts)
 
@@ -908,6 +918,11 @@ async def run_rag_pipeline_stream(
         if m.get("title"): src["title"] = m["title"]
         if m.get("url"): src["url"] = m["url"]
         if m.get("type"): src["type"] = m["type"]
+        # Structured page number — the reliable half of citation. Prose in
+        # the answer may or may not mention it (see the grounding-rules
+        # clause below), but the widget can always show "file, page N" from
+        # this regardless of what the model actually wrote.
+        if m.get("page"): src["page"] = m["page"]
         if src: sources.append(src)
 
     full_text = ""
@@ -1017,7 +1032,8 @@ async def run_rag_pipeline(
     for i, chunk in enumerate(chunks, 1):
         meta = chunk.get("metadata", {})
         title = meta.get("title", "")
-        header = f"[Source {i}]" + (f" {title}" if title else "")
+        page = meta.get("page")
+        header = f"[Source {i}]" + (f" {title}" if title else "") + (f" (page {page})" if page else "")
         context_parts.append(f"{header}\n{chunk['content']}")
     context = "\n\n---\n\n".join(context_parts)
 
@@ -1071,6 +1087,11 @@ async def run_rag_pipeline(
         if m.get("title"): src["title"] = m["title"]
         if m.get("url"): src["url"] = m["url"]
         if m.get("type"): src["type"] = m["type"]
+        # Structured page number — the reliable half of citation. Prose in
+        # the answer may or may not mention it (see the grounding-rules
+        # clause below), but the widget can always show "file, page N" from
+        # this regardless of what the model actually wrote.
+        if m.get("page"): src["page"] = m["page"]
         if src: sources.append(src)
 
     total_latency_ms = int((time.time() - start) * 1000)
