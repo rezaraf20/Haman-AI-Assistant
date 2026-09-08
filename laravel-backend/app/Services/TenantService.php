@@ -402,7 +402,7 @@ class TenantService
                 notification_settings JSONB NOT NULL DEFAULT '{}',
                 -- Which tool-registry tools (see python-ai-service/app/
                 -- services/tools/registry.py) this chatbot may call, e.g.
-                -- a JSON array containing check_product_availability.
+                -- a JSON array containing e.g. get_product_availability.
                 -- Empty by default — opt-in per chatbot, same posture as
                 -- lead_capture_enabled:
                 -- every existing chatbot keeps today's retrieval-only

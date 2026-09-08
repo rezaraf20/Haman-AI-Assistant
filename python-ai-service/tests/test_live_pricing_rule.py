@@ -1,0 +1,56 @@
+"""
+The live stock/price/variant tools (see app/services/tools/product_tools.py)
+deliberately never fall back to the last-synced index on failure — a wrong
+price is the worst mistake a shop's bot can make. But sys_p already
+contains the regular retrieved CONTEXT (which can itself mention an old
+price, e.g. from a synced product description or a datasheet example) by
+the time the tool-calling call runs, so the model must be told explicitly
+never to answer a price/stock/variant question from that context and to
+use the live tool instead. This tests _live_pricing_rule() directly, the
+same "verify the prompt text, not an LLM's actual output" approach used by
+test_grounding_no_fabricated_claims.py.
+"""
+import unittest
+
+from app.services.rag_service import _live_pricing_rule
+
+
+class LivePricingRuleTest(unittest.TestCase):
+    def test_absent_when_no_tools_enabled(self):
+        self.assertEqual(_live_pricing_rule(None, is_fa=False), "")
+        self.assertEqual(_live_pricing_rule([], is_fa=False), "")
+
+    def test_absent_when_enabled_tools_has_no_pricing_tool(self):
+        self.assertEqual(_live_pricing_rule(["some_other_tool"], is_fa=False), "")
+
+    def test_present_when_get_product_availability_enabled(self):
+        rule = _live_pricing_rule(["get_product_availability"], is_fa=False)
+        self.assertIn("Never state a price", rule)
+
+    def test_present_when_get_product_variants_enabled(self):
+        rule = _live_pricing_rule(["get_product_variants"], is_fa=False)
+        self.assertNotEqual(rule, "")
+
+    def test_present_when_search_products_enabled(self):
+        rule = _live_pricing_rule(["search_products"], is_fa=False)
+        self.assertNotEqual(rule, "")
+
+    def test_english_rule_forbids_stating_price_from_context(self):
+        rule = _live_pricing_rule(["get_product_availability"], is_fa=False)
+        self.assertIn("CONTEXT above", rule)
+        self.assertIn("live/current data", rule)
+        self.assertIn("product_url", rule)
+
+    def test_persian_rule_forbids_stating_price_from_context(self):
+        rule = _live_pricing_rule(["get_product_availability"], is_fa=True)
+        self.assertIn("هرگز قیمت", rule)
+        self.assertIn("زنده و", rule)
+
+    def test_language_selection_follows_is_fa_flag_not_tool_name(self):
+        en_rule = _live_pricing_rule(["get_product_availability"], is_fa=False)
+        fa_rule = _live_pricing_rule(["get_product_availability"], is_fa=True)
+        self.assertNotEqual(en_rule, fa_rule)
+
+
+if __name__ == "__main__":
+    unittest.main()

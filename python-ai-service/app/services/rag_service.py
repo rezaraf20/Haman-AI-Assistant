@@ -162,6 +162,48 @@ def _business_name_rule(business_name: Optional[str], is_fa: bool) -> str:
     return f"\n\nThis business's name is \"{business_name}\". Never use any other name for it, and never state any other company's name as its own."
 
 
+# Names from tools/product_tools.py — a chatbot enabling any of these has
+# live pricing/stock capability, so the model must be told never to answer
+# a price/stock/variant question from the (possibly stale) retrieved
+# CONTEXT above and to use the tool instead. Checked by name rather than
+# just "enabled_tools is non-empty" so a future non-pricing tool doesn't
+# silently pull in a rule that doesn't apply to it.
+_PRICING_TOOL_NAMES = {"get_product_availability", "get_product_variants", "search_products"}
+
+
+def _live_pricing_rule(enabled_tools: Optional[List[str]], is_fa: bool) -> str:
+    """A wrong price is the worst mistake a shop's bot can make — worse
+    than no answer. This rule exists specifically because sys_p already
+    contains the regular retrieved CONTEXT (which may itself mention an
+    old price, e.g. from a synced product description or a datasheet
+    example) by the time the tool-calling call runs, so the model must be
+    told explicitly which source wins."""
+    if not enabled_tools or not (_PRICING_TOOL_NAMES & set(enabled_tools)):
+        return ""
+    if is_fa:
+        return (
+            "\n\nقیمت و موجودی محصولات این کسب‌وکار ممکن است در هر لحظه تغییر کند — زمینه‌ی (context) "
+            "بالا ممکن است شامل قیمت‌های قدیمی باشد. هرگز قیمت، وضعیت موجودی یا در دسترس بودن را از "
+            "زمینه‌ی بالا بیان نکن. برای هر سوال درباره‌ی قیمت، موجودی، در دسترس بودن یا تنوع محصول "
+            "(رنگ/سایز)، باید از ابزار زنده‌ی مناسب استفاده کنی و فقط بر اساس نتیجه‌ی همان ابزار پاسخ "
+            "بدهی. وقتی از نتیجه‌ی یک ابزار زنده استفاده می‌کنی، صراحتاً به کاربر بگو این اطلاعات زنده و "
+            "لحظه‌ای است. اگر ابزار زنده در دسترس نبود یا خطا داد، هرگز عدد قدیمی حدس نزن یا تکرار نکن — "
+            "صادقانه بگو در حال حاضر نمی‌توانی قیمت یا موجودی دقیق را تأیید کنی، و اگر ابزار لینک صفحه‌ی "
+            "محصول (product_url) داد از همان استفاده کن، وگرنه بگو مستقیم به فروشگاه مراجعه کند."
+        )
+    return (
+        "\n\nThis business's product prices and stock levels can change at any time — the "
+        "CONTEXT above may contain outdated prices, if any. Never state a price, stock "
+        "status, or availability from the CONTEXT above. For any question about price, "
+        "stock, availability, or product variants (color/size), you must call the "
+        "appropriate live tool and answer using only its result. When you answer using a "
+        "live tool's result, explicitly tell the user this is live/current data. If the "
+        "live tool is unavailable or fails, never guess or reuse an old number — say you "
+        "can't confirm the exact price or availability right now, and if the tool gave a "
+        "product_url, share that link; otherwise tell them to check the shop directly."
+    )
+
+
 def _grounding_reminder(is_fa: bool) -> str:
     """A short, final restatement of the highest-risk rules, placed right
     before the user's question — the repetition closest to the generated
@@ -961,6 +1003,7 @@ async def run_rag_pipeline_stream(
     is_fa_question = _looks_persian(query)
     sys_p = _grounding_rules_for(query)
     sys_p += _business_name_rule(business_name, is_fa_question)
+    sys_p += _live_pricing_rule(enabled_tools, is_fa_question)
     if system_prompt:
         sys_p += f"\n\n{system_prompt}"
     if context:
@@ -1140,6 +1183,7 @@ async def run_rag_pipeline(
     is_fa_question = _looks_persian(query)
     sys_p = _grounding_rules_for(query)
     sys_p += _business_name_rule(business_name, is_fa_question)
+    sys_p += _live_pricing_rule(enabled_tools, is_fa_question)
     if system_prompt:
         sys_p += f"\n\n{system_prompt}"
     if context:

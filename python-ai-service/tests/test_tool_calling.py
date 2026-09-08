@@ -5,16 +5,17 @@ and app/services/tools/). Covers the explicit acceptance criteria:
   - a tool_called conversation_event being logged with tool/args/result/latency
   - a manipulated tool-call argument (chatbot_id/schema_name/tenant_id) never
     reaching a tool handler — the real server-side chatbot_id always wins
-  - the WordPress site being unreachable degrading to a graceful fallback,
-    never a crash
+  - the WordPress site being unreachable degrading to a graceful fallback
+    that never states a stale price, never a crash
 
 Live verification (a real conversation_events row from an actual chat
-request, and the real check_product_availability tool hitting a real —
-or genuinely offline — WordPress site) is done separately against the
-deployed server per the task's acceptance criteria; this file verifies the
-code's own logic deterministically, the same division of labor as every
-other test file in this suite.
+request, and the real live-data tools hitting a real — or genuinely
+offline — WordPress site) is done separately against the deployed server
+per the task's acceptance criteria; this file verifies the code's own
+logic deterministically, the same division of labor as every other test
+file in this suite.
 """
+import json as _json
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -27,34 +28,42 @@ class RegistryTest(unittest.TestCase):
     def test_unregistered_name_is_silently_ignored(self):
         self.assertEqual(get_enabled_tools(["does_not_exist"]), [])
 
+    def test_all_three_live_tools_are_registered(self):
+        for name in ("get_product_availability", "get_product_variants", "search_products"):
+            self.assertIn(name, _REGISTRY)
+
     def test_registered_tool_is_returned_when_named(self):
-        self.assertIn("check_product_availability", _REGISTRY)
-        tools = get_enabled_tools(["check_product_availability"])
+        tools = get_enabled_tools(["get_product_availability"])
         self.assertEqual(len(tools), 1)
-        self.assertEqual(tools[0].name, "check_product_availability")
+        self.assertEqual(tools[0].name, "get_product_availability")
 
     def test_openai_schema_shape(self):
-        tools = get_enabled_tools(["check_product_availability"])
+        tools = get_enabled_tools(["get_product_availability", "get_product_variants", "search_products"])
         schema = to_openai_schema(tools)
-        self.assertEqual(schema[0]["type"], "function")
-        self.assertEqual(schema[0]["function"]["name"], "check_product_availability")
-        self.assertIn("parameters", schema[0]["function"])
-        # chatbot_id/schema_name must never be exposed to the model as
-        # something it could supply — the real security boundary.
-        self.assertNotIn("chatbot_id", schema[0]["function"]["parameters"]["properties"])
-        self.assertNotIn("schema_name", schema[0]["function"]["parameters"]["properties"])
+        names = {f["function"]["name"] for f in schema}
+        self.assertEqual(names, {"get_product_availability", "get_product_variants", "search_products"})
+        for f in schema:
+            self.assertEqual(f["type"], "function")
+            # chatbot_id/schema_name must never be exposed to the model as
+            # something it could supply — the real security boundary.
+            self.assertNotIn("chatbot_id", f["function"]["parameters"]["properties"])
+            self.assertNotIn("schema_name", f["function"]["parameters"]["properties"])
 
 
-class ProductToolsSecurityTest(unittest.TestCase):
+class ProductToolsValidationTest(unittest.TestCase):
+    """Every identifier/filter these tools accept must be validated before
+    it goes anywhere near a URL, an HMAC payload, or a live query — never
+    merely escaped."""
+
     def test_sku_with_sql_metacharacters_is_rejected(self):
         db = MagicMock()
-        result = product_tools.check_product_availability(db, "chatbot-1", "'; DROP TABLE products; --")
+        result = product_tools.get_product_availability(db, "chatbot-1", sku="'; DROP TABLE products; --")
         self.assertIn("error", result)
         db.execute.assert_not_called()
 
     def test_sku_with_path_traversal_is_rejected(self):
         db = MagicMock()
-        result = product_tools.check_product_availability(db, "chatbot-1", "../../etc/passwd")
+        result = product_tools.get_product_availability(db, "chatbot-1", sku="../../etc/passwd")
         self.assertIn("error", result)
 
     def test_normal_sku_passes_validation(self):
@@ -62,85 +71,174 @@ class ProductToolsSecurityTest(unittest.TestCase):
         self.assertTrue(product_tools._SAFE_SKU_RE.match("LM358-N"))
         self.assertFalse(product_tools._SAFE_SKU_RE.match("LM358<script>"))
 
-
-class ProductToolsWordPressUnreachableTest(unittest.TestCase):
-    """Acceptance criterion: when the WordPress site is unreachable, the
-    response must degrade gracefully, never crash or propagate an exception."""
-
-    def test_no_site_on_file_falls_back_to_index_without_crashing(self):
+    def test_neither_sku_nor_product_id_is_an_error(self):
         db = MagicMock()
-        db.execute.return_value.fetchone.side_effect = [None, None]  # _resolve_site, then _fallback_from_index
-        result = product_tools.check_product_availability(db, "chatbot-1", "LM358N")
-        self.assertFalse(result.get("live"))
-        self.assertIn("note", result)
+        result = product_tools.get_product_availability(db, "chatbot-1")
+        self.assertIn("error", result)
+        db.execute.assert_not_called()
 
-    def test_live_query_timeout_falls_back_without_crashing(self):
+    def test_non_numeric_product_id_is_rejected(self):
+        db = MagicMock()
+        result = product_tools.get_product_availability(db, "chatbot-1", product_id="1 OR 1=1")
+        self.assertIn("error", result)
+        db.execute.assert_not_called()
+
+    def test_negative_product_id_is_rejected(self):
+        db = MagicMock()
+        result = product_tools.get_product_variants(db, "chatbot-1", product_id=-5)
+        self.assertIn("error", result)
+        db.execute.assert_not_called()
+
+    def test_search_query_over_200_chars_is_truncated_not_rejected(self):
         db = MagicMock()
         site_row = MagicMock(primary_domain="example.test", webhook_secret="s3cret")
-        product_row = None
-        db.execute.return_value.fetchone.side_effect = [site_row, product_row]
+        db.execute.return_value.fetchone.return_value = site_row
+
+        fake_response = MagicMock(status_code=200)
+        fake_response.json.return_value = {"count": 0, "currency": "IRT", "results": []}
+        with patch("app.services.tools.product_tools._requests.post", return_value=fake_response) as mock_post:
+            product_tools.search_products(db, "chatbot-1", query="x" * 500)
+
+        sent_body = mock_post.call_args.kwargs["data"].decode()
+        sent_query = _json.loads(sent_body)["query"]
+        self.assertEqual(len(sent_query), 200)
+
+    def test_invalid_category_filter_is_rejected(self):
+        db = MagicMock()
+        result = product_tools.search_products(db, "chatbot-1", category="a" * 200)
+        self.assertIn("error", result)
+        db.execute.assert_not_called()
+
+
+class ProductToolsPricingSafetyTest(unittest.TestCase):
+    """The core safety property of these three tools: on ANY failure to
+    reach the live store, they must never return a price/stock figure at
+    all — there's nothing left for the model to misreport, only a note
+    telling it to say so and (when knowable) a product_url built from the
+    numeric ID."""
+
+    def test_no_site_on_file_returns_no_price_field(self):
+        db = MagicMock()
+        db.execute.return_value.fetchone.return_value = None
+        result = product_tools.get_product_availability(db, "chatbot-1", sku="LM358N")
+        self.assertFalse(result["live"])
+        self.assertNotIn("price", result)
+        self.assertIn("note", result)
+        self.assertIsNone(result["product_url"])
+
+    def test_no_site_on_file_but_product_id_known_still_builds_no_url(self):
+        # No domain is known at all in this case, so even a known numeric
+        # ID can't be turned into a URL — nothing to link to yet.
+        db = MagicMock()
+        db.execute.return_value.fetchone.return_value = None
+        result = product_tools.get_product_availability(db, "chatbot-1", product_id=42)
+        self.assertIsNone(result["product_url"])
+
+    def test_live_query_timeout_returns_no_price_field(self):
+        db = MagicMock()
+        site_row = MagicMock(primary_domain="example.test", webhook_secret="s3cret")
+        db.execute.return_value.fetchone.return_value = site_row
 
         with patch("app.services.tools.product_tools._requests.post", side_effect=product_tools._requests.RequestException("timed out")):
-            result = product_tools.check_product_availability(db, "chatbot-1", "LM358N")
+            result = product_tools.get_product_availability(db, "chatbot-1", product_id=42)
 
-        self.assertFalse(result.get("live"))
+        self.assertFalse(result["live"])
+        self.assertNotIn("price", result)
+        self.assertNotIn("stock_status", result)
         self.assertIn("note", result)
-        self.assertFalse(result.get("found"))
+        # product_id WAS known (the caller supplied it) even though the live
+        # call failed, so a product_url should still be buildable.
+        self.assertEqual(result["product_url"], "https://example.test/?p=42")
 
-    def test_live_query_non_200_falls_back_without_crashing(self):
+    def test_live_query_non_200_returns_no_price_field(self):
         db = MagicMock()
         site_row = MagicMock(primary_domain="example.test", webhook_secret="s3cret")
-        db.execute.return_value.fetchone.side_effect = [site_row, None]
+        db.execute.return_value.fetchone.return_value = site_row
 
         fake_response = MagicMock(status_code=500, text="Internal Server Error")
         with patch("app.services.tools.product_tools._requests.post", return_value=fake_response):
-            result = product_tools.check_product_availability(db, "chatbot-1", "LM358N")
+            result = product_tools.get_product_availability(db, "chatbot-1", sku="LM358N")
 
-        self.assertFalse(result.get("live"))
+        self.assertFalse(result["live"])
+        self.assertNotIn("price", result)
 
-    def test_index_fallback_with_a_found_row_returns_json_serializable_price(self):
-        """Regression: products.price is a Postgres NUMERIC, which SQLAlchemy
-        hands back as a Decimal — json.dumps() (used both to feed the result
-        back to the model as a tool-role message and to persist it in
-        conversation_events.payload) can't serialize Decimal on its own.
-        Caught live: the real fallback path crashed the whole chat turn with
-        TypeError: Object of type Decimal is not JSON serializable."""
-        import json as _json
-        from decimal import Decimal
-
-        db = MagicMock()
-        # NOTE: MagicMock(name=...) is a reserved constructor kwarg that sets
-        # the mock's own repr, NOT a settable ".name" attribute — must be
-        # assigned after construction instead, or row.name silently stays a
-        # child MagicMock (itself not JSON-serializable, defeating the point
-        # of this regression test).
-        product_row = MagicMock(sku="LM358N-TEST", price=Decimal("15000.0000"), currency="IRT", stock_status="instock")
-        product_row.name = "Test Op-Amp LM358N"
-        db.execute.return_value.fetchone.side_effect = [None, product_row]  # _resolve_site -> None, then the fallback query
-
-        result = product_tools.check_product_availability(db, "chatbot-1", "LM358N-TEST")
-
-        self.assertTrue(result["found"])
-        self.assertEqual(result["price"], 15000.0)
-        self.assertIsInstance(result["price"], float)
-        _json.dumps(result)  # must not raise
-
-    def test_live_query_success_returns_live_data(self):
+    def test_live_query_success_returns_live_price_and_id_based_url(self):
         db = MagicMock()
         site_row = MagicMock(primary_domain="example.test", webhook_secret="s3cret")
         db.execute.return_value.fetchone.return_value = site_row
 
         fake_response = MagicMock(status_code=200)
         fake_response.json.return_value = {
-            "found": True, "name": "LM358 Op-Amp", "sku": "LM358N",
-            "price": 15000, "currency": "IRT", "stock_status": "instock",
+            "found": True, "product_id": 42, "name": "LM358 Op-Amp", "sku": "LM358N",
+            "status": "publish", "stock_status": "instock", "stock_quantity": 10,
+            "price": 15000, "regular_price": 18000, "sale_price": 15000, "on_sale": True,
+            "is_variable": False, "currency": "IRT",
         }
         with patch("app.services.tools.product_tools._requests.post", return_value=fake_response):
-            result = product_tools.check_product_availability(db, "chatbot-1", "LM358N")
+            result = product_tools.get_product_availability(db, "chatbot-1", sku="LM358N")
 
         self.assertTrue(result["live"])
         self.assertTrue(result["found"])
+        self.assertEqual(result["price"], 15000)
         self.assertEqual(result["stock_status"], "instock")
+        # By numeric ID, never by slug (see product_tools._product_url).
+        self.assertEqual(result["product_url"], "https://example.test/?p=42")
+
+    def test_search_products_unavailable_returns_empty_results_not_stale_data(self):
+        db = MagicMock()
+        db.execute.return_value.fetchone.return_value = None
+        result = product_tools.search_products(db, "chatbot-1", query="shoes")
+        self.assertFalse(result["live"])
+        self.assertEqual(result["results"], [])
+
+    def test_search_products_success_tags_each_result_with_an_id_based_url(self):
+        db = MagicMock()
+        site_row = MagicMock(primary_domain="example.test", webhook_secret="s3cret")
+        db.execute.return_value.fetchone.return_value = site_row
+
+        fake_response = MagicMock(status_code=200)
+        fake_response.json.return_value = {
+            "count": 1, "currency": "IRT",
+            "results": [{"product_id": 7, "name": "Red Shoes", "sku": "SHOE-RED", "price": 200000, "on_sale": False, "stock_status": "instock", "is_variable": False}],
+        }
+        with patch("app.services.tools.product_tools._requests.post", return_value=fake_response):
+            result = product_tools.search_products(db, "chatbot-1", query="shoes", in_stock_only=True)
+
+        self.assertTrue(result["live"])
+        self.assertEqual(result["results"][0]["product_url"], "https://example.test/?p=7")
+
+    def test_variants_unavailable_returns_no_price_field(self):
+        db = MagicMock()
+        site_row = MagicMock(primary_domain="example.test", webhook_secret="s3cret")
+        db.execute.return_value.fetchone.return_value = site_row
+
+        with patch("app.services.tools.product_tools._requests.post", side_effect=product_tools._requests.RequestException("connection refused")):
+            result = product_tools.get_product_variants(db, "chatbot-1", product_id=99)
+
+        self.assertFalse(result["live"])
+        self.assertNotIn("variants", result)
+        self.assertEqual(result["product_url"], "https://example.test/?p=99")
+
+    def test_variants_success_returns_each_variants_own_price_and_stock(self):
+        db = MagicMock()
+        site_row = MagicMock(primary_domain="example.test", webhook_secret="s3cret")
+        db.execute.return_value.fetchone.return_value = site_row
+
+        fake_response = MagicMock(status_code=200)
+        fake_response.json.return_value = {
+            "found": True, "is_variable": True, "product_id": 99, "name": "T-Shirt", "currency": "IRT",
+            "variants": [
+                {"variation_id": 101, "attributes": {"attribute_pa_size": "M"}, "sku": "TS-M", "stock_status": "instock", "stock_quantity": 5, "price": 100000, "regular_price": 100000, "sale_price": None},
+                {"variation_id": 102, "attributes": {"attribute_pa_size": "L"}, "sku": "TS-L", "stock_status": "outofstock", "stock_quantity": 0, "price": 100000, "regular_price": 100000, "sale_price": None},
+            ],
+        }
+        with patch("app.services.tools.product_tools._requests.post", return_value=fake_response):
+            result = product_tools.get_product_variants(db, "chatbot-1", product_id=99)
+
+        self.assertTrue(result["live"])
+        self.assertEqual(len(result["variants"]), 2)
+        self.assertEqual(result["variants"][0]["stock_status"], "instock")
+        self.assertEqual(result["variants"][1]["stock_status"], "outofstock")
 
 
 class ExecuteToolCallSecurityTest(unittest.TestCase):
@@ -260,7 +358,7 @@ class RunToolCallingPipelineTest(unittest.TestCase):
             return {"found": True, "live": True, "stock_status": "instock", "price": 15000}
 
         test_tool = Tool(
-            name="check_product_availability", description="test", access_level="read",
+            name="get_product_availability", description="test", access_level="read",
             parameters={"type": "object", "properties": {"sku": {"type": "string"}}, "required": ["sku"]},
             handler=fake_handler,
         )
@@ -268,10 +366,10 @@ class RunToolCallingPipelineTest(unittest.TestCase):
         # First LLM call: the model decides to call the tool.
         tool_call_message = {
             "content": None,
-            "tool_calls": [{"id": "call_1", "function": {"name": "check_product_availability", "arguments": '{"sku": "LM358N"}'}}],
+            "tool_calls": [{"id": "call_1", "function": {"name": "get_product_availability", "arguments": '{"sku": "LM358N"}'}}],
         }
         # Second LLM call (after seeing the tool result): final text answer.
-        final_message = {"content": "Yes, LM358N is in stock for 15000 IRT.", "tool_calls": None}
+        final_message = {"content": "Yes, LM358N is in stock for 15000 IRT (live data).", "tool_calls": None}
 
         call_sequence = [
             (tool_call_message, {"prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70}),
@@ -283,13 +381,13 @@ class RunToolCallingPipelineTest(unittest.TestCase):
             return message, "groq/test-tool-model", usage, 0.0
 
         with patch.object(tool_calling_service, "get_enabled_tools", return_value=[test_tool]), \
-             patch.object(tool_calling_service, "to_openai_schema", return_value=[{"type": "function", "function": {"name": "check_product_availability"}}]), \
+             patch.object(tool_calling_service, "to_openai_schema", return_value=[{"type": "function", "function": {"name": "get_product_availability"}}]), \
              patch.object(tool_calling_service, "_tool_calling_chat", side_effect=fake_tool_calling_chat), \
              patch("app.services.rag_service._log_event"):
             result = tool_calling_service.run_tool_calling_pipeline(
                 db=MagicMock(), chatbot_id="chatbot-1", conversation_id="conv-1",
                 query="Is LM358N in stock?", history=[], system_prompt_text="system prompt",
-                max_tokens=800, temperature=0.3, enabled_tool_names=["check_product_availability"],
+                max_tokens=800, temperature=0.3, enabled_tool_names=["get_product_availability"],
             )
 
         self.assertEqual(handler_calls, ["LM358N"], "The real tool handler must actually have been invoked with the model's argument.")
@@ -309,7 +407,7 @@ class RunToolCallingPipelineTest(unittest.TestCase):
             return {"found": True}
 
         test_tool = Tool(
-            name="check_product_availability", description="test", access_level="read",
+            name="get_product_availability", description="test", access_level="read",
             parameters={"type": "object", "properties": {"sku": {"type": "string"}}},
             handler=fake_handler,
         )
@@ -320,7 +418,7 @@ class RunToolCallingPipelineTest(unittest.TestCase):
             offered_tools_log.append(tools_schema is not None)
             if tools_schema is not None:
                 return (
-                    {"content": None, "tool_calls": [{"id": f"call_{len(offered_tools_log)}", "function": {"name": "check_product_availability", "arguments": '{"sku": "X"}'}}]},
+                    {"content": None, "tool_calls": [{"id": f"call_{len(offered_tools_log)}", "function": {"name": "get_product_availability", "arguments": '{"sku": "X"}'}}]},
                     "groq/test", {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}, 0.0,
                 )
             return ({"content": "Here's what I found.", "tool_calls": None}, "groq/test", {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}, 0.0)
@@ -332,7 +430,7 @@ class RunToolCallingPipelineTest(unittest.TestCase):
             result = tool_calling_service.run_tool_calling_pipeline(
                 db=MagicMock(), chatbot_id="chatbot-1", conversation_id="conv-1",
                 query="check a bunch of parts", history=[], system_prompt_text="sys",
-                max_tokens=800, temperature=0.3, enabled_tool_names=["check_product_availability"],
+                max_tokens=800, temperature=0.3, enabled_tool_names=["get_product_availability"],
             )
 
         self.assertIsNotNone(result, "The loop must still end in a real answer, not None, once the budget is spent.")
@@ -340,8 +438,8 @@ class RunToolCallingPipelineTest(unittest.TestCase):
         self.assertFalse(offered_tools_log[-1], "The final call must have been made with tools disabled.")
 
     def test_llm_failure_returns_none_and_does_not_raise(self):
-        with patch("app.services.tools.registry.get_enabled_tools", return_value=[MagicMock()]), \
-             patch("app.services.tools.registry.to_openai_schema", return_value=[{"type": "function"}]), \
+        with patch.object(tool_calling_service, "get_enabled_tools", return_value=[MagicMock()]), \
+             patch.object(tool_calling_service, "to_openai_schema", return_value=[{"type": "function"}]), \
              patch.object(tool_calling_service, "_tool_calling_chat", side_effect=RuntimeError("all providers failed")):
             result = tool_calling_service.run_tool_calling_pipeline(
                 db=MagicMock(), chatbot_id="chatbot-1", conversation_id=None,
