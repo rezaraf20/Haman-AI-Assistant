@@ -255,8 +255,8 @@ class RunToolCallingPipelineTest(unittest.TestCase):
             message, usage = call_sequence.pop(0)
             return message, "groq/test-tool-model", usage, 0.0
 
-        with patch("app.services.tools.registry.get_enabled_tools", return_value=[test_tool]), \
-             patch("app.services.tools.registry.to_openai_schema", return_value=[{"type": "function", "function": {"name": "check_product_availability"}}]), \
+        with patch.object(tool_calling_service, "get_enabled_tools", return_value=[test_tool]), \
+             patch.object(tool_calling_service, "to_openai_schema", return_value=[{"type": "function", "function": {"name": "check_product_availability"}}]), \
              patch.object(tool_calling_service, "_tool_calling_chat", side_effect=fake_tool_calling_chat), \
              patch("app.services.rag_service._log_event"):
             result = tool_calling_service.run_tool_calling_pipeline(
@@ -298,8 +298,8 @@ class RunToolCallingPipelineTest(unittest.TestCase):
                 )
             return ({"content": "Here's what I found.", "tool_calls": None}, "groq/test", {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}, 0.0)
 
-        with patch("app.services.tools.registry.get_enabled_tools", return_value=[test_tool]), \
-             patch("app.services.tools.registry.to_openai_schema", return_value=[{"type": "function"}]), \
+        with patch.object(tool_calling_service, "get_enabled_tools", return_value=[test_tool]), \
+             patch.object(tool_calling_service, "to_openai_schema", return_value=[{"type": "function"}]), \
              patch.object(tool_calling_service, "_tool_calling_chat", side_effect=fake_tool_calling_chat), \
              patch("app.services.rag_service._log_event"):
             result = tool_calling_service.run_tool_calling_pipeline(
