@@ -109,10 +109,13 @@ class ProductToolsWordPressUnreachableTest(unittest.TestCase):
         from decimal import Decimal
 
         db = MagicMock()
-        product_row = MagicMock(
-            name="Test Op-Amp LM358N", sku="LM358N-TEST",
-            price=Decimal("15000.0000"), currency="IRT", stock_status="instock",
-        )
+        # NOTE: MagicMock(name=...) is a reserved constructor kwarg that sets
+        # the mock's own repr, NOT a settable ".name" attribute — must be
+        # assigned after construction instead, or row.name silently stays a
+        # child MagicMock (itself not JSON-serializable, defeating the point
+        # of this regression test).
+        product_row = MagicMock(sku="LM358N-TEST", price=Decimal("15000.0000"), currency="IRT", stock_status="instock")
+        product_row.name = "Test Op-Amp LM358N"
         db.execute.return_value.fetchone.side_effect = [None, product_row]  # _resolve_site -> None, then the fallback query
 
         result = product_tools.check_product_availability(db, "chatbot-1", "LM358N-TEST")
