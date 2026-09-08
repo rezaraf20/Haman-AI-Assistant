@@ -24,6 +24,13 @@ class ChatRequest(BaseModel):
     rerank_enabled: bool = False
     rerank_threshold: float = 0.500
     business_name: Optional[str] = None
+    # Which tool-registry tools (app/services/tools/registry.py) this
+    # chatbot may call — empty by default, matching every chatbot that
+    # existed before tool calling shipped. Names the model-supplied
+    # arguments can never widen: chatbot_id/schema_name for every tool
+    # handler always come from this request's own fields, never from the
+    # model's tool-call arguments (see run_tool_calling_pipeline()).
+    enabled_tools: List[str] = []
 
 class ChatResponse(BaseModel):
     response: str

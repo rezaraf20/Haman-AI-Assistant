@@ -30,6 +30,7 @@ class Hamman_Loader {
         $this->add_action( 'wp_enqueue_scripts',   $public, 'enqueue_assets' );
         $this->add_action( 'hamman_hourly_sync',   $sync,   'run_incremental_sync' );
         $this->add_action( 'rest_api_init',        new Hamman_Webhook_Handler(), 'register_routes' );
+        $this->add_action( 'rest_api_init',        new Hamman_Live_Query_Handler(), 'register_routes' );
 
         if ( class_exists( 'WooCommerce' ) ) {
             $this->add_action( 'woocommerce_update_product', $sync, 'on_product_updated' );

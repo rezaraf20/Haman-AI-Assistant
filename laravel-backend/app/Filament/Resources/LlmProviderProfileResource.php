@@ -56,6 +56,8 @@ class LlmProviderProfileResource extends Resource {
             TextInput::make('priority')->label(__('panel.priority'))->numeric()->default(0)->required()
                 ->helperText(__('panel.priority_help')),
             Toggle::make('is_active')->label(__('common.active'))->default(true),
+            Toggle::make('supports_tool_calling')->label(__('panel.supports_tool_calling'))->default(false)
+                ->helperText(__('panel.supports_tool_calling_help')),
             TextInput::make('max_tokens_response')->label(__('panel.max_tokens_response'))->numeric()->nullable(),
             TextInput::make('timeout_seconds')->label(__('panel.timeout_seconds'))->numeric()->default(30)->required(),
         ]);
@@ -77,6 +79,8 @@ class LlmProviderProfileResource extends Resource {
                     ->formatStateUsing(fn ($state) => number_format($state) . ' ' . __('common.toman_short'))->toggleable(isToggledHiddenByDefault: true),
                 IconColumn::make('is_active')->boolean()->label(__('common.active'))
                     ->tooltip(fn (LlmProviderProfile $record) => $record->disabled_reason),
+                IconColumn::make('supports_tool_calling')->boolean()->label(__('panel.supports_tool_calling'))
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('consecutive_failures')->label(__('panel.consecutive_failures'))
                     ->color(fn (int $state) => $state > 0 ? 'danger' : 'gray'),
                 TextColumn::make('last_success_at')->label(__('panel.last_success'))->formatStateUsing(fn ($state) => Jalali::dateTime($state))->placeholder(__('common.never'))->toggleable(isToggledHiddenByDefault: true),

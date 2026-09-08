@@ -254,6 +254,10 @@ class TenantService
         try {
             DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_products_sku_normalized ON {$schemaName}.products(chatbot_id, sku_normalized)");
         } catch (\Throwable $e) {}
+        // Tool calling — see createTenantTables()'s matching column comment.
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.chatbots ADD COLUMN IF NOT EXISTS enabled_tools JSONB NOT NULL DEFAULT '[]'");
+        } catch (\Throwable $e) {}
         // Backfill: the ADD COLUMN above leaves every pre-existing chunk row
         // at content_tsv=NULL (never matches any full-text query), so hybrid
         // search would silently degrade to vector-only for already-embedded
@@ -396,6 +400,18 @@ class TenantService
                 -- client/widget-facing behavior, this is merchant-facing
                 -- alerting config, never sent to the browser.
                 notification_settings JSONB NOT NULL DEFAULT '{}',
+                -- Which tool-registry tools (see python-ai-service/app/
+                -- services/tools/registry.py) this chatbot may call, e.g.
+                -- a JSON array containing check_product_availability.
+                -- Empty by default — opt-in per chatbot, same posture as
+                -- lead_capture_enabled:
+                -- every existing chatbot keeps today's retrieval-only
+                -- behavior unchanged unless the merchant explicitly turns
+                -- a tool on. A separate column from widget_config (that one
+                -- is client/widget-facing UI text; this gates a real
+                -- server-side capability with live-data and cost
+                -- implications, never sent to the browser).
+                enabled_tools JSONB NOT NULL DEFAULT '[]',
                 language VARCHAR(10) NOT NULL DEFAULT 'en',
                 response_language VARCHAR(10) NOT NULL DEFAULT 'auto',
                 is_active BOOLEAN NOT NULL DEFAULT true,

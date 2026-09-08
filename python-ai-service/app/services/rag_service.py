@@ -902,6 +902,7 @@ async def run_rag_pipeline_stream(
     top_k: int, threshold: float, temperature: float, max_tokens: int, language: str,
     rerank_enabled: bool = False, rerank_threshold: float = 0.500,
     business_name: Optional[str] = None, conversation_id: Optional[str] = None,
+    enabled_tools: Optional[List[str]] = None,
 ) -> AsyncGenerator[Tuple[str, object], None]:
     """Streaming counterpart to run_rag_pipeline() — identical retrieval and
     prompt-building, but yields ("delta", str) as the answer is generated
@@ -968,6 +969,25 @@ async def run_rag_pipeline_stream(
     lang_map = {"fa": "Persian/Farsi", "ar": "Arabic", "en": "English"}
     if language and language != "auto" and language in lang_map:
         sys_p += f"\n\nIMPORTANT: Always respond in {lang_map[language]}."
+
+    # Tool calling doesn't stream token-by-token (a multi-step tool loop
+    # doesn't map onto a single delta stream the way one plain completion
+    # does) — run it to completion, then yield the whole answer as one
+    # delta chunk followed by "done", the exact same pattern already used
+    # for the SKU-shortcut and quota-exceeded paths above. See
+    # run_rag_pipeline()'s identical, more detailed comment.
+    if enabled_tools:
+        from app.services.tool_calling_service import run_tool_calling_pipeline
+        tool_result = run_tool_calling_pipeline(
+            db, chatbot_id, conversation_id, query, history, sys_p, max_tokens, temperature, enabled_tools,
+        )
+        if tool_result is not None:
+            tool_result["chunk_ids"] = [c["id"] for c in chunks]
+            tool_result["scores"] = [round(c.get("rerank_score", c.get("similarity", 0.0)), 4) for c in chunks]
+            tool_result["cost_toman"] = round(tool_result["cost_toman"] + retrieval_cost_toman, 4)
+            yield ("delta", tool_result["response"])
+            yield ("done", tool_result)
+            return
 
     hist_text = ""
     for h in history[-12:]:
@@ -1052,6 +1072,7 @@ async def run_rag_pipeline(
     top_k: int, threshold: float, temperature: float, max_tokens: int, language: str,
     rerank_enabled: bool = False, rerank_threshold: float = 0.500,
     business_name: Optional[str] = None, conversation_id: Optional[str] = None,
+    enabled_tools: Optional[List[str]] = None,
 ) -> dict:
 
     start = time.time()
@@ -1127,6 +1148,26 @@ async def run_rag_pipeline(
     lang_map = {"fa": "Persian/Farsi", "ar": "Arabic", "en": "English"}
     if language and language != "auto" and language in lang_map:
         sys_p += f"\n\nIMPORTANT: Always respond in {lang_map[language]}."
+
+    # Tool calling is layered on top of the RAG context above, not a
+    # replacement for it — the model still sees whatever was retrieved
+    # (sys_p already has grounding rules + business name + context baked
+    # in at this point) AND gets the option to call a live-data tool for
+    # the specific stock/price/etc. question retrieval structurally can't
+    # answer. Returns None whenever tool calling doesn't apply (no tools
+    # enabled for this chatbot, no tool-calling-capable provider
+    # configured, the call itself failed, or the time budget ran out) —
+    # falls through to the normal completion below unchanged in that case.
+    if enabled_tools:
+        from app.services.tool_calling_service import run_tool_calling_pipeline
+        tool_result = run_tool_calling_pipeline(
+            db, chatbot_id, conversation_id, query, history, sys_p, max_tokens, temperature, enabled_tools,
+        )
+        if tool_result is not None:
+            tool_result["chunk_ids"] = [c["id"] for c in chunks]
+            tool_result["scores"] = [round(c.get("rerank_score", c.get("similarity", 0.0)), 4) for c in chunks]
+            tool_result["cost_toman"] = round(tool_result["cost_toman"] + retrieval_cost_toman, 4)
+            return tool_result
 
     hist_text = ""
     for h in history[-12:]:
