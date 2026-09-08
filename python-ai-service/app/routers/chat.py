@@ -19,6 +19,7 @@ async def chat_complete(req: ChatRequest, db: Session = Depends(get_db)):
         rerank_enabled=req.rerank_enabled, rerank_threshold=req.rerank_threshold,
         business_name=req.business_name, conversation_id=req.conversation_id,
         enabled_tools=req.enabled_tools,
+        authenticity_unknown_message=req.authenticity_unknown_message,
     )
     return ChatResponse(**result)
 

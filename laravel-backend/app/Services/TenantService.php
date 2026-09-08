@@ -258,6 +258,16 @@ class TenantService
         try {
             DB::statement("ALTER TABLE {$schemaName}.chatbots ADD COLUMN IF NOT EXISTS enabled_tools JSONB NOT NULL DEFAULT '[]'");
         } catch (\Throwable $e) {}
+        // Authenticity fields — see createTenantTables()'s matching column
+        // comments and rag_service._authenticity_rule().
+        foreach (['authenticity_status', 'brand', 'official_distributor', 'warranty_period', 'country_of_origin'] as $col) {
+            try {
+                DB::statement("ALTER TABLE {$schemaName}.products ADD COLUMN IF NOT EXISTS {$col} VARCHAR(255)");
+            } catch (\Throwable $e) {}
+        }
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.chatbots ADD COLUMN IF NOT EXISTS authenticity_unknown_message TEXT");
+        } catch (\Throwable $e) {}
         // Backfill: the ADD COLUMN above leaves every pre-existing chunk row
         // at content_tsv=NULL (never matches any full-text query), so hybrid
         // search would silently degrade to vector-only for already-embedded
@@ -412,6 +422,11 @@ class TenantService
                 -- server-side capability with live-data and cost
                 -- implications, never sent to the browser).
                 enabled_tools JSONB NOT NULL DEFAULT '[]',
+                -- Store-level fallback for is-this-genuine questions when a
+                -- product has none of the 5 authenticity fields synced.
+                -- Nullable -- when unset, rag_service._authenticity_rule()
+                -- uses its own hardcoded bilingual default instead.
+                authenticity_unknown_message TEXT,
                 language VARCHAR(10) NOT NULL DEFAULT 'en',
                 response_language VARCHAR(10) NOT NULL DEFAULT 'auto',
                 is_active BOOLEAN NOT NULL DEFAULT true,
@@ -520,6 +535,18 @@ class TenantService
                 -- array literal). JSONB accepts what the cast actually
                 -- sends, matching attributes.
                 tags JSONB DEFAULT '[]',
+                -- Is this genuine? -- the most common customer question in
+                -- both real interviews this was built from. Seller-entered
+                -- data ONLY (synced from a WordPress admin-configured field
+                -- mapping -- see Hamman_Product_Sync::authenticity_fields()),
+                -- never something the model infers; a NULL here must always
+                -- read as not-recorded, never as a genuine/not-genuine
+                -- verdict. See rag_service._authenticity_rule().
+                authenticity_status VARCHAR(255),
+                brand VARCHAR(255),
+                official_distributor VARCHAR(255),
+                warranty_period VARCHAR(255),
+                country_of_origin VARCHAR(255),
                 embedding_status VARCHAR(20) DEFAULT 'pending',
                 synced_at TIMESTAMPTZ DEFAULT now(),
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

@@ -61,6 +61,7 @@ class WidgetSettings extends Page implements HasForms {
             'powered_by_enabled' => $config['powered_by_enabled'],
             'system_instruction' => $config['system_instruction'],
             'quick_questions'    => $config['quick_questions'],
+            'authenticity_unknown_message' => $bot?->authenticity_unknown_message ?? '',
         ]);
     }
 
@@ -98,6 +99,10 @@ class WidgetSettings extends Page implements HasForms {
                 ->label(__('chatbot.system_instruction_label'))
                 ->helperText(__('chatbot.system_instruction_help'))
                 ->rows(4)->maxLength(10000),
+            Textarea::make('authenticity_unknown_message')
+                ->label(__('chatbot.authenticity_unknown_message_label'))
+                ->helperText(__('chatbot.authenticity_unknown_message_help'))
+                ->rows(3)->maxLength(2000),
             Repeater::make('quick_questions')
                 ->label(__('chatbot.quick_questions_label'))
                 ->schema([
@@ -120,6 +125,7 @@ class WidgetSettings extends Page implements HasForms {
             $bot->update([
                 'welcome_message' => $data['welcome_message'] ?: null,
                 'system_prompt'   => $data['system_instruction'] ?: null,
+                'authenticity_unknown_message' => $data['authenticity_unknown_message'] ?: null,
                 'widget_config'   => array_merge($bot->widget_config ?? [], [
                     'chat_title'         => $data['chat_title'],
                     'ai_name'            => $data['ai_name'],

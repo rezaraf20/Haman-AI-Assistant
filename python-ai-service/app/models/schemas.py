@@ -31,6 +31,11 @@ class ChatRequest(BaseModel):
     # handler always come from this request's own fields, never from the
     # model's tool-call arguments (see run_tool_calling_pipeline()).
     enabled_tools: List[str] = []
+    # Store-level fallback text for "is this genuine?"-type questions when
+    # a product has none of its 5 authenticity fields synced — see
+    # rag_service._authenticity_rule(). None uses that function's own
+    # hardcoded bilingual default.
+    authenticity_unknown_message: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str

@@ -5,7 +5,7 @@ use App\Traits\{HasUuid, HasTenant};
 
 class Chatbot extends Model {
     use HasUuid, HasTenant;
-    protected $fillable = ['name','business_name','type','status','system_prompt','welcome_message','fallback_response','embedding_model','llm_model','temperature','max_tokens_response','retrieval_top_k','retrieval_threshold','reranker_enabled','rerank_threshold','memory_window','widget_config','notification_settings','enabled_tools','language','response_language','is_active'];
+    protected $fillable = ['name','business_name','type','status','system_prompt','welcome_message','fallback_response','authenticity_unknown_message','embedding_model','llm_model','temperature','max_tokens_response','retrieval_top_k','retrieval_threshold','reranker_enabled','rerank_threshold','memory_window','widget_config','notification_settings','enabled_tools','language','response_language','is_active'];
     protected $casts = ['widget_config'=>'array','notification_settings'=>'array','enabled_tools'=>'array','is_active'=>'boolean','reranker_enabled'=>'boolean','temperature'=>'float','retrieval_threshold'=>'float','rerank_threshold'=>'float'];
     public function domains()       { return $this->hasMany(ChatbotDomain::class); }
     public function documents()     { return $this->hasMany(Document::class); }

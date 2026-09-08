@@ -1,6 +1,16 @@
 <?php if (!defined('ABSPATH')) exit;
 $log = get_option(Hamman_Admin::LOG_OPTION, []);
 if (!is_array($log)) $log = [];
+
+$field_mapping = get_option('hamman_field_mapping', []);
+if (!is_array($field_mapping)) $field_mapping = [];
+$authenticity_field_labels = [
+    'authenticity_status'  => 'وضعیت اصالت / Authenticity status',
+    'brand'                => 'نام برند / Brand name',
+    'official_distributor' => 'نمایندگی رسمی / Official distributor',
+    'warranty_period'      => 'مدت گارانتی / Warranty period',
+    'country_of_origin'    => 'کشور مبدأ / Country of origin',
+];
 ?>
 <div class="wrap hm-settings-wrap">
 <h1>🤖 Hamman AI Chatbot — شرکت هامان فناوران پیشرو</h1>
@@ -65,6 +75,29 @@ if (!is_array($log)) $log = [];
         <label><input type="checkbox" name="hamman_sync_pages" value="1" <?php checked(get_option('hamman_sync_pages','1'),'1'); ?>> صفحات و نوشته‌ها / Pages &amp; posts</label><br>
         <label><input type="checkbox" name="hamman_sync_pdfs" value="1" <?php checked(get_option('hamman_sync_pdfs','1'),'1'); ?>> فایل‌های PDF ضمیمه‌ی محصول (دیتاشیت) / PDF attachments (datasheets)</label>
     </td></tr>
+    </table>
+
+    <h3>نگاشت فیلدهای اصالت کالا / Authenticity Field Mapping</h3>
+    <p class="description">
+        «این اصل است؟» پرتکرارترین سوال مشتریان در هر دو مصاحبه بود. بات فقط همین فیلدها را — دقیقاً همان‌طور که فروشنده ثبت کرده — نقل می‌کند؛ هرگز خودش قضاوت نمی‌کند. اگر فروشگاه شما یک فیلد سفارشی یا ویژگی برای هرکدام دارد، اینجا مشخص کنید کدام کلید به کدام معنا نگاشت شود.<br>
+        <em>"Is this genuine?" was the most common customer question in both interviews this feature was built from. The bot only ever repeats exactly what the seller recorded in these fields — it never judges on its own. If your store has a custom field or attribute for each, map its key here.</em>
+    </p>
+    <table class="form-table hm-field-mapping-table">
+        <?php foreach ( Hamman_Product_Sync::AUTHENTICITY_FIELDS as $field ): $conf = $field_mapping[ $field ] ?? []; ?>
+        <tr>
+            <th><?php echo esc_html( $authenticity_field_labels[ $field ] ); ?></th>
+            <td>
+                <select name="hamman_field_map_<?php echo esc_attr( $field ); ?>_type">
+                    <option value="" <?php selected( empty( $conf['type'] ) ); ?>>— هیچ‌کدام / None —</option>
+                    <option value="meta" <?php selected( $conf['type'] ?? '', 'meta' ); ?>>فیلد سفارشی (meta key) / Custom field</option>
+                    <option value="attribute" <?php selected( $conf['type'] ?? '', 'attribute' ); ?>>ویژگی محصول / Product attribute</option>
+                </select>
+                <input type="text" name="hamman_field_map_<?php echo esc_attr( $field ); ?>_key"
+                       value="<?php echo esc_attr( $conf['key'] ?? '' ); ?>" class="regular-text"
+                       placeholder="مثلاً / e.g. _is_genuine یا pa_brand">
+            </td>
+        </tr>
+        <?php endforeach; ?>
     </table>
 </div>
 

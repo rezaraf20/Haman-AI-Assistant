@@ -162,6 +162,45 @@ def _business_name_rule(business_name: Optional[str], is_fa: bool) -> str:
     return f"\n\nThis business's name is \"{business_name}\". Never use any other name for it, and never state any other company's name as its own."
 
 
+# "Is this genuine?" — the single most common customer question in BOTH
+# real interviews this app was built from (electronics parts and
+# cosmetics). A wrong "yes" here is a real liability the merchant bears,
+# not a cosmetic mistake — so this rule is always active (unlike the
+# tool-gated pricing rules below), since authenticity data is synced
+# straight into the regular retrieved CONTEXT as plain lines (see
+# SyncService::syncProducts()' "Authenticity Status:"/"Brand:"/etc. — only
+# ever written when the seller's own WooCommerce field mapping actually
+# had a value), never fetched via a live tool call.
+DEFAULT_AUTHENTICITY_UNKNOWN_EN = (
+    "This detail hasn't been recorded by the seller for this product. Please contact us "
+    "directly to confirm authenticity, brand, official distributor, or warranty details."
+)
+DEFAULT_AUTHENTICITY_UNKNOWN_FA = (
+    "این جزئیات توسط فروشنده برای این محصول ثبت نشده است. لطفاً برای تأیید اصالت، برند، "
+    "نمایندگی رسمی یا گارانتی مستقیماً با ما تماس بگیرید."
+)
+
+
+def _authenticity_rule(authenticity_unknown_message: Optional[str], is_fa: bool) -> str:
+    fallback = authenticity_unknown_message or (DEFAULT_AUTHENTICITY_UNKNOWN_FA if is_fa else DEFAULT_AUTHENTICITY_UNKNOWN_EN)
+    if is_fa:
+        return (
+            "\n\nدرباره‌ی اصالت، برند، نمایندگی رسمی، مدت گارانتی یا کشور مبدأ یک محصول، فقط "
+            "دقیقاً همان چیزی را بگو که در زمینه‌ی بالا صراحتاً برای همان محصول آمده — هرگز بر "
+            "اساس توضیحات محصول، نظرات کاربران، قیمت یا برداشت خودت درباره‌ی اصالت قضاوت نکن. "
+            f"اگر این اطلاعات برای همان محصول در زمینه نیامده، دقیقاً همین را بگو: «{fallback}» "
+            "— هرگز حدس نزن و هرگز نگو «به‌احتمال زیاد اصل است» یا مشابه آن."
+        )
+    return (
+        "\n\nFor any question about a product's authenticity, brand, official distributor, "
+        "warranty period, or country of origin, state only exactly what the CONTEXT above "
+        "explicitly says for that specific product — never judge authenticity from the "
+        "product's description, reviews, price, or your own impression. If this information "
+        f"isn't in the context for that product, say exactly this: \"{fallback}\" — never "
+        "guess, and never say it's \"probably genuine\" or similar."
+    )
+
+
 # Names from tools/product_tools.py — a chatbot enabling any of these has
 # live pricing/stock capability, so the model must be told never to answer
 # a price/stock/variant question from the (possibly stale) retrieved
@@ -980,6 +1019,7 @@ async def run_rag_pipeline_stream(
     rerank_enabled: bool = False, rerank_threshold: float = 0.500,
     business_name: Optional[str] = None, conversation_id: Optional[str] = None,
     enabled_tools: Optional[List[str]] = None,
+    authenticity_unknown_message: Optional[str] = None,
 ) -> AsyncGenerator[Tuple[str, object], None]:
     """Streaming counterpart to run_rag_pipeline() — identical retrieval and
     prompt-building, but yields ("delta", str) as the answer is generated
@@ -1040,6 +1080,7 @@ async def run_rag_pipeline_stream(
     sys_p += _business_name_rule(business_name, is_fa_question)
     sys_p += _live_pricing_rule(enabled_tools, is_fa_question)
     sys_p += _product_display_rule(enabled_tools, is_fa_question)
+    sys_p += _authenticity_rule(authenticity_unknown_message, is_fa_question)
     if system_prompt:
         sys_p += f"\n\n{system_prompt}"
     if context:
@@ -1152,6 +1193,7 @@ async def run_rag_pipeline(
     rerank_enabled: bool = False, rerank_threshold: float = 0.500,
     business_name: Optional[str] = None, conversation_id: Optional[str] = None,
     enabled_tools: Optional[List[str]] = None,
+    authenticity_unknown_message: Optional[str] = None,
 ) -> dict:
 
     start = time.time()
@@ -1221,6 +1263,7 @@ async def run_rag_pipeline(
     sys_p += _business_name_rule(business_name, is_fa_question)
     sys_p += _live_pricing_rule(enabled_tools, is_fa_question)
     sys_p += _product_display_rule(enabled_tools, is_fa_question)
+    sys_p += _authenticity_rule(authenticity_unknown_message, is_fa_question)
     if system_prompt:
         sys_p += f"\n\n{system_prompt}"
     if context:

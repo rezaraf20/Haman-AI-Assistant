@@ -24,6 +24,18 @@ class SyncService {
     'Stock: '.($p['stock_status']??'instock'),
     'Link: '.($p['permalink']??''),
     'Image: '.($p['featured_image']??''),
+    // "Is this genuine?" fields — only a line if the seller actually
+    // recorded that specific field (see Hamman_Product_Sync::
+    // authenticity_fields() on the plugin side); array_filter() above
+    // drops any of these that are empty, so an unmapped/unfilled field
+    // leaves no trace in the indexed text at all — the grounding rule
+    // (rag_service._authenticity_rule()) treats its absence as "not
+    // recorded", never guessing a value never actually written here.
+    !empty($p['authenticity_status']) ? 'Authenticity Status: '.$p['authenticity_status'] : '',
+    !empty($p['brand']) ? 'Brand: '.$p['brand'] : '',
+    !empty($p['official_distributor']) ? 'Official Distributor: '.$p['official_distributor'] : '',
+    !empty($p['warranty_period']) ? 'Warranty Period: '.$p['warranty_period'] : '',
+    !empty($p['country_of_origin']) ? 'Country of Origin: '.$p['country_of_origin'] : '',
 ]));
                 ['document'=>$doc, 'outcome'=>$outcome] = $this->upsertDoc([
                     'chatbot_id'  => $chatbotId,
@@ -43,7 +55,7 @@ class SyncService {
                 ]);
                 Product::updateOrCreate(
                     ['chatbot_id'=>$chatbotId,'woo_product_id'=>$p['id']],
-                    ['name'=>$p['name'],'sku'=>$p['sku']??null,'sku_normalized'=>SkuNormalizer::normalize($p['sku']??null),'type'=>$p['type']??'simple','status'=>$p['status']??'publish','description'=>strip_tags($p['description']??''),'price'=>$p['price']??null,'currency'=>$p['currency']??'USD','stock_status'=>$p['stock_status']??'instock','permalink'=>$p['permalink']??null,'featured_image'=>$p['featured_image']??null,'attributes'=>$p['attributes']??[],'tags'=>$p['tags']??[],'embedding_status'=>'pending','synced_at'=>now()]
+                    ['name'=>$p['name'],'sku'=>$p['sku']??null,'sku_normalized'=>SkuNormalizer::normalize($p['sku']??null),'type'=>$p['type']??'simple','status'=>$p['status']??'publish','description'=>strip_tags($p['description']??''),'price'=>$p['price']??null,'currency'=>$p['currency']??'USD','stock_status'=>$p['stock_status']??'instock','permalink'=>$p['permalink']??null,'featured_image'=>$p['featured_image']??null,'attributes'=>$p['attributes']??[],'tags'=>$p['tags']??[],'authenticity_status'=>$p['authenticity_status']??null,'brand'=>$p['brand']??null,'official_distributor'=>$p['official_distributor']??null,'warranty_period'=>$p['warranty_period']??null,'country_of_origin'=>$p['country_of_origin']??null,'embedding_status'=>'pending','synced_at'=>now()]
                 );
                 if (in_array($outcome, ['new','updated'], true)) {
                     EmbedDocumentJob::dispatch($doc->id, $chatbotId, $schema);
