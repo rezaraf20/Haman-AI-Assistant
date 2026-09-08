@@ -46,6 +46,12 @@ class ChatResponse(BaseModel):
     is_fallback: bool = False
     is_unanswered: bool = False
     finish_reason: str = "stop"
+    # Structured UI content the widget renders directly — product cards
+    # (recommend_products) or a comparison table (compare_products), see
+    # tool_calling_service._build_widget_block(). Empty for every response
+    # that didn't call one of those two tools; the widget must never try to
+    # render this as text.
+    widget_blocks: List[dict] = []
 
 class EmbedRequest(BaseModel):
     document_id: str

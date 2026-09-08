@@ -49,6 +49,38 @@ MAX_TOTAL_SECONDS = 12.0
 TOOL_RATE_LIMIT_MAX_PER_MINUTE = 10
 TOOL_RATE_LIMIT_KEY_PREFIX = "hamman:tool_rate_limit:"
 
+# Tools whose successful result must render as an actual widget UI element
+# (product cards / a comparison table) rather than as text the model
+# paraphrases — see hamman-widget.js's renderProductCards()/
+# renderCompareTable(). Every product that ends up in one of these blocks
+# also gets a product_mentioned conversation_event (revenue-attribution
+# input, doc-04's acceptance criterion), logged for exactly the products
+# actually shown, never merely fetched/considered.
+_RENDERABLE_TOOLS = {"recommend_products", "compare_products"}
+
+
+def _build_widget_block(fn_name: str, result: dict) -> Optional[dict]:
+    if fn_name not in _RENDERABLE_TOOLS or not isinstance(result, dict) or not result.get("live"):
+        return None
+    products = result.get("products") or []
+    if not products:
+        return None
+    if fn_name == "recommend_products":
+        return {"type": "product_cards", "products": products}
+    return {"type": "product_compare", "products": products, "attribute_rows": result.get("attribute_rows", [])}
+
+
+def _log_product_mentions(db: Session, conversation_id: Optional[str], chatbot_id: str, source: str, products: List[dict]) -> None:
+    from app.services.rag_service import _log_event
+    for p in products:
+        if not isinstance(p, dict) or not p.get("product_id"):
+            continue
+        if p.get("found") is False:  # compare_products marks a missing id this way — nothing real was shown
+            continue
+        _log_event(db, conversation_id, chatbot_id, "product_mentioned", {
+            "product_id": p.get("product_id"), "name": p.get("name"), "source": source,
+        })
+
 
 def _tool_rate_limited(chatbot_id: str) -> bool:
     """Fixed 1-minute bucket per chatbot, Redis INCR+EXPIRE. Fails OPEN
@@ -198,6 +230,7 @@ def run_tool_calling_pipeline(
     total_cost = 0.0
     model_used = "n/a"
     executed = 0
+    widget_blocks: List[dict] = []
 
     # +1: guarantees one final call with tools disabled once the execution
     # budget is spent, so the turn always ends in a real text answer
@@ -236,6 +269,7 @@ def run_tool_calling_pipeline(
                 "cost_toman": round(total_cost, 4),
                 "model": model_used, "latency_ms": latency_ms,
                 "is_fallback": False, "is_unanswered": False, "finish_reason": "tool_stop",
+                "widget_blocks": widget_blocks,
             }
 
         messages.append({"role": "assistant", "content": message.get("content"), "tool_calls": tool_calls})
@@ -248,6 +282,11 @@ def run_tool_calling_pipeline(
                 continue
             executed += 1
             result = _execute_tool_call(db, chatbot_id, conversation_id, call, tools)
+            fn_name = call.get("function", {}).get("name", "")
+            block = _build_widget_block(fn_name, result)
+            if block:
+                widget_blocks.append(block)
+                _log_product_mentions(db, conversation_id, chatbot_id, fn_name, block["products"])
             messages.append({
                 "role": "tool",
                 "tool_call_id": call.get("id", ""),

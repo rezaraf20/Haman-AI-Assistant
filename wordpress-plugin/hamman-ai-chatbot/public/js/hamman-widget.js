@@ -262,6 +262,91 @@
         typingEl = null;
     }
 
+    // ── Product cards / comparison table ───────────────────────────────
+    // Structured content from recommend_products/compare_products (see
+    // tool_calling_service._build_widget_block() on the Python side) —
+    // rendered as real DOM (cards, a table), never dumped as text the
+    // model would otherwise have to hand-format. Both card strip and
+    // table wrapper scroll horizontally rather than trying to squeeze
+    // multiple columns into the widget's ~360px (or full-width-mobile)
+    // box, which is what actually makes them render correctly at any
+    // width instead of just at one.
+    function formatPrice(price, currency) {
+        if (price === null || typeof price === 'undefined') return '';
+        var n = Number(price);
+        if (isNaN(n)) return '';
+        return n.toLocaleString() + (currency ? ' ' + currency : '');
+    }
+
+    function renderWidgetBlocks(blocks) {
+        if (!blocks || !blocks.length) return;
+        var wasNearBottom = isNearBottom();
+        blocks.forEach(function (block) {
+            if (block.type === 'product_cards') renderProductCards(block.products);
+            else if (block.type === 'product_compare') renderCompareTable(block.products, block.attribute_rows);
+        });
+        if (wasNearBottom) scrollToBottom(false);
+    }
+
+    function renderProductCards(products) {
+        if (!products || !products.length) return;
+        var wrap = document.createElement('div');
+        wrap.className = 'hm-product-cards';
+        products.forEach(function (p) {
+            var card = document.createElement('a');
+            card.className = 'hm-product-card';
+            card.href = p.product_url || '#';
+            card.target = '_blank';
+            card.rel = 'noopener';
+            var imgHtml = p.image
+                ? '<img src="' + esc(p.image) + '" alt="" loading="lazy">'
+                : '<div class="hm-product-card-noimg"></div>';
+            var priceHtml = (p.price !== null && typeof p.price !== 'undefined')
+                ? '<span class="hm-product-price">' + esc(formatPrice(p.price, p.currency)) + '</span>' : '';
+            var inStock = p.stock_status === 'instock';
+            var stockHtml = p.stock_status
+                ? '<span class="hm-stock-badge ' + (inStock ? 'hm-instock' : 'hm-outofstock') + '">' +
+                  esc(inStock ? CFG.i18n.inStockLabel : CFG.i18n.outOfStockLabel) + '</span>' : '';
+            card.innerHTML =
+                imgHtml +
+                '<div class="hm-product-card-body">' +
+                    '<div class="hm-product-name">' + esc(p.name) + '</div>' +
+                    priceHtml +
+                    stockHtml +
+                '</div>';
+            wrap.appendChild(card);
+        });
+        msgs.appendChild(wrap);
+    }
+
+    function renderCompareTable(products, rows) {
+        if (!products || products.length < 2) return;
+        var outer = document.createElement('div');
+        outer.className = 'hm-compare-wrap';
+        var table = document.createElement('table');
+        table.className = 'hm-compare-table';
+
+        var theadHtml = '<thead><tr><th></th>' + products.map(function (p) {
+            var imgHtml = p.image ? '<img src="' + esc(p.image) + '" alt="">' : '';
+            var priceHtml = (p.price !== null && typeof p.price !== 'undefined')
+                ? '<div class="hm-compare-price">' + esc(formatPrice(p.price, p.currency)) + '</div>' : '';
+            var linkHtml = p.product_url
+                ? '<a href="' + esc(p.product_url) + '" target="_blank" rel="noopener">' + esc(CFG.i18n.viewProductLabel) + '</a>' : '';
+            return '<th>' + imgHtml + '<div class="hm-compare-name">' + esc(p.name || '') + '</div>' + priceHtml + linkHtml + '</th>';
+        }).join('') + '</tr></thead>';
+
+        var tbodyHtml = '<tbody>' + (rows || []).map(function (row) {
+            return '<tr><th>' + esc(row.attribute) + '</th>' + products.map(function (p) {
+                var v = row.values ? row.values[String(p.product_id)] : null;
+                return '<td>' + (v === null || typeof v === 'undefined' || v === '' ? '—' : esc(v)) + '</td>';
+            }).join('') + '</tr>';
+        }).join('') + '</tbody>';
+
+        table.innerHTML = theadHtml + tbodyHtml;
+        outer.appendChild(table);
+        msgs.appendChild(outer);
+    }
+
     function renderHistory(list) {
         list.forEach(function (m) {
             addMsg(m.content, m.role === 'assistant' ? 'bot' : 'user');
@@ -421,6 +506,7 @@
         hideTyping();
         if (!res.ok) { addMsg(res.data && res.data.error ? res.data.error : CFG.genericErrorMessage, 'bot'); return; }
         if (res.data.data && res.data.data.response) addMsg(res.data.data.response, 'bot');
+        if (res.data.data) renderWidgetBlocks(res.data.data.widget_blocks);
     }
 
     // Reads the SSE body as it arrives, growing one bot bubble token-by-token
@@ -454,6 +540,7 @@
             }
             if (eventName === 'done') {
                 sendBtn.disabled = false;
+                renderWidgetBlocks(data.widget_blocks);
                 return;
             }
             if (data.delta) {

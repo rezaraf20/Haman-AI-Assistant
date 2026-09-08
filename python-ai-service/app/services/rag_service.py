@@ -168,7 +168,42 @@ def _business_name_rule(business_name: Optional[str], is_fa: bool) -> str:
 # CONTEXT above and to use the tool instead. Checked by name rather than
 # just "enabled_tools is non-empty" so a future non-pricing tool doesn't
 # silently pull in a rule that doesn't apply to it.
-_PRICING_TOOL_NAMES = {"get_product_availability", "get_product_variants", "search_products"}
+_PRICING_TOOL_NAMES = {"get_product_availability", "get_product_variants", "search_products", "recommend_products", "compare_products"}
+
+# recommend_products / compare_products (doc-04's "Product compare", Very
+# high) results render as actual widget UI — product cards or a comparison
+# table (see hamman-widget.js's renderProductCards()/renderCompareTable())
+# — never as text the model re-describes or re-tables itself.
+_PRODUCT_DISPLAY_TOOL_NAMES = {"recommend_products", "compare_products"}
+
+
+def _product_display_rule(enabled_tools: Optional[List[str]], is_fa: bool) -> str:
+    if not enabled_tools or not (_PRODUCT_DISPLAY_TOOL_NAMES & set(enabled_tools)):
+        return ""
+    if is_fa:
+        return (
+            "\n\nوقتی از ابزار recommend_products یا compare_products استفاده می‌کنی، کارت‌های محصول یا "
+            "جدول مقایسه به‌طور مستقیم در ویجت به کاربر نمایش داده می‌شود — نام، قیمت یا فهرست کامل "
+            "ویژگی‌های هر محصول را دوباره در متن خودت تکرار نکن و هرگز جدول متنی خودت را نساز. فقط یک "
+            "جمله‌ی کوتاه مقدمه بنویس، و برای recommend_products، برای هر محصول پیشنهادی یک جمله‌ی کوتاه "
+            "بنویس که چرا مناسب است — فقط بر اساس همان توضیح کوتاهی (short_description) که ابزار "
+            "برگردانده، نه از خودت. هرگز محصولی را که ابزار برنگردانده پیشنهاد نده، و هرگز محصولی از یک "
+            "فراخوانی ناموفق یا خالی را طوری بیان نکن که انگار موجود است. در compare_products، اگر "
+            "ویژگی‌ای برای یک محصول در نتیجه نبود، صراحتاً بگو برای آن محصول ذکر نشده — هرگز آن را از "
+            "روی محصول دیگر یا از خودت حدس نزن."
+        )
+    return (
+        "\n\nWhen you use recommend_products or compare_products, the actual product cards or "
+        "comparison table are rendered directly in the chat widget for the customer — do not "
+        "re-describe each product's name, price, or full attribute list in your own text, and "
+        "never draw your own text table. Just write one short intro sentence, and for "
+        "recommend_products, one short sentence per recommended product explaining why it fits — "
+        "based only on the short_description the tool actually returned, never invented. Never "
+        "recommend a product the tool did not return, and never describe a product from a failed "
+        "or empty call as if it were available. For compare_products, if a feature is missing for "
+        "one product in the result, say plainly that it isn't listed for that product — never "
+        "guess it from the other product or from general knowledge."
+    )
 
 
 def _live_pricing_rule(enabled_tools: Optional[List[str]], is_fa: bool) -> str:
@@ -1004,6 +1039,7 @@ async def run_rag_pipeline_stream(
     sys_p = _grounding_rules_for(query)
     sys_p += _business_name_rule(business_name, is_fa_question)
     sys_p += _live_pricing_rule(enabled_tools, is_fa_question)
+    sys_p += _product_display_rule(enabled_tools, is_fa_question)
     if system_prompt:
         sys_p += f"\n\n{system_prompt}"
     if context:
@@ -1184,6 +1220,7 @@ async def run_rag_pipeline(
     sys_p = _grounding_rules_for(query)
     sys_p += _business_name_rule(business_name, is_fa_question)
     sys_p += _live_pricing_rule(enabled_tools, is_fa_question)
+    sys_p += _product_display_rule(enabled_tools, is_fa_question)
     if system_prompt:
         sys_p += f"\n\n{system_prompt}"
     if context:

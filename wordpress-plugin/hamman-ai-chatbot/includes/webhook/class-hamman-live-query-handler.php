@@ -21,6 +21,8 @@ class Hamman_Live_Query_Handler {
     const RATE_LIMIT_MAX_PER_MINUTE = 20;
     const MAX_SEARCH_RESULTS        = 10;
     const MAX_VARIANTS_RETURNED     = 50;
+    const MAX_RECOMMEND_RESULTS     = 3;
+    const MAX_COMPARE_PRODUCTS      = 5;
 
     public function register_routes(): void {
         register_rest_route( 'hamman/v1', '/live-query', [
@@ -53,6 +55,10 @@ class Hamman_Live_Query_Handler {
                 return $this->get_variants( $body );
             case 'search_products':
                 return $this->search_products( $body );
+            case 'recommend_products':
+                return $this->recommend_products( $body );
+            case 'compare_products':
+                return $this->compare_products( $body );
             default:
                 return new WP_REST_Response( [ 'error' => 'Unknown action' ], 400 );
         }
@@ -264,5 +270,140 @@ class Hamman_Live_Query_Handler {
             if ( taxonomy_exists( $tax ) ) return $tax;
         }
         return null;
+    }
+
+    /**
+     * recommend_products: candidates for "what's good for X?" — from doc-04's
+     * product-compare item and a real shop interview ("what product is right
+     * for me?" was one of a cosmetics store's three most common questions).
+     * ALWAYS in-stock only, hardcoded here rather than left as a
+     * model-controlled flag — the acceptance criterion is that an
+     * out-of-stock item is never recommended, so this is enforced at the
+     * query level, not merely by prompting the model to behave. $need is
+     * passed straight into WC's own 's' (search) query arg, which WP_Query
+     * parameterizes internally; never built into raw SQL here.
+     */
+    private function recommend_products( array $body ): WP_REST_Response {
+        $need = isset( $body['need'] ) ? sanitize_text_field( (string) $body['need'] ) : '';
+        if ( '' === $need ) {
+            return new WP_REST_Response( [ 'error' => 'need is required' ], 400 );
+        }
+
+        $args = [
+            'status'       => 'publish',
+            'stock_status' => 'instock',
+            'limit'        => self::MAX_RECOMMEND_RESULTS,
+            'return'       => 'objects',
+            's'            => mb_substr( $need, 0, 300 ),
+        ];
+        if ( ! empty( $body['category'] ) ) {
+            $args['category'] = [ sanitize_title( (string) $body['category'] ) ];
+        }
+        if ( isset( $body['price_max'] ) && is_numeric( $body['price_max'] ) ) {
+            $args['max_price'] = (float) $body['price_max'];
+        }
+        if ( isset( $body['price_min'] ) && is_numeric( $body['price_min'] ) ) {
+            $args['min_price'] = (float) $body['price_min'];
+        }
+
+        $products = wc_get_products( $args );
+        $results  = [];
+        foreach ( $products as $p ) {
+            $results[] = [
+                'product_id'        => $p->get_id(),
+                'name'              => $p->get_name(),
+                'price'             => '' !== $p->get_price() ? (float) $p->get_price() : null,
+                'on_sale'           => $p->is_on_sale(),
+                // Always 'instock' by construction (see stock_status above)
+                // — still returned so the caller never has to assume it.
+                'stock_status'      => $p->get_stock_status(),
+                'short_description' => $this->plain_short_description( $p ),
+                'image'             => $this->product_image_url( $p ),
+            ];
+        }
+
+        return new WP_REST_Response( [
+            'currency' => get_woocommerce_currency(),
+            'products' => $results,
+        ], 200 );
+    }
+
+    /**
+     * compare_products: a feature-by-feature table for 2-5 products. Returns
+     * each product's OWN real WooCommerce attributes only — never invents or
+     * infers a value for a product that doesn't have one; the caller (see
+     * product_tools.compare_products on the Python side) builds the union of
+     * attribute names across all returned products and leaves a product's
+     * cell blank wherever it has no matching key, rather than guessing.
+     */
+    private function compare_products( array $body ): WP_REST_Response {
+        $raw_ids = is_array( $body['product_ids'] ?? null ) ? $body['product_ids'] : [];
+        $ids     = array_values( array_filter( array_unique( array_map( 'absint', $raw_ids ) ) ) );
+        $ids     = array_slice( $ids, 0, self::MAX_COMPARE_PRODUCTS );
+        if ( count( $ids ) < 2 ) {
+            return new WP_REST_Response( [ 'error' => 'At least 2 valid product_ids are required' ], 400 );
+        }
+
+        $products = [];
+        foreach ( $ids as $id ) {
+            $p = wc_get_product( $id );
+            if ( ! $p ) {
+                $products[] = [ 'product_id' => $id, 'found' => false ];
+                continue;
+            }
+            $products[] = [
+                'product_id'   => $p->get_id(),
+                'found'        => true,
+                'name'         => $p->get_name(),
+                'price'        => '' !== $p->get_price() ? (float) $p->get_price() : null,
+                'stock_status' => $p->get_stock_status(),
+                'image'        => $this->product_image_url( $p ),
+                'attributes'   => $this->product_attributes_map( $p ),
+            ];
+        }
+
+        return new WP_REST_Response( [
+            'currency' => get_woocommerce_currency(),
+            'products' => $products,
+        ], 200 );
+    }
+
+    /** Label => value for every attribute this SPECIFIC product actually
+     * has (both global/taxonomy attributes like pa_color and local/custom
+     * ones) — omits anything empty rather than returning a blank value, so
+     * a missing key unambiguously means "this product doesn't have this
+     * attribute", not "it has an empty one". */
+    private function product_attributes_map( WC_Product $product ): array {
+        $map = [];
+        foreach ( $product->get_attributes() as $attribute ) {
+            $label = wc_attribute_label( $attribute->get_name(), $product );
+            if ( $attribute->is_taxonomy() ) {
+                $terms = wc_get_product_terms( $product->get_id(), $attribute->get_name(), [ 'fields' => 'names' ] );
+                $value = implode( ', ', $terms );
+            } else {
+                $value = implode( ', ', $attribute->get_options() );
+            }
+            if ( '' !== trim( (string) $value ) ) {
+                $map[ $label ] = $value;
+            }
+        }
+        return $map;
+    }
+
+    private function product_image_url( WC_Product $product ): ?string {
+        $image_id = $product->get_image_id();
+        if ( ! $image_id ) return null;
+        $url = wp_get_attachment_image_url( $image_id, 'medium' );
+        return $url ?: null;
+    }
+
+    /** Plain, tag-stripped, whitespace-collapsed short description — the
+     * raw material the model grounds its one-sentence "why this fits"
+     * recommendation in, never invented beyond what this text says. */
+    private function plain_short_description( WC_Product $product ): string {
+        $text = $product->get_short_description() ?: $product->get_description();
+        $text = wp_strip_all_tags( (string) $text );
+        $text = trim( preg_replace( '/\s+/', ' ', $text ) );
+        return mb_substr( $text, 0, 220 );
     }
 }

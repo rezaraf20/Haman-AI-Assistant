@@ -449,5 +449,98 @@ class RunToolCallingPipelineTest(unittest.TestCase):
         self.assertIsNone(result)
 
 
+class WidgetBlockTest(unittest.TestCase):
+    """recommend_products/compare_products results must render as actual
+    widget UI, never as text the model re-describes (see
+    _build_widget_block()), and every product actually shown must get a
+    product_mentioned event (revenue-attribution input, doc-04's
+    acceptance criterion) — logged for exactly the products shown, not
+    merely fetched/considered."""
+
+    def test_build_widget_block_ignores_non_display_tools(self):
+        self.assertIsNone(tool_calling_service._build_widget_block("get_product_availability", {"live": True, "products": [{"product_id": 1}]}))
+
+    def test_build_widget_block_ignores_unsuccessful_result(self):
+        self.assertIsNone(tool_calling_service._build_widget_block("recommend_products", {"live": False, "products": []}))
+
+    def test_build_widget_block_ignores_empty_products(self):
+        self.assertIsNone(tool_calling_service._build_widget_block("recommend_products", {"live": True, "products": []}))
+
+    def test_build_widget_block_recommend_shape(self):
+        products = [{"product_id": 1, "name": "A"}]
+        block = tool_calling_service._build_widget_block("recommend_products", {"live": True, "products": products})
+        self.assertEqual(block, {"type": "product_cards", "products": products})
+
+    def test_build_widget_block_compare_shape_includes_attribute_rows(self):
+        products = [{"product_id": 1}, {"product_id": 2}]
+        rows = [{"attribute": "Volume", "values": {"1": "50ml", "2": None}}]
+        block = tool_calling_service._build_widget_block("compare_products", {"live": True, "products": products, "attribute_rows": rows})
+        self.assertEqual(block, {"type": "product_compare", "products": products, "attribute_rows": rows})
+
+    def test_log_product_mentions_skips_not_found_entries(self):
+        with patch("app.services.rag_service._log_event") as mock_log:
+            tool_calling_service._log_product_mentions(
+                MagicMock(), "conv-1", "chatbot-1", "compare_products",
+                [{"product_id": 1, "name": "A", "found": True}, {"product_id": 999, "found": False}],
+            )
+        mock_log.assert_called_once()
+        self.assertEqual(mock_log.call_args[0][4]["product_id"], 1)
+
+    def test_log_product_mentions_logs_one_event_per_product(self):
+        with patch("app.services.rag_service._log_event") as mock_log:
+            tool_calling_service._log_product_mentions(
+                MagicMock(), "conv-1", "chatbot-1", "recommend_products",
+                [{"product_id": 1, "name": "A"}, {"product_id": 2, "name": "B"}],
+            )
+        self.assertEqual(mock_log.call_count, 2)
+        payloads = [c[0][4] for c in mock_log.call_args_list]
+        self.assertEqual({p["product_id"] for p in payloads}, {1, 2})
+        self.assertTrue(all(p["source"] == "recommend_products" for p in payloads))
+
+    def test_run_tool_calling_pipeline_returns_widget_blocks_and_logs_mentions(self):
+        recommend_tool = Tool(
+            name="recommend_products", description="test", access_level="read",
+            parameters={"type": "object", "properties": {"need": {"type": "string"}}, "required": ["need"]},
+            handler=lambda db, chatbot_id, **kw: {
+                "live": True,
+                "products": [{"product_id": 11, "name": "Oil-Free Cleanser", "price": 90000, "stock_status": "instock"}],
+            },
+        )
+
+        tool_call_message = {
+            "content": None,
+            "tool_calls": [{"id": "call_1", "function": {"name": "recommend_products", "arguments": '{"need": "oily skin"}'}}],
+        }
+        final_message = {"content": "Here's a good option for oily skin.", "tool_calls": None}
+        call_sequence = [
+            (tool_call_message, {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}),
+            (final_message, {"prompt_tokens": 20, "completion_tokens": 8, "total_tokens": 28}),
+        ]
+
+        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature):
+            message, usage = call_sequence.pop(0)
+            return message, "groq/test-tool-model", usage, 0.0
+
+        with patch.object(tool_calling_service, "get_enabled_tools", return_value=[recommend_tool]), \
+             patch.object(tool_calling_service, "to_openai_schema", return_value=[{"type": "function", "function": {"name": "recommend_products"}}]), \
+             patch.object(tool_calling_service, "_tool_calling_chat", side_effect=fake_tool_calling_chat), \
+             patch("app.services.rag_service._log_event") as mock_log:
+            result = tool_calling_service.run_tool_calling_pipeline(
+                db=MagicMock(), chatbot_id="chatbot-1", conversation_id="conv-1",
+                query="what do you recommend for oily skin?", history=[], system_prompt_text="system prompt",
+                max_tokens=800, temperature=0.3, enabled_tool_names=["recommend_products"],
+            )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["widget_blocks"], [{
+            "type": "product_cards",
+            "products": [{"product_id": 11, "name": "Oil-Free Cleanser", "price": 90000, "stock_status": "instock"}],
+        }])
+        # Both the tool_called event AND the product_mentioned event fired.
+        event_types = [c[0][3] for c in mock_log.call_args_list]
+        self.assertIn("tool_called", event_types)
+        self.assertIn("product_mentioned", event_types)
+
+
 if __name__ == "__main__":
     unittest.main()

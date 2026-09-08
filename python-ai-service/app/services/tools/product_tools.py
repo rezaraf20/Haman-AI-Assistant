@@ -13,29 +13,47 @@ from the last sync, not live).
                              price range, brand, in-stock) — not a
                              semantic/similarity search, that's what the
                              regular vector retrieval pipeline is for.
+  recommend_products         up to 3 in-stock products matching a
+                             described need (doc-04 "Product compare",
+                             Very high — "what product is right for me?"
+                             was one of a cosmetics shop's three most
+                             common questions).
+  compare_products            a feature-by-feature table for 2-5 products.
 
-All three call the WordPress plugin's own live-query REST endpoint (more
+All five call the WordPress plugin's own live-query REST endpoint (more
 control than WooCommerce's own REST API, no extra customer-supplied
 consumer key, reuses the webhook_secret trust relationship that already
 exists for outbound sync webhooks) with a short timeout.
 
 PRICING RULE — deliberately stricter than an ordinary "best effort" tool:
 a wrong price is the worst possible mistake for a shop, worse than no
-answer at all. So none of these three tools fall back to the last-synced
-index on failure the way the sync-era check_product_availability once did.
+answer at all. So none of these tools fall back to the last-synced index
+on failure the way the sync-era check_product_availability once did.
 On ANY failure (site down, timed out, no domain on file) they return an
 explicit "live check unavailable" result with no price/stock field at
 all, plus a product_url (built from the numeric product ID, never a slug —
 slugs change, IDs don't) when one is knowable, so the model has nothing to
 misreport and is steered toward "check the product page" instead. The
 matching prompt-side rule lives in rag_service._live_pricing_rule().
+
+recommend_products additionally enforces "never suggest an out-of-stock
+item" at the QUERY level (WordPress's stock_status='instock' filter is
+hardcoded, not a model-controlled parameter) rather than relying on the
+model to comply with a prompt instruction — see the acceptance criterion
+this was built against.
+
+compare_products never invents a value for an attribute a product doesn't
+have: WordPress returns only the real attributes each product actually
+carries, and this module's own attribute_rows builder fills a product's
+cell with None (rendered as a blank/dash by the widget) wherever that
+product simply has no matching key, rather than inferring anything.
 """
 import hashlib
 import hmac
 import json as _json
 import logging
 import re
-from typing import Optional
+from typing import List, Optional
 
 import requests as _requests
 from sqlalchemy import text
@@ -260,6 +278,116 @@ def search_products(
     return {"live": True, "count": live.get("count", len(results)), "currency": live.get("currency", "IRT"), "results": results}
 
 
+MAX_RECOMMEND_RESULTS = 3
+MIN_COMPARE_PRODUCTS = 2
+MAX_COMPARE_PRODUCTS = 5
+
+
+def recommend_products(
+    db: Session, chatbot_id: str, need: str, category: Optional[str] = None,
+    price_min: Optional[float] = None, price_max: Optional[float] = None,
+) -> dict:
+    if not isinstance(need, str) or not need.strip():
+        return {"error": "need is required."}
+    params: dict = {"need": need.strip()[:300]}
+    for field_name, val in (("category", category),):
+        if val is not None:
+            if not isinstance(val, str) or not _SAFE_FILTER_RE.match(val):
+                return {"error": f"Invalid {field_name}."}
+            params[field_name] = val
+    for field_name, val in (("price_min", price_min), ("price_max", price_max)):
+        if val is not None:
+            try:
+                params[field_name] = float(val)
+            except (TypeError, ValueError):
+                return {"error": f"Invalid {field_name}."}
+
+    site = _resolve_site(db, chatbot_id)
+    if not site:
+        return {"live": False, "error": "live_check_unavailable",
+                "note": "Live recommendations are unavailable right now. Do not recommend any specific product.", "products": []}
+
+    live = _query_live(site["domain"], site["secret"], "recommend_products", params)
+    if live is None:
+        return {"live": False, "error": "live_check_unavailable",
+                "note": "Live recommendations are unavailable right now. Do not recommend any specific product.", "products": []}
+
+    products = live.get("products", [])
+    if not isinstance(products, list):
+        products = []
+    # Hard cap here too, even though WordPress already caps at 3 — defense
+    # in depth against a future WP-side change, same posture as every other
+    # server-enforced limit in this module.
+    products = products[:MAX_RECOMMEND_RESULTS]
+    for p in products:
+        if isinstance(p, dict):
+            p["product_url"] = _product_url(site["domain"], p.get("product_id"))
+
+    return {"live": True, "currency": live.get("currency", "IRT"), "products": products}
+
+
+def compare_products(db: Session, chatbot_id: str, product_ids: List[int]) -> dict:
+    if not isinstance(product_ids, list):
+        return {"error": "product_ids must be a list."}
+    clean_ids: List[int] = []
+    for raw in product_ids:
+        pid = _validate_product_id(raw)
+        if pid is None:
+            return {"error": "Invalid product_id in product_ids."}
+        if pid not in clean_ids:
+            clean_ids.append(pid)
+    clean_ids = clean_ids[:MAX_COMPARE_PRODUCTS]
+    if len(clean_ids) < MIN_COMPARE_PRODUCTS:
+        return {"error": f"At least {MIN_COMPARE_PRODUCTS} distinct product_ids are required."}
+
+    site = _resolve_site(db, chatbot_id)
+    if not site:
+        return {"live": False, "error": "live_check_unavailable",
+                "note": "Live comparison is unavailable right now. Do not compare these products from memory.", "products": [], "attribute_rows": []}
+
+    live = _query_live(site["domain"], site["secret"], "compare_products", {"product_ids": clean_ids})
+    if live is None:
+        return {"live": False, "error": "live_check_unavailable",
+                "note": "Live comparison is unavailable right now. Do not compare these products from memory.", "products": [], "attribute_rows": []}
+
+    raw_products = live.get("products", [])
+    if not isinstance(raw_products, list):
+        raw_products = []
+
+    # Union of attribute labels across every product that actually has any,
+    # in first-seen order — a product with no key for a given row simply
+    # never had that attribute, never inferred as a blank/empty value.
+    attribute_names: List[str] = []
+    for p in raw_products:
+        if not isinstance(p, dict) or not p.get("found"):
+            continue
+        for label in (p.get("attributes") or {}).keys():
+            if label not in attribute_names:
+                attribute_names.append(label)
+
+    products_out = []
+    for p in raw_products:
+        if not isinstance(p, dict):
+            continue
+        products_out.append({
+            "product_id": p.get("product_id"), "found": bool(p.get("found")),
+            "name": p.get("name"), "price": p.get("price"), "stock_status": p.get("stock_status"),
+            "image": p.get("image"),
+            "product_url": _product_url(site["domain"], p.get("product_id")),
+        })
+
+    attribute_rows = []
+    for label in attribute_names:
+        values = {}
+        for p in raw_products:
+            if not isinstance(p, dict) or not p.get("found"):
+                continue
+            values[str(p.get("product_id"))] = (p.get("attributes") or {}).get(label)  # None if this product lacks it
+        attribute_rows.append({"attribute": label, "values": values})
+
+    return {"live": True, "currency": live.get("currency", "IRT"), "products": products_out, "attribute_rows": attribute_rows}
+
+
 register(Tool(
     name="get_product_availability",
     description=(
@@ -322,5 +450,55 @@ register(Tool(
         "additionalProperties": False,
     },
     handler=search_products,
+    access_level="read",
+))
+
+register(Tool(
+    name="recommend_products",
+    description=(
+        "Recommend up to 3 IN-STOCK products from the live catalog that fit a customer's "
+        "described need (e.g. 'something for oily skin', 'a gift under 300000 toman'). "
+        "Always returns only in-stock products. For each product returned, base your one-"
+        "sentence explanation of why it fits ONLY on the short_description the tool gives "
+        "you — never invent a reason. If the tool returns fewer than 3 products, recommend "
+        "only that many; never pad the list with something not returned here."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "need": {"type": "string", "description": "The customer's need/goal in their own words (e.g. 'oily skin', 'gift for a beginner').", "maxLength": 300},
+            "category": {"type": "string", "description": "Category name or slug to narrow to, if known."},
+            "price_min": {"type": "number", "description": "Minimum price, if the customer gave one."},
+            "price_max": {"type": "number", "description": "Maximum price, if the customer gave one."},
+        },
+        "required": ["need"],
+        "additionalProperties": False,
+    },
+    handler=recommend_products,
+    access_level="read",
+))
+
+register(Tool(
+    name="compare_products",
+    description=(
+        "Build a feature-by-feature comparison table for 2 to 5 specific products, by "
+        "numeric product ID — use this when a customer wants to compare products they (or "
+        "you, from an earlier search/recommendation) already identified. Only ever state a "
+        "feature value the tool actually returned for that product; if a feature is missing "
+        "for one of them, say it isn't listed — never guess it from the other product or from "
+        "general knowledge."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "product_ids": {
+                "type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 5,
+                "description": "The numeric WooCommerce product IDs to compare (2 to 5 of them).",
+            },
+        },
+        "required": ["product_ids"],
+        "additionalProperties": False,
+    },
+    handler=compare_products,
     access_level="read",
 ))
