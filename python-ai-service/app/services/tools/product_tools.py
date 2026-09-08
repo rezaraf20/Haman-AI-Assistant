@@ -94,7 +94,13 @@ def _fallback_from_index(db: Session, chatbot_id: str, sku: str, reason: str) ->
         }
     return {
         "found": True, "live": False,
-        "name": row.name, "sku": row.sku, "price": row.price, "currency": row.currency,
+        "name": row.name, "sku": row.sku,
+        # Postgres NUMERIC comes back as Decimal via SQLAlchemy, which
+        # json.dumps() can't serialize on its own — this result is fed
+        # straight back into the conversation as a tool-role message and
+        # also persisted in conversation_events.payload (jsonb).
+        "price": float(row.price) if row.price is not None else None,
+        "currency": row.currency,
         "stock_status": row.stock_status,
         "note": f"{reason} This is from the last catalog sync, not a live check — it may not be current.",
     }

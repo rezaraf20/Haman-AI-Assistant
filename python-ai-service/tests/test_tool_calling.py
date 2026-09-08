@@ -98,6 +98,30 @@ class ProductToolsWordPressUnreachableTest(unittest.TestCase):
 
         self.assertFalse(result.get("live"))
 
+    def test_index_fallback_with_a_found_row_returns_json_serializable_price(self):
+        """Regression: products.price is a Postgres NUMERIC, which SQLAlchemy
+        hands back as a Decimal — json.dumps() (used both to feed the result
+        back to the model as a tool-role message and to persist it in
+        conversation_events.payload) can't serialize Decimal on its own.
+        Caught live: the real fallback path crashed the whole chat turn with
+        TypeError: Object of type Decimal is not JSON serializable."""
+        import json as _json
+        from decimal import Decimal
+
+        db = MagicMock()
+        product_row = MagicMock(
+            name="Test Op-Amp LM358N", sku="LM358N-TEST",
+            price=Decimal("15000.0000"), currency="IRT", stock_status="instock",
+        )
+        db.execute.return_value.fetchone.side_effect = [None, product_row]  # _resolve_site -> None, then the fallback query
+
+        result = product_tools.check_product_availability(db, "chatbot-1", "LM358N-TEST")
+
+        self.assertTrue(result["found"])
+        self.assertEqual(result["price"], 15000.0)
+        self.assertIsInstance(result["price"], float)
+        _json.dumps(result)  # must not raise
+
     def test_live_query_success_returns_live_data(self):
         db = MagicMock()
         site_row = MagicMock(primary_domain="example.test", webhook_secret="s3cret")
