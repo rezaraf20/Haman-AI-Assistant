@@ -115,6 +115,21 @@ class ClassifyIntentTest(unittest.TestCase):
     def test_order_status_checked_before_return(self):
         self.assertEqual(classify_intent("My order status - can I still return it?"), "order_status")
 
+    # ── real-message regression (found via the 20-real-message accuracy
+    # check this feature's own acceptance criteria required) ────────────
+    def test_casually_worded_real_price_questions(self):
+        # The original fixed-phrase-only price list missed all three of
+        # these real production messages entirely (classified "other").
+        self.assertEqual(classify_intent("میتونم قیمت اپلیکیشن رو بدونم؟"), "price")
+        self.assertEqual(classify_intent("برای سئو چقدر هزینه میگیرید؟"), "price")
+        self.assertEqual(classify_intent("هزینه طراحی سایت چقدر است؟"), "price")
+
+    def test_bare_shipping_cost_still_resolves_to_shipping_not_price(self):
+        # "هزینه" alone now triggers price, but "هزینه ارسال" (shipping
+        # cost) must still resolve to the more specific shipping category —
+        # shipping's patterns are checked first.
+        self.assertEqual(classify_intent("هزینه ارسال به شیراز چقدره؟"), "shipping")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -73,7 +73,16 @@ _PATTERNS = [
         "in stock", "out of stock", "do you have", "is it available", "available now",
     )),
     ("price", _P(
-        "قیمتش", "قیمت چنده", "چند تومانه", "چند ریاله", "تخفیف داره", "چقدره",
+        # "قیمت"/"هزینه" bare (price/cost, standalone nouns) are included
+        # deliberately, not just fixed phrases — a real-message accuracy
+        # check against 20 actual production messages (none of them a shop,
+        # all a services company: "میتونم قیمت اپلیکیشن رو بدونم؟", "برای
+        # سئو چقدر هزینه میگیرید؟", "هزینه طراحی سایت چقدر است؟") showed
+        # the original fixed-phrase-only list missed real, more casually
+        # worded price questions entirely. Checked after the more specific
+        # shipping/order_status patterns above, so "هزینه ارسال" still
+        # correctly resolves to shipping, not price.
+        "قیمت", "هزینه", "قیمتش", "قیمت چنده", "چند تومانه", "چند ریاله", "تخفیف داره", "چقدره",
         "how much", "what's the price", "price of", "cost of", "is it expensive", "any discount",
     )),
     ("technical_support", _P(
