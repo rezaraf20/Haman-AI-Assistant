@@ -68,4 +68,63 @@ class Hamman_Sync_Manager {
         if (!in_array( get_post_type($id), ['page','post'], true )) return;
         $this->api()->send_webhook(['event'=>'page.deleted','chatbot_id'=>$this->chatbotId(),'data'=>['id'=>$id]]);
     }
+
+    /**
+     * Revenue attribution (doc-04, prerequisite for Intent analytics) — the
+     * outbound half. Fires once per successful order (woocommerce_thankyou,
+     * the standard hook for "the order exists, the customer is looking at
+     * the thank-you page") and reports it, WITH the conversation ID from
+     * this browser's own hamman_conv_id cookie WHEN ONE IS PRESENT — never
+     * fabricated, and never assumed present (a customer who never opened
+     * the chat widget, or whose cookie already expired, simply reports no
+     * conversation_id, and Laravel's SyncService::recordOrder() treats a
+     * missing/invalid one the same safe way). A post meta flag makes this
+     * idempotent against the thank-you page being reloaded/revisited.
+     */
+    public function on_order_placed( int $order_id ): void {
+        if ( ! $order_id || ! $this->isReady() ) return;
+        if ( ! function_exists( 'wc_get_order' ) ) return;
+        $order = wc_get_order( $order_id );
+        if ( ! $order ) return;
+        if ( $order->get_meta( '_hamman_reported' ) ) return;
+
+        $conv_id = null;
+        if ( isset( $_COOKIE['hamman_conv_id'] ) ) {
+            $raw = sanitize_text_field( wp_unslash( $_COOKIE['hamman_conv_id'] ) );
+            // Only a plausible UUID is ever forwarded — never trust an
+            // arbitrary cookie value blindly, even though the server side
+            // re-validates this against its own conversations table too.
+            if ( preg_match( '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $raw ) ) {
+                $conv_id = $raw;
+            }
+        }
+
+        $line_items = [];
+        foreach ( $order->get_items() as $item ) {
+            $product = $item->get_product();
+            $line_items[] = [
+                'product_id' => $product ? $product->get_id() : (int) $item->get_product_id(),
+                'quantity'   => (int) $item->get_quantity(),
+                'total'      => (float) $item->get_total(),
+            ];
+        }
+
+        $result = $this->api()->send_webhook( [
+            'event'      => 'order.placed',
+            'chatbot_id' => $this->chatbotId(),
+            'data'       => [
+                'order_id'        => $order_id,
+                'conversation_id' => $conv_id,
+                'total'           => (float) $order->get_total(),
+                'currency'        => $order->get_currency(),
+                'status'          => $order->get_status(),
+                'line_items'      => $line_items,
+            ],
+        ] );
+
+        if ( ! is_wp_error( $result ) ) {
+            $order->update_meta_data( '_hamman_reported', 1 );
+            $order->save();
+        }
+    }
 }

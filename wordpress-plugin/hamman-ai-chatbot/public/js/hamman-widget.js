@@ -35,6 +35,20 @@
                 sessionId: sessionId, convId: convId, savedAt: Date.now()
             }));
         } catch (e) { /* private-browsing / storage disabled — persistence just won't work */ }
+        // Revenue attribution (doc-04) — localStorage isn't readable from a
+        // normal PHP page load (WooCommerce's checkout/thank-you page is a
+        // full navigation on the merchant's own site, not something this
+        // widget's JS runs inside), so a real cookie is what lets
+        // Hamman_Sync_Manager::on_order_placed() attach this conversation
+        // to an order later, if the same browser goes on to buy something.
+        // Same 24h TTL as the localStorage copy above; document.cookie here
+        // is the real top-level page's cookie jar (Shadow DOM only isolates
+        // the DOM tree/styles, not this global), so it's actually readable
+        // server-side on any later page load on this domain.
+        try {
+            document.cookie = 'hamman_conv_id=' + encodeURIComponent(convId) +
+                '; path=/; max-age=' + Math.floor(CONV_TTL_MS / 1000) + '; SameSite=Lax';
+        } catch (e) { /* cookies disabled — order attribution just won't have a conversation_id */ }
     }
     function loadPersistedOpen() {
         try { return localStorage.getItem(OPEN_STORAGE_KEY) === '1'; } catch (e) { return false; }

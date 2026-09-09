@@ -18,6 +18,7 @@ class CustomerDashboardData {
             'chatbotStatuses' => [], 'dailyRows' => collect(), 'monthQuestions' => 0,
             'monthUnanswered' => 0, 'recentUnanswered' => [], 'topTopics' => [],
             'newLeadsThisWeek' => 0, 'maxTokensMonthly' => $maxTokensMonthly,
+            'intentDailyRows' => [], 'intentTotals' => [],
         ];
     }
 
@@ -137,6 +138,29 @@ class CustomerDashboardData {
             ->get()
             ->toArray();
 
+        // doc-04 "Intent analytics" — {intent: count} per day, summed
+        // across every chatbot this tenant has (analytics_daily is one row
+        // per chatbot per date, so a tenant with several chatbots can have
+        // more than one row for the same date). Done in PHP rather than a
+        // SQL-side jsonb aggregate: 30 days x a handful of chatbots is a
+        // trivial row count, and there's no portable "sum these jsonb
+        // objects together" operator worth reaching for at this size.
+        $intentRaw = DB::table('analytics_daily')
+            ->where('date', '>=', $chartStart)
+            ->get(['date', 'intent_counts']);
+
+        $intentDailyRows = [];
+        $intentTotals = [];
+        foreach ($intentRaw as $row) {
+            $dateKey = $row->date instanceof \DateTimeInterface ? $row->date->format('Y-m-d') : substr($row->date, 0, 10);
+            $counts = json_decode($row->intent_counts ?? '{}', true) ?: [];
+            foreach ($counts as $intent => $cnt) {
+                $intentDailyRows[$dateKey][$intent] = ($intentDailyRows[$dateKey][$intent] ?? 0) + (int) $cnt;
+                $intentTotals[$intent] = ($intentTotals[$intent] ?? 0) + (int) $cnt;
+            }
+        }
+        arsort($intentTotals);
+
         return compact(
             'chatbotStatuses',
             'dailyRows',
@@ -146,6 +170,8 @@ class CustomerDashboardData {
             'topTopics',
             'newLeadsThisWeek',
             'maxTokensMonthly',
+            'intentDailyRows',
+            'intentTotals',
         );
     }
 }

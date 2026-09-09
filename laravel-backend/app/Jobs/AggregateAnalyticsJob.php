@@ -68,6 +68,20 @@ class AggregateAnalyticsJob implements ShouldQueue {
                     $productsRecommended = $events->where('event_type', 'product_mentioned')->count();
                     $conversions        = $events->where('event_type', 'lead_captured')->count();
 
+                    // doc-04 "Intent analytics" — {intent: count} for the
+                    // day, from intent_classified events (see
+                    // intent_classifier.py; logged unconditionally per
+                    // user message, no LLM cost). A malformed/missing
+                    // intent in a payload is dropped rather than counted
+                    // as a fake "other", since that would silently inflate
+                    // a real bucket with parse failures.
+                    $intentCounts = [];
+                    foreach ($events->where('event_type', 'intent_classified') as $e) {
+                        $intent = json_decode($e->payload ?? '{}', true)['intent'] ?? null;
+                        if (!$intent) continue;
+                        $intentCounts[$intent] = ($intentCounts[$intent] ?? 0) + 1;
+                    }
+
                     AnalyticsDaily::updateOrCreate(['chatbot_id' => $chatbot->id, 'date' => $date], [
                         'total_conversations'     => $convs,
                         'total_messages'          => $msgs->count(),
@@ -93,6 +107,7 @@ class AggregateAnalyticsJob implements ShouldQueue {
                         'negative_feedback'       => $negativeFeedback,
                         'products_recommended'    => $productsRecommended,
                         'conversions'             => $conversions,
+                        'intent_counts'           => $intentCounts,
                         'updated_at'              => now(),
                     ]);
 

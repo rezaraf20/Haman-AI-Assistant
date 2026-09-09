@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.core.config import settings
 from app.services import llm_provider_service
+from app.services.intent_classifier import classify_intent
 
 logger = logging.getLogger(__name__)
 
@@ -1061,6 +1062,14 @@ async def run_rag_pipeline_stream(
     """
     start = time.time()
 
+    # Zero-cost (no LLM call) — see intent_classifier.py. Logged
+    # unconditionally, before any early-return branch below, so every real
+    # user message gets an intent regardless of how the turn is eventually
+    # answered (SKU shortcut, embedding failure, fallback, tool call, or a
+    # normal completion) — a message's intent is a property of what the
+    # customer asked, not of how well the pipeline could answer it.
+    _log_event(db, conversation_id, chatbot_id, "intent_classified", {"intent": classify_intent(query)})
+
     sku_result = _try_sku_shortcut(db, chatbot_id, conversation_id, query, start)
     if sku_result is not None:
         yield ("delta", sku_result["response"])
@@ -1229,6 +1238,14 @@ async def run_rag_pipeline(
 ) -> dict:
 
     start = time.time()
+
+    # Zero-cost (no LLM call) — see intent_classifier.py. Logged
+    # unconditionally, before any early-return branch below, so every real
+    # user message gets an intent regardless of how the turn is eventually
+    # answered (SKU shortcut, embedding failure, fallback, tool call, or a
+    # normal completion) — a message's intent is a property of what the
+    # customer asked, not of how well the pipeline could answer it.
+    _log_event(db, conversation_id, chatbot_id, "intent_classified", {"intent": classify_intent(query)})
 
     sku_result = _try_sku_shortcut(db, chatbot_id, conversation_id, query, start)
     if sku_result is not None:

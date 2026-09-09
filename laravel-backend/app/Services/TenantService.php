@@ -311,6 +311,11 @@ class TenantService
                     negative_feedback BIGINT NOT NULL DEFAULT 0,
                     products_recommended BIGINT NOT NULL DEFAULT 0,
                     conversions BIGINT NOT NULL DEFAULT 0,
+                    -- {intent: count} for that day (see intent_classifier.py
+                    -- and the intent_classified conversation_event) --
+                    -- doc-04's Intent analytics item, rolled up here the same
+                    -- way products_recommended already is.
+                    intent_counts JSONB NOT NULL DEFAULT '{}',
                     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                     UNIQUE(chatbot_id, date)
@@ -327,6 +332,9 @@ class TenantService
         } catch (\Throwable $e) {}
         try {
             DB::statement("ALTER TABLE {$schemaName}.analytics_daily ADD COLUMN IF NOT EXISTS unanswered_count BIGINT NOT NULL DEFAULT 0");
+        } catch (\Throwable $e) {}
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.analytics_daily ADD COLUMN IF NOT EXISTS intent_counts JSONB NOT NULL DEFAULT '{}'");
         } catch (\Throwable $e) {}
         // Fine-grained per-turn events — see createTenantTables()'s matching
         // block for the full rationale. Needed here too since this method is
@@ -369,6 +377,32 @@ class TenantService
                 )
             ");
             DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_leads_lookup ON {$schemaName}.leads(chatbot_id, status, created_at)");
+        } catch (\Throwable $e) {}
+        // Revenue attribution (doc-04, prerequisite for Intent analytics) —
+        // see createTenantTables()'s matching block and SyncService::
+        // recordOrder(). conversation_id is nullable and only ever set when
+        // the WordPress plugin's order webhook found a real hamman_conv_id
+        // cookie from the SAME browser session that placed the order — a
+        // real signal, never guessed. UNIQUE(chatbot_id, woo_order_id) makes
+        // recordOrder() naturally idempotent against WooCommerce re-firing
+        // the same order-placed hook (e.g. a thank-you page refresh).
+        try {
+            DB::statement("
+                CREATE TABLE IF NOT EXISTS {$schemaName}.orders (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    chatbot_id UUID NOT NULL REFERENCES {$schemaName}.chatbots(id) ON DELETE CASCADE,
+                    conversation_id UUID NULL REFERENCES {$schemaName}.conversations(id) ON DELETE SET NULL,
+                    woo_order_id BIGINT NOT NULL,
+                    total DECIMAL(14,4) NOT NULL DEFAULT 0,
+                    currency VARCHAR(10) NOT NULL DEFAULT 'IRT',
+                    status VARCHAR(30) NOT NULL DEFAULT 'pending',
+                    line_items JSONB NOT NULL DEFAULT '[]',
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    UNIQUE(chatbot_id, woo_order_id)
+                )
+            ");
+            DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_orders_conv ON {$schemaName}.orders(conversation_id)");
+            DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_orders_lookup ON {$schemaName}.orders(chatbot_id, created_at)");
         } catch (\Throwable $e) {}
     }
 
@@ -677,6 +711,7 @@ class TenantService
                 negative_feedback BIGINT NOT NULL DEFAULT 0,
                 products_recommended BIGINT NOT NULL DEFAULT 0,
                 conversions BIGINT NOT NULL DEFAULT 0,
+                intent_counts JSONB NOT NULL DEFAULT '{}',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 UNIQUE(chatbot_id, date)
@@ -729,6 +764,27 @@ class TenantService
             )
         ");
         DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_leads_lookup ON {$s}.leads(chatbot_id, status, created_at)");
+
+        // Revenue attribution (doc-04, prerequisite for Intent analytics) —
+        // see fixSchema()'s matching block for the full rationale on
+        // conversation_id and the UNIQUE(chatbot_id, woo_order_id) idempotency
+        // guarantee.
+        DB::statement("
+            CREATE TABLE IF NOT EXISTS {$s}.orders (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                chatbot_id UUID NOT NULL REFERENCES {$s}.chatbots(id) ON DELETE CASCADE,
+                conversation_id UUID NULL REFERENCES {$s}.conversations(id) ON DELETE SET NULL,
+                woo_order_id BIGINT NOT NULL,
+                total DECIMAL(14,4) NOT NULL DEFAULT 0,
+                currency VARCHAR(10) NOT NULL DEFAULT 'IRT',
+                status VARCHAR(30) NOT NULL DEFAULT 'pending',
+                line_items JSONB NOT NULL DEFAULT '[]',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE(chatbot_id, woo_order_id)
+            )
+        ");
+        DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_orders_conv ON {$s}.orders(conversation_id)");
+        DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_orders_lookup ON {$s}.orders(chatbot_id, created_at)");
 
         DB::statement("SET search_path TO public");
     }
