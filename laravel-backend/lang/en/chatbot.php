@@ -4,6 +4,8 @@ return [
     'ai_name_label' => 'AI Name (shown in the chat header)',
     'appearance_action' => 'Widget Appearance',
     'appearance_saved' => 'Widget appearance saved',
+    'authenticity_unknown_message_help' => "Shown when a customer asks whether a product is genuine (or about its brand, official distributor, or warranty) and none of that has been synced for it. Leave empty to use the default. The bot only ever repeats what was actually recorded for a product — it never guesses.",
+    'authenticity_unknown_message_label' => 'Authenticity — Not Recorded Message',
     'avatar_url_label' => 'Avatar Image URL',
     'bonus_tokens_desc' => "These are used only after your plan's monthly quota runs out, and never expire.",
     'bonus_tokens_heading' => 'Purchased Bonus Tokens',

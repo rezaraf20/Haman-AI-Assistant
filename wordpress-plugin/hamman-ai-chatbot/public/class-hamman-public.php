@@ -65,6 +65,14 @@ class Hamman_Public {
             'copyLabel'            => 'کپی پیام',
             'copiedLabel'          => 'کپی شد',
             'scrollToBottomLabel'  => 'رفتن به پایین',
+            // Product cards / comparison table (recommend_products,
+            // compare_products tools) — see renderProductCards()/
+            // renderCompareTable() in hamman-widget.js.
+            'inStockLabel'         => 'موجود',
+            'outOfStockLabel'      => 'ناموجود',
+            'viewProductLabel'     => 'مشاهده محصول',
+            // build_cart_url tool — see renderCartLinks() in hamman-widget.js.
+            'addToCartLabel'       => 'افزودن به سبد خرید',
         ] : [
             'dialogLabel'          => 'Chat with AI assistant',
             'closeLabel'           => 'Close chat',
@@ -72,6 +80,10 @@ class Hamman_Public {
             'copyLabel'            => 'Copy message',
             'copiedLabel'          => 'Copied',
             'scrollToBottomLabel'  => 'Scroll to bottom',
+            'inStockLabel'         => 'In stock',
+            'outOfStockLabel'      => 'Out of stock',
+            'viewProductLabel'     => 'View product',
+            'addToCartLabel'       => 'Add to cart',
         ];
 
         return [

@@ -188,6 +188,11 @@ class ChatController extends BaseApiController
             'latency_ms'  => $msg->latency_ms,
             'is_fallback' => $msg->is_fallback,
             'sources'     => $r['result']['sources'] ?? [],
+            // Product cards / comparison table (recommend_products,
+            // compare_products) — see hamman-widget.js's
+            // renderProductCards()/renderCompareTable(). Empty for every
+            // response that didn't use one of those two tools.
+            'widget_blocks' => $r['result']['widget_blocks'] ?? [],
         ]);
     }
 
@@ -206,11 +211,12 @@ class ChatController extends BaseApiController
                 });
                 $msg = $r['message'];
                 $write('event: done' . "\n" . 'data: ' . json_encode([
-                    'message_id'  => $msg->id,
-                    'model'       => $msg->model_used,
-                    'latency_ms'  => $msg->latency_ms,
-                    'is_fallback' => $msg->is_fallback,
-                    'sources'     => $r['result']['sources'] ?? [],
+                    'message_id'    => $msg->id,
+                    'model'         => $msg->model_used,
+                    'latency_ms'    => $msg->latency_ms,
+                    'is_fallback'   => $msg->is_fallback,
+                    'sources'       => $r['result']['sources'] ?? [],
+                    'widget_blocks' => $r['result']['widget_blocks'] ?? [],
                 ], JSON_UNESCAPED_UNICODE) . "\n\n");
             } catch (\Throwable $e) {
                 report($e);

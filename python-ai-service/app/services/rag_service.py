@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.core.config import settings
 from app.services import llm_provider_service
+from app.services.intent_classifier import classify_intent
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +161,153 @@ def _business_name_rule(business_name: Optional[str], is_fa: bool) -> str:
     if is_fa:
         return f"\n\nنام این کسب‌وکار «{business_name}» است. هرگز نام دیگری برای آن به کار نبر و هیچ نام شرکت دیگری را ذکر نکن."
     return f"\n\nThis business's name is \"{business_name}\". Never use any other name for it, and never state any other company's name as its own."
+
+
+# "Is this genuine?" — the single most common customer question in BOTH
+# real interviews this app was built from (electronics parts and
+# cosmetics). A wrong "yes" here is a real liability the merchant bears,
+# not a cosmetic mistake — so this rule is always active (unlike the
+# tool-gated pricing rules below), since authenticity data is synced
+# straight into the regular retrieved CONTEXT as plain lines (see
+# SyncService::syncProducts()' "Authenticity Status:"/"Brand:"/etc. — only
+# ever written when the seller's own WooCommerce field mapping actually
+# had a value), never fetched via a live tool call.
+DEFAULT_AUTHENTICITY_UNKNOWN_EN = (
+    "This detail hasn't been recorded by the seller for this product. Please contact us "
+    "directly to confirm authenticity, brand, official distributor, or warranty details."
+)
+DEFAULT_AUTHENTICITY_UNKNOWN_FA = (
+    "این جزئیات توسط فروشنده برای این محصول ثبت نشده است. لطفاً برای تأیید اصالت، برند، "
+    "نمایندگی رسمی یا گارانتی مستقیماً با ما تماس بگیرید."
+)
+
+
+def _authenticity_rule(authenticity_unknown_message: Optional[str], is_fa: bool) -> str:
+    fallback = authenticity_unknown_message or (DEFAULT_AUTHENTICITY_UNKNOWN_FA if is_fa else DEFAULT_AUTHENTICITY_UNKNOWN_EN)
+    if is_fa:
+        return (
+            "\n\nدرباره‌ی اصالت، برند، نمایندگی رسمی، مدت گارانتی یا کشور مبدأ یک محصول، فقط "
+            "دقیقاً همان چیزی را بگو که در زمینه‌ی بالا صراحتاً برای همان محصول آمده — هرگز بر "
+            "اساس توضیحات محصول، نظرات کاربران، قیمت یا برداشت خودت درباره‌ی اصالت قضاوت نکن. "
+            f"اگر این اطلاعات برای همان محصول در زمینه نیامده، دقیقاً همین را بگو: «{fallback}» "
+            "— هرگز حدس نزن و هرگز نگو «به‌احتمال زیاد اصل است» یا مشابه آن."
+        )
+    return (
+        "\n\nFor any question about a product's authenticity, brand, official distributor, "
+        "warranty period, or country of origin, state only exactly what the CONTEXT above "
+        "explicitly says for that specific product — never judge authenticity from the "
+        "product's description, reviews, price, or your own impression. If this information "
+        f"isn't in the context for that product, say exactly this: \"{fallback}\" — never "
+        "guess, and never say it's \"probably genuine\" or similar."
+    )
+
+
+# Names from tools/product_tools.py — a chatbot enabling any of these has
+# live pricing/stock capability, so the model must be told never to answer
+# a price/stock/variant question from the (possibly stale) retrieved
+# CONTEXT above and to use the tool instead. Checked by name rather than
+# just "enabled_tools is non-empty" so a future non-pricing tool doesn't
+# silently pull in a rule that doesn't apply to it.
+_PRICING_TOOL_NAMES = {"get_product_availability", "get_product_variants", "search_products", "recommend_products", "compare_products"}
+
+# recommend_products / compare_products (doc-04's "Product compare", Very
+# high) results render as actual widget UI — product cards or a comparison
+# table (see hamman-widget.js's renderProductCards()/renderCompareTable())
+# — never as text the model re-describes or re-tables itself.
+_PRODUCT_DISPLAY_TOOL_NAMES = {"recommend_products", "compare_products"}
+
+
+def _product_display_rule(enabled_tools: Optional[List[str]], is_fa: bool) -> str:
+    if not enabled_tools or not (_PRODUCT_DISPLAY_TOOL_NAMES & set(enabled_tools)):
+        return ""
+    if is_fa:
+        return (
+            "\n\nوقتی از ابزار recommend_products یا compare_products استفاده می‌کنی، کارت‌های محصول یا "
+            "جدول مقایسه به‌طور مستقیم در ویجت به کاربر نمایش داده می‌شود — نام، قیمت یا فهرست کامل "
+            "ویژگی‌های هر محصول را دوباره در متن خودت تکرار نکن و هرگز جدول متنی خودت را نساز. فقط یک "
+            "جمله‌ی کوتاه مقدمه بنویس، و برای recommend_products، برای هر محصول پیشنهادی یک جمله‌ی کوتاه "
+            "بنویس که چرا مناسب است — فقط بر اساس همان توضیح کوتاهی (short_description) که ابزار "
+            "برگردانده، نه از خودت. هرگز محصولی را که ابزار برنگردانده پیشنهاد نده، و هرگز محصولی از یک "
+            "فراخوانی ناموفق یا خالی را طوری بیان نکن که انگار موجود است. در compare_products، اگر "
+            "ویژگی‌ای برای یک محصول در نتیجه نبود، صراحتاً بگو برای آن محصول ذکر نشده — هرگز آن را از "
+            "روی محصول دیگر یا از خودت حدس نزن."
+        )
+    return (
+        "\n\nWhen you use recommend_products or compare_products, the actual product cards or "
+        "comparison table are rendered directly in the chat widget for the customer — do not "
+        "re-describe each product's name, price, or full attribute list in your own text, and "
+        "never draw your own text table. Just write one short intro sentence, and for "
+        "recommend_products, one short sentence per recommended product explaining why it fits — "
+        "based only on the short_description the tool actually returned, never invented. Never "
+        "recommend a product the tool did not return, and never describe a product from a failed "
+        "or empty call as if it were available. For compare_products, if a feature is missing for "
+        "one product in the result, say plainly that it isn't listed for that product — never "
+        "guess it from the other product or from general knowledge."
+    )
+
+
+_CART_LINK_TOOL_NAMES = {"build_cart_url"}
+
+
+def _cart_link_rule(enabled_tools: Optional[List[str]], is_fa: bool) -> str:
+    """build_cart_url builds a link the CUSTOMER must click for anything to
+    actually happen — this server never adds anything to a cart itself
+    (see product_tools.build_cart_url's docstring). The one failure mode
+    that matters here isn't a wrong price or a stale fact, it's the model
+    describing the add as already done ("I've added it to your cart") when
+    nothing has happened yet — that's simply false until the customer
+    clicks, so this gets its own explicit rule rather than folding into
+    _product_display_rule's more general "don't re-describe" guidance."""
+    if not enabled_tools or not (_CART_LINK_TOOL_NAMES & set(enabled_tools)):
+        return ""
+    if is_fa:
+        return (
+            "\n\nوقتی از ابزار build_cart_url استفاده می‌کنی، دکمه‌های واقعی «افزودن به سبد خرید» "
+            "به‌طور مستقیم در ویجت نمایش داده می‌شود — لینک خام را در متن خودت تکرار نکن. مهم‌تر از آن: "
+            "تا وقتی کاربر خودش روی آن دکمه کلیک نکند، هیچ‌چیز واقعاً به سبد خرید اضافه نشده — هرگز نگو "
+            "«اضافه کردم» یا «به سبد شما اضافه شد»؛ به‌جایش بگو چیزی مثل «برای افزودن به سبد خرید روی "
+            "دکمه‌ی زیر کلیک کنید»."
+        )
+    return (
+        "\n\nWhen you use build_cart_url, real 'Add to cart' buttons are rendered directly in the "
+        "chat widget — do not repeat the raw link as text. More importantly: nothing is actually "
+        "added to the customer's cart until they click that button themselves — never say you've "
+        "already added it or that it's now in their cart; say something like 'click below to add "
+        "it to your cart' instead."
+    )
+
+
+def _live_pricing_rule(enabled_tools: Optional[List[str]], is_fa: bool) -> str:
+    """A wrong price is the worst mistake a shop's bot can make — worse
+    than no answer. This rule exists specifically because sys_p already
+    contains the regular retrieved CONTEXT (which may itself mention an
+    old price, e.g. from a synced product description or a datasheet
+    example) by the time the tool-calling call runs, so the model must be
+    told explicitly which source wins."""
+    if not enabled_tools or not (_PRICING_TOOL_NAMES & set(enabled_tools)):
+        return ""
+    if is_fa:
+        return (
+            "\n\nقیمت و موجودی محصولات این کسب‌وکار ممکن است در هر لحظه تغییر کند — زمینه‌ی (context) "
+            "بالا ممکن است شامل قیمت‌های قدیمی باشد. هرگز قیمت، وضعیت موجودی یا در دسترس بودن را از "
+            "زمینه‌ی بالا بیان نکن. برای هر سوال درباره‌ی قیمت، موجودی، در دسترس بودن یا تنوع محصول "
+            "(رنگ/سایز)، باید از ابزار زنده‌ی مناسب استفاده کنی و فقط بر اساس نتیجه‌ی همان ابزار پاسخ "
+            "بدهی. وقتی از نتیجه‌ی یک ابزار زنده استفاده می‌کنی، صراحتاً به کاربر بگو این اطلاعات زنده و "
+            "لحظه‌ای است. اگر ابزار زنده در دسترس نبود یا خطا داد، هرگز عدد قدیمی حدس نزن یا تکرار نکن — "
+            "صادقانه بگو در حال حاضر نمی‌توانی قیمت یا موجودی دقیق را تأیید کنی، و اگر ابزار لینک صفحه‌ی "
+            "محصول (product_url) داد از همان استفاده کن، وگرنه بگو مستقیم به فروشگاه مراجعه کند."
+        )
+    return (
+        "\n\nThis business's product prices and stock levels can change at any time — the "
+        "CONTEXT above may contain outdated prices, if any. Never state a price, stock "
+        "status, or availability from the CONTEXT above. For any question about price, "
+        "stock, availability, or product variants (color/size), you must call the "
+        "appropriate live tool and answer using only its result. When you answer using a "
+        "live tool's result, explicitly tell the user this is live/current data. If the "
+        "live tool is unavailable or fails, never guess or reuse an old number — say you "
+        "can't confirm the exact price or availability right now, and if the tool gave a "
+        "product_url, share that link; otherwise tell them to check the shop directly."
+    )
 
 
 def _grounding_reminder(is_fa: bool) -> str:
@@ -902,6 +1050,8 @@ async def run_rag_pipeline_stream(
     top_k: int, threshold: float, temperature: float, max_tokens: int, language: str,
     rerank_enabled: bool = False, rerank_threshold: float = 0.500,
     business_name: Optional[str] = None, conversation_id: Optional[str] = None,
+    enabled_tools: Optional[List[str]] = None,
+    authenticity_unknown_message: Optional[str] = None,
 ) -> AsyncGenerator[Tuple[str, object], None]:
     """Streaming counterpart to run_rag_pipeline() — identical retrieval and
     prompt-building, but yields ("delta", str) as the answer is generated
@@ -911,6 +1061,14 @@ async def run_rag_pipeline_stream(
     only care about the final persisted record can treat it the same way.
     """
     start = time.time()
+
+    # Zero-cost (no LLM call) — see intent_classifier.py. Logged
+    # unconditionally, before any early-return branch below, so every real
+    # user message gets an intent regardless of how the turn is eventually
+    # answered (SKU shortcut, embedding failure, fallback, tool call, or a
+    # normal completion) — a message's intent is a property of what the
+    # customer asked, not of how well the pipeline could answer it.
+    _log_event(db, conversation_id, chatbot_id, "intent_classified", {"intent": classify_intent(query)})
 
     sku_result = _try_sku_shortcut(db, chatbot_id, conversation_id, query, start)
     if sku_result is not None:
@@ -960,6 +1118,10 @@ async def run_rag_pipeline_stream(
     is_fa_question = _looks_persian(query)
     sys_p = _grounding_rules_for(query)
     sys_p += _business_name_rule(business_name, is_fa_question)
+    sys_p += _live_pricing_rule(enabled_tools, is_fa_question)
+    sys_p += _product_display_rule(enabled_tools, is_fa_question)
+    sys_p += _cart_link_rule(enabled_tools, is_fa_question)
+    sys_p += _authenticity_rule(authenticity_unknown_message, is_fa_question)
     if system_prompt:
         sys_p += f"\n\n{system_prompt}"
     if context:
@@ -968,6 +1130,25 @@ async def run_rag_pipeline_stream(
     lang_map = {"fa": "Persian/Farsi", "ar": "Arabic", "en": "English"}
     if language and language != "auto" and language in lang_map:
         sys_p += f"\n\nIMPORTANT: Always respond in {lang_map[language]}."
+
+    # Tool calling doesn't stream token-by-token (a multi-step tool loop
+    # doesn't map onto a single delta stream the way one plain completion
+    # does) — run it to completion, then yield the whole answer as one
+    # delta chunk followed by "done", the exact same pattern already used
+    # for the SKU-shortcut and quota-exceeded paths above. See
+    # run_rag_pipeline()'s identical, more detailed comment.
+    if enabled_tools:
+        from app.services.tool_calling_service import run_tool_calling_pipeline
+        tool_result = run_tool_calling_pipeline(
+            db, chatbot_id, conversation_id, query, history, sys_p, max_tokens, temperature, enabled_tools,
+        )
+        if tool_result is not None:
+            tool_result["chunk_ids"] = [c["id"] for c in chunks]
+            tool_result["scores"] = [round(c.get("rerank_score", c.get("similarity", 0.0)), 4) for c in chunks]
+            tool_result["cost_toman"] = round(tool_result["cost_toman"] + retrieval_cost_toman, 4)
+            yield ("delta", tool_result["response"])
+            yield ("done", tool_result)
+            return
 
     hist_text = ""
     for h in history[-12:]:
@@ -1052,9 +1233,19 @@ async def run_rag_pipeline(
     top_k: int, threshold: float, temperature: float, max_tokens: int, language: str,
     rerank_enabled: bool = False, rerank_threshold: float = 0.500,
     business_name: Optional[str] = None, conversation_id: Optional[str] = None,
+    enabled_tools: Optional[List[str]] = None,
+    authenticity_unknown_message: Optional[str] = None,
 ) -> dict:
 
     start = time.time()
+
+    # Zero-cost (no LLM call) — see intent_classifier.py. Logged
+    # unconditionally, before any early-return branch below, so every real
+    # user message gets an intent regardless of how the turn is eventually
+    # answered (SKU shortcut, embedding failure, fallback, tool call, or a
+    # normal completion) — a message's intent is a property of what the
+    # customer asked, not of how well the pipeline could answer it.
+    _log_event(db, conversation_id, chatbot_id, "intent_classified", {"intent": classify_intent(query)})
 
     sku_result = _try_sku_shortcut(db, chatbot_id, conversation_id, query, start)
     if sku_result is not None:
@@ -1119,6 +1310,10 @@ async def run_rag_pipeline(
     is_fa_question = _looks_persian(query)
     sys_p = _grounding_rules_for(query)
     sys_p += _business_name_rule(business_name, is_fa_question)
+    sys_p += _live_pricing_rule(enabled_tools, is_fa_question)
+    sys_p += _product_display_rule(enabled_tools, is_fa_question)
+    sys_p += _cart_link_rule(enabled_tools, is_fa_question)
+    sys_p += _authenticity_rule(authenticity_unknown_message, is_fa_question)
     if system_prompt:
         sys_p += f"\n\n{system_prompt}"
     if context:
@@ -1127,6 +1322,26 @@ async def run_rag_pipeline(
     lang_map = {"fa": "Persian/Farsi", "ar": "Arabic", "en": "English"}
     if language and language != "auto" and language in lang_map:
         sys_p += f"\n\nIMPORTANT: Always respond in {lang_map[language]}."
+
+    # Tool calling is layered on top of the RAG context above, not a
+    # replacement for it — the model still sees whatever was retrieved
+    # (sys_p already has grounding rules + business name + context baked
+    # in at this point) AND gets the option to call a live-data tool for
+    # the specific stock/price/etc. question retrieval structurally can't
+    # answer. Returns None whenever tool calling doesn't apply (no tools
+    # enabled for this chatbot, no tool-calling-capable provider
+    # configured, the call itself failed, or the time budget ran out) —
+    # falls through to the normal completion below unchanged in that case.
+    if enabled_tools:
+        from app.services.tool_calling_service import run_tool_calling_pipeline
+        tool_result = run_tool_calling_pipeline(
+            db, chatbot_id, conversation_id, query, history, sys_p, max_tokens, temperature, enabled_tools,
+        )
+        if tool_result is not None:
+            tool_result["chunk_ids"] = [c["id"] for c in chunks]
+            tool_result["scores"] = [round(c.get("rerank_score", c.get("similarity", 0.0)), 4) for c in chunks]
+            tool_result["cost_toman"] = round(tool_result["cost_toman"] + retrieval_cost_toman, 4)
+            return tool_result
 
     hist_text = ""
     for h in history[-12:]:

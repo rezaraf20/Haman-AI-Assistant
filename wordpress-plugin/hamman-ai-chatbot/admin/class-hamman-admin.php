@@ -55,6 +55,21 @@ class Hamman_Admin {
         update_option('hamman_sync_pages',    isset($_POST['hamman_sync_pages'])?'1':'0');
         update_option('hamman_sync_pdfs',     isset($_POST['hamman_sync_pdfs'])?'1':'0');
 
+        // نگاشت فیلدهای اصالت / Authenticity field mapping — see
+        // Hamman_Product_Sync::AUTHENTICITY_FIELDS/authenticity_fields().
+        // An entry is only kept when both a real type AND a non-empty key
+        // were given; anything else means "not mapped", read back as null
+        // at sync time — never a half-filled mapping guessed at.
+        $field_mapping = [];
+        foreach ( Hamman_Product_Sync::AUTHENTICITY_FIELDS as $field ) {
+            $type = sanitize_key( $_POST["hamman_field_map_{$field}_type"] ?? '' );
+            $key  = sanitize_text_field( $_POST["hamman_field_map_{$field}_key"] ?? '' );
+            if ( in_array( $type, [ 'meta', 'attribute' ], true ) && '' !== $key ) {
+                $field_mapping[ $field ] = [ 'type' => $type, 'key' => $key ];
+            }
+        }
+        update_option( 'hamman_field_mapping', $field_mapping );
+
         // پیشرفته / Advanced (rate limiting stays local — it's per-visitor-IP
         // on this specific site, not a server-side/content setting)
         update_option('hamman_rate_limit_max_messages',  max(1,(int)($_POST['hamman_rate_limit_max_messages']??50)));

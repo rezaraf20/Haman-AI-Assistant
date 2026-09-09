@@ -18,6 +18,8 @@ async def chat_complete(req: ChatRequest, db: Session = Depends(get_db)):
         temperature=req.temperature, max_tokens=req.max_tokens, language=req.language,
         rerank_enabled=req.rerank_enabled, rerank_threshold=req.rerank_threshold,
         business_name=req.business_name, conversation_id=req.conversation_id,
+        enabled_tools=req.enabled_tools,
+        authenticity_unknown_message=req.authenticity_unknown_message,
     )
     return ChatResponse(**result)
 
@@ -41,6 +43,7 @@ async def chat_stream(req: ChatRequest, db: Session = Depends(get_db)):
             temperature=req.temperature, max_tokens=req.max_tokens, language=req.language,
             rerank_enabled=req.rerank_enabled, rerank_threshold=req.rerank_threshold,
             business_name=req.business_name, conversation_id=req.conversation_id,
+            enabled_tools=req.enabled_tools,
         ):
             if kind == "delta":
                 yield f"data: {json.dumps({'delta': payload})}\n\n"

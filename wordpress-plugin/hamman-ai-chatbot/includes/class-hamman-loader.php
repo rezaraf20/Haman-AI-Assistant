@@ -30,10 +30,15 @@ class Hamman_Loader {
         $this->add_action( 'wp_enqueue_scripts',   $public, 'enqueue_assets' );
         $this->add_action( 'hamman_hourly_sync',   $sync,   'run_incremental_sync' );
         $this->add_action( 'rest_api_init',        new Hamman_Webhook_Handler(), 'register_routes' );
+        $this->add_action( 'rest_api_init',        new Hamman_Live_Query_Handler(), 'register_routes' );
 
         if ( class_exists( 'WooCommerce' ) ) {
             $this->add_action( 'woocommerce_update_product', $sync, 'on_product_updated' );
             $this->add_action( 'woocommerce_delete_product', $sync, 'on_product_deleted' );
+            // Revenue attribution (doc-04) — fires once the order actually
+            // exists and the customer is on the thank-you page, the
+            // standard WooCommerce hook for "a real order was just placed".
+            $this->add_action( 'woocommerce_thankyou', $sync, 'on_order_placed' );
         }
         $this->add_action( 'save_post',    $sync, 'on_post_saved',   10, 3 );
         $this->add_action( 'delete_post',  $sync, 'on_post_removed' );

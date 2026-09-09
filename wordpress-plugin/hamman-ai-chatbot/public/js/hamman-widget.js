@@ -35,6 +35,20 @@
                 sessionId: sessionId, convId: convId, savedAt: Date.now()
             }));
         } catch (e) { /* private-browsing / storage disabled — persistence just won't work */ }
+        // Revenue attribution (doc-04) — localStorage isn't readable from a
+        // normal PHP page load (WooCommerce's checkout/thank-you page is a
+        // full navigation on the merchant's own site, not something this
+        // widget's JS runs inside), so a real cookie is what lets
+        // Hamman_Sync_Manager::on_order_placed() attach this conversation
+        // to an order later, if the same browser goes on to buy something.
+        // Same 24h TTL as the localStorage copy above; document.cookie here
+        // is the real top-level page's cookie jar (Shadow DOM only isolates
+        // the DOM tree/styles, not this global), so it's actually readable
+        // server-side on any later page load on this domain.
+        try {
+            document.cookie = 'hamman_conv_id=' + encodeURIComponent(convId) +
+                '; path=/; max-age=' + Math.floor(CONV_TTL_MS / 1000) + '; SameSite=Lax';
+        } catch (e) { /* cookies disabled — order attribution just won't have a conversation_id */ }
     }
     function loadPersistedOpen() {
         try { return localStorage.getItem(OPEN_STORAGE_KEY) === '1'; } catch (e) { return false; }
@@ -262,6 +276,112 @@
         typingEl = null;
     }
 
+    // ── Product cards / comparison table ───────────────────────────────
+    // Structured content from recommend_products/compare_products (see
+    // tool_calling_service._build_widget_block() on the Python side) —
+    // rendered as real DOM (cards, a table), never dumped as text the
+    // model would otherwise have to hand-format. Both card strip and
+    // table wrapper scroll horizontally rather than trying to squeeze
+    // multiple columns into the widget's ~360px (or full-width-mobile)
+    // box, which is what actually makes them render correctly at any
+    // width instead of just at one.
+    function formatPrice(price, currency) {
+        if (price === null || typeof price === 'undefined') return '';
+        var n = Number(price);
+        if (isNaN(n)) return '';
+        return n.toLocaleString() + (currency ? ' ' + currency : '');
+    }
+
+    function renderWidgetBlocks(blocks) {
+        if (!blocks || !blocks.length) return;
+        var wasNearBottom = isNearBottom();
+        blocks.forEach(function (block) {
+            if (block.type === 'product_cards') renderProductCards(block.products);
+            else if (block.type === 'product_compare') renderCompareTable(block.products, block.attribute_rows);
+            else if (block.type === 'cart_links') renderCartLinks(block.items);
+        });
+        if (wasNearBottom) scrollToBottom(false);
+    }
+
+    // build_cart_url's items are plain WooCommerce ?add-to-cart=ID GET
+    // links — the click itself is what adds the item, this button is just
+    // real UI for that link, not something that adds anything on its own.
+    function renderCartLinks(items) {
+        if (!items || !items.length) return;
+        var wrap = document.createElement('div');
+        wrap.className = 'hm-cart-links';
+        items.forEach(function (it) {
+            var btn = document.createElement('a');
+            btn.className = 'hm-cart-link-btn';
+            btn.href = it.url;
+            btn.target = '_blank';
+            btn.rel = 'noopener';
+            var qtyText = (it.quantity && it.quantity > 1) ? ' × ' + it.quantity : '';
+            btn.textContent = CFG.i18n.addToCartLabel + qtyText;
+            wrap.appendChild(btn);
+        });
+        msgs.appendChild(wrap);
+    }
+
+    function renderProductCards(products) {
+        if (!products || !products.length) return;
+        var wrap = document.createElement('div');
+        wrap.className = 'hm-product-cards';
+        products.forEach(function (p) {
+            var card = document.createElement('a');
+            card.className = 'hm-product-card';
+            card.href = p.product_url || '#';
+            card.target = '_blank';
+            card.rel = 'noopener';
+            var imgHtml = p.image
+                ? '<img src="' + esc(p.image) + '" alt="" loading="lazy">'
+                : '<div class="hm-product-card-noimg"></div>';
+            var priceHtml = (p.price !== null && typeof p.price !== 'undefined')
+                ? '<span class="hm-product-price">' + esc(formatPrice(p.price, p.currency)) + '</span>' : '';
+            var inStock = p.stock_status === 'instock';
+            var stockHtml = p.stock_status
+                ? '<span class="hm-stock-badge ' + (inStock ? 'hm-instock' : 'hm-outofstock') + '">' +
+                  esc(inStock ? CFG.i18n.inStockLabel : CFG.i18n.outOfStockLabel) + '</span>' : '';
+            card.innerHTML =
+                imgHtml +
+                '<div class="hm-product-card-body">' +
+                    '<div class="hm-product-name">' + esc(p.name) + '</div>' +
+                    priceHtml +
+                    stockHtml +
+                '</div>';
+            wrap.appendChild(card);
+        });
+        msgs.appendChild(wrap);
+    }
+
+    function renderCompareTable(products, rows) {
+        if (!products || products.length < 2) return;
+        var outer = document.createElement('div');
+        outer.className = 'hm-compare-wrap';
+        var table = document.createElement('table');
+        table.className = 'hm-compare-table';
+
+        var theadHtml = '<thead><tr><th></th>' + products.map(function (p) {
+            var imgHtml = p.image ? '<img src="' + esc(p.image) + '" alt="">' : '';
+            var priceHtml = (p.price !== null && typeof p.price !== 'undefined')
+                ? '<div class="hm-compare-price">' + esc(formatPrice(p.price, p.currency)) + '</div>' : '';
+            var linkHtml = p.product_url
+                ? '<a href="' + esc(p.product_url) + '" target="_blank" rel="noopener">' + esc(CFG.i18n.viewProductLabel) + '</a>' : '';
+            return '<th>' + imgHtml + '<div class="hm-compare-name">' + esc(p.name || '') + '</div>' + priceHtml + linkHtml + '</th>';
+        }).join('') + '</tr></thead>';
+
+        var tbodyHtml = '<tbody>' + (rows || []).map(function (row) {
+            return '<tr><th>' + esc(row.attribute) + '</th>' + products.map(function (p) {
+                var v = row.values ? row.values[String(p.product_id)] : null;
+                return '<td>' + (v === null || typeof v === 'undefined' || v === '' ? '—' : esc(v)) + '</td>';
+            }).join('') + '</tr>';
+        }).join('') + '</tbody>';
+
+        table.innerHTML = theadHtml + tbodyHtml;
+        outer.appendChild(table);
+        msgs.appendChild(outer);
+    }
+
     function renderHistory(list) {
         list.forEach(function (m) {
             addMsg(m.content, m.role === 'assistant' ? 'bot' : 'user');
@@ -421,6 +541,7 @@
         hideTyping();
         if (!res.ok) { addMsg(res.data && res.data.error ? res.data.error : CFG.genericErrorMessage, 'bot'); return; }
         if (res.data.data && res.data.data.response) addMsg(res.data.data.response, 'bot');
+        if (res.data.data) renderWidgetBlocks(res.data.data.widget_blocks);
     }
 
     // Reads the SSE body as it arrives, growing one bot bubble token-by-token
@@ -454,6 +575,7 @@
             }
             if (eventName === 'done') {
                 sendBtn.disabled = false;
+                renderWidgetBlocks(data.widget_blocks);
                 return;
             }
             if (data.delta) {

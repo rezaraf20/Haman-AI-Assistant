@@ -10,12 +10,13 @@ class LlmProviderProfile extends Model {
     protected $fillable = [
         'name', 'provider', 'base_url', 'model_name', 'api_key',
         'input_price_per_1m_toman', 'output_price_per_1m_toman',
-        'priority', 'is_active', 'max_tokens_response', 'timeout_seconds',
+        'priority', 'is_active', 'supports_tool_calling', 'max_tokens_response', 'timeout_seconds',
         'extra_headers', 'last_success_at', 'last_failure_at', 'consecutive_failures',
         'disabled_reason', 'disabled_notified_at',
     ];
     protected $casts = [
         'is_active'                  => 'boolean',
+        'supports_tool_calling'      => 'boolean',
         'extra_headers'              => 'array',
         'last_success_at'            => 'datetime',
         'last_failure_at'            => 'datetime',

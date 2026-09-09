@@ -4,6 +4,8 @@ namespace App\Services;
 use App\Models\Tenant\{Document, SyncJob, Product, Faq, Chunk};
 use App\Jobs\EmbedDocumentJob;
 use App\Support\SkuNormalizer;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class SyncService {
 
@@ -24,6 +26,18 @@ class SyncService {
     'Stock: '.($p['stock_status']??'instock'),
     'Link: '.($p['permalink']??''),
     'Image: '.($p['featured_image']??''),
+    // "Is this genuine?" fields — only a line if the seller actually
+    // recorded that specific field (see Hamman_Product_Sync::
+    // authenticity_fields() on the plugin side); array_filter() above
+    // drops any of these that are empty, so an unmapped/unfilled field
+    // leaves no trace in the indexed text at all — the grounding rule
+    // (rag_service._authenticity_rule()) treats its absence as "not
+    // recorded", never guessing a value never actually written here.
+    !empty($p['authenticity_status']) ? 'Authenticity Status: '.$p['authenticity_status'] : '',
+    !empty($p['brand']) ? 'Brand: '.$p['brand'] : '',
+    !empty($p['official_distributor']) ? 'Official Distributor: '.$p['official_distributor'] : '',
+    !empty($p['warranty_period']) ? 'Warranty Period: '.$p['warranty_period'] : '',
+    !empty($p['country_of_origin']) ? 'Country of Origin: '.$p['country_of_origin'] : '',
 ]));
                 ['document'=>$doc, 'outcome'=>$outcome] = $this->upsertDoc([
                     'chatbot_id'  => $chatbotId,
@@ -43,7 +57,7 @@ class SyncService {
                 ]);
                 Product::updateOrCreate(
                     ['chatbot_id'=>$chatbotId,'woo_product_id'=>$p['id']],
-                    ['name'=>$p['name'],'sku'=>$p['sku']??null,'sku_normalized'=>SkuNormalizer::normalize($p['sku']??null),'type'=>$p['type']??'simple','status'=>$p['status']??'publish','description'=>strip_tags($p['description']??''),'price'=>$p['price']??null,'currency'=>$p['currency']??'USD','stock_status'=>$p['stock_status']??'instock','permalink'=>$p['permalink']??null,'featured_image'=>$p['featured_image']??null,'attributes'=>$p['attributes']??[],'tags'=>$p['tags']??[],'embedding_status'=>'pending','synced_at'=>now()]
+                    ['name'=>$p['name'],'sku'=>$p['sku']??null,'sku_normalized'=>SkuNormalizer::normalize($p['sku']??null),'type'=>$p['type']??'simple','status'=>$p['status']??'publish','description'=>strip_tags($p['description']??''),'price'=>$p['price']??null,'currency'=>$p['currency']??'USD','stock_status'=>$p['stock_status']??'instock','permalink'=>$p['permalink']??null,'featured_image'=>$p['featured_image']??null,'attributes'=>$p['attributes']??[],'tags'=>$p['tags']??[],'authenticity_status'=>$p['authenticity_status']??null,'brand'=>$p['brand']??null,'official_distributor'=>$p['official_distributor']??null,'warranty_period'=>$p['warranty_period']??null,'country_of_origin'=>$p['country_of_origin']??null,'embedding_status'=>'pending','synced_at'=>now()]
                 );
                 if (in_array($outcome, ['new','updated'], true)) {
                     EmbedDocumentJob::dispatch($doc->id, $chatbotId, $schema);
@@ -169,8 +183,67 @@ class SyncService {
             'faq.updated'                       => $this->syncFaqs($chatbotId, [$data], $schema),
             'product.deleted' => $this->deleteDocument($chatbotId, 'woocommerce_product', (string)($data['id']??''), $data['id']??null),
             'page.deleted'     => $this->deleteDocument($chatbotId, null, (string)($data['id']??''), null),
+            'order.placed'     => $this->recordOrder($chatbotId, $data),
             default => null,
         };
+    }
+
+    /**
+     * Revenue attribution (doc-04, prerequisite for Intent analytics) —
+     * fired from Hamman_Sync_Manager::on_order_placed() (WooCommerce's
+     * woocommerce_thankyou hook) once per real order. conversation_id
+     * arrives from a hamman_conv_id browser cookie the plugin read at
+     * checkout time — since that value ultimately came from the customer's
+     * own browser, it's never trusted blindly: it must look like a real
+     * UUID AND actually belong to a conversation on THIS chatbot before
+     * being attached to the order, otherwise it's silently dropped rather
+     * than attributed to the wrong bot (or a manipulated/stale cookie).
+     * UNIQUE(chatbot_id, woo_order_id) (see TenantService) makes this
+     * naturally idempotent against WooCommerce re-firing the hook (e.g. a
+     * thank-you page refresh) — the id column is only ever set on the
+     * initial insert, never touched again, so a repeat call can't silently
+     * swap the primary key underneath an existing row.
+     */
+    private function recordOrder(string $chatbotId, array $data): void {
+        $wooOrderId = (int) ($data['order_id'] ?? 0);
+        if (!$wooOrderId) return;
+
+        $conversationId = null;
+        $rawConvId = $data['conversation_id'] ?? null;
+        if ($rawConvId && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', (string) $rawConvId)) {
+            $belongsToThisChatbot = DB::table('conversations')->where('id', $rawConvId)->where('chatbot_id', $chatbotId)->exists();
+            if ($belongsToThisChatbot) $conversationId = $rawConvId;
+        }
+
+        $lineItems = [];
+        foreach (($data['line_items'] ?? []) as $item) {
+            if (!isset($item['product_id'])) continue;
+            $lineItems[] = [
+                'product_id' => (int) $item['product_id'],
+                'quantity'   => (int) ($item['quantity'] ?? 1),
+                'total'      => (float) ($item['total'] ?? 0),
+            ];
+        }
+
+        $fields = [
+            'conversation_id' => $conversationId,
+            'total'           => (float) ($data['total'] ?? 0),
+            'currency'        => $data['currency'] ?? 'IRT',
+            'status'          => $data['status'] ?? 'pending',
+            'line_items'      => json_encode($lineItems),
+        ];
+
+        $existing = DB::table('orders')->where('chatbot_id', $chatbotId)->where('woo_order_id', $wooOrderId)->first();
+        if ($existing) {
+            DB::table('orders')->where('id', $existing->id)->update($fields);
+            return;
+        }
+        DB::table('orders')->insert(array_merge($fields, [
+            'id'           => (string) Str::uuid(),
+            'chatbot_id'   => $chatbotId,
+            'woo_order_id' => $wooOrderId,
+            'created_at'   => now(),
+        ]));
     }
 
     /**

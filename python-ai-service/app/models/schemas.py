@@ -24,6 +24,18 @@ class ChatRequest(BaseModel):
     rerank_enabled: bool = False
     rerank_threshold: float = 0.500
     business_name: Optional[str] = None
+    # Which tool-registry tools (app/services/tools/registry.py) this
+    # chatbot may call — empty by default, matching every chatbot that
+    # existed before tool calling shipped. Names the model-supplied
+    # arguments can never widen: chatbot_id/schema_name for every tool
+    # handler always come from this request's own fields, never from the
+    # model's tool-call arguments (see run_tool_calling_pipeline()).
+    enabled_tools: List[str] = []
+    # Store-level fallback text for "is this genuine?"-type questions when
+    # a product has none of its 5 authenticity fields synced — see
+    # rag_service._authenticity_rule(). None uses that function's own
+    # hardcoded bilingual default.
+    authenticity_unknown_message: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str
@@ -39,6 +51,12 @@ class ChatResponse(BaseModel):
     is_fallback: bool = False
     is_unanswered: bool = False
     finish_reason: str = "stop"
+    # Structured UI content the widget renders directly — product cards
+    # (recommend_products) or a comparison table (compare_products), see
+    # tool_calling_service._build_widget_block(). Empty for every response
+    # that didn't call one of those two tools; the widget must never try to
+    # render this as text.
+    widget_blocks: List[dict] = []
 
 class EmbedRequest(BaseModel):
     document_id: str

@@ -254,6 +254,20 @@ class TenantService
         try {
             DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_products_sku_normalized ON {$schemaName}.products(chatbot_id, sku_normalized)");
         } catch (\Throwable $e) {}
+        // Tool calling — see createTenantTables()'s matching column comment.
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.chatbots ADD COLUMN IF NOT EXISTS enabled_tools JSONB NOT NULL DEFAULT '[]'");
+        } catch (\Throwable $e) {}
+        // Authenticity fields — see createTenantTables()'s matching column
+        // comments and rag_service._authenticity_rule().
+        foreach (['authenticity_status', 'brand', 'official_distributor', 'warranty_period', 'country_of_origin'] as $col) {
+            try {
+                DB::statement("ALTER TABLE {$schemaName}.products ADD COLUMN IF NOT EXISTS {$col} VARCHAR(255)");
+            } catch (\Throwable $e) {}
+        }
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.chatbots ADD COLUMN IF NOT EXISTS authenticity_unknown_message TEXT");
+        } catch (\Throwable $e) {}
         // Backfill: the ADD COLUMN above leaves every pre-existing chunk row
         // at content_tsv=NULL (never matches any full-text query), so hybrid
         // search would silently degrade to vector-only for already-embedded
@@ -297,6 +311,11 @@ class TenantService
                     negative_feedback BIGINT NOT NULL DEFAULT 0,
                     products_recommended BIGINT NOT NULL DEFAULT 0,
                     conversions BIGINT NOT NULL DEFAULT 0,
+                    -- {intent: count} for that day (see intent_classifier.py
+                    -- and the intent_classified conversation_event) --
+                    -- doc-04's Intent analytics item, rolled up here the same
+                    -- way products_recommended already is.
+                    intent_counts JSONB NOT NULL DEFAULT '{}',
                     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                     UNIQUE(chatbot_id, date)
@@ -313,6 +332,9 @@ class TenantService
         } catch (\Throwable $e) {}
         try {
             DB::statement("ALTER TABLE {$schemaName}.analytics_daily ADD COLUMN IF NOT EXISTS unanswered_count BIGINT NOT NULL DEFAULT 0");
+        } catch (\Throwable $e) {}
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.analytics_daily ADD COLUMN IF NOT EXISTS intent_counts JSONB NOT NULL DEFAULT '{}'");
         } catch (\Throwable $e) {}
         // Fine-grained per-turn events — see createTenantTables()'s matching
         // block for the full rationale. Needed here too since this method is
@@ -356,6 +378,32 @@ class TenantService
             ");
             DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_leads_lookup ON {$schemaName}.leads(chatbot_id, status, created_at)");
         } catch (\Throwable $e) {}
+        // Revenue attribution (doc-04, prerequisite for Intent analytics) —
+        // see createTenantTables()'s matching block and SyncService::
+        // recordOrder(). conversation_id is nullable and only ever set when
+        // the WordPress plugin's order webhook found a real hamman_conv_id
+        // cookie from the SAME browser session that placed the order — a
+        // real signal, never guessed. UNIQUE(chatbot_id, woo_order_id) makes
+        // recordOrder() naturally idempotent against WooCommerce re-firing
+        // the same order-placed hook (e.g. a thank-you page refresh).
+        try {
+            DB::statement("
+                CREATE TABLE IF NOT EXISTS {$schemaName}.orders (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    chatbot_id UUID NOT NULL REFERENCES {$schemaName}.chatbots(id) ON DELETE CASCADE,
+                    conversation_id UUID NULL REFERENCES {$schemaName}.conversations(id) ON DELETE SET NULL,
+                    woo_order_id BIGINT NOT NULL,
+                    total DECIMAL(14,4) NOT NULL DEFAULT 0,
+                    currency VARCHAR(10) NOT NULL DEFAULT 'IRT',
+                    status VARCHAR(30) NOT NULL DEFAULT 'pending',
+                    line_items JSONB NOT NULL DEFAULT '[]',
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    UNIQUE(chatbot_id, woo_order_id)
+                )
+            ");
+            DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_orders_conv ON {$schemaName}.orders(conversation_id)");
+            DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_orders_lookup ON {$schemaName}.orders(chatbot_id, created_at)");
+        } catch (\Throwable $e) {}
     }
 
     private function createTenantTables(string $s): void
@@ -396,6 +444,23 @@ class TenantService
                 -- client/widget-facing behavior, this is merchant-facing
                 -- alerting config, never sent to the browser.
                 notification_settings JSONB NOT NULL DEFAULT '{}',
+                -- Which tool-registry tools (see python-ai-service/app/
+                -- services/tools/registry.py) this chatbot may call, e.g.
+                -- a JSON array containing e.g. get_product_availability.
+                -- Empty by default — opt-in per chatbot, same posture as
+                -- lead_capture_enabled:
+                -- every existing chatbot keeps today's retrieval-only
+                -- behavior unchanged unless the merchant explicitly turns
+                -- a tool on. A separate column from widget_config (that one
+                -- is client/widget-facing UI text; this gates a real
+                -- server-side capability with live-data and cost
+                -- implications, never sent to the browser).
+                enabled_tools JSONB NOT NULL DEFAULT '[]',
+                -- Store-level fallback for is-this-genuine questions when a
+                -- product has none of the 5 authenticity fields synced.
+                -- Nullable -- when unset, rag_service._authenticity_rule()
+                -- uses its own hardcoded bilingual default instead.
+                authenticity_unknown_message TEXT,
                 language VARCHAR(10) NOT NULL DEFAULT 'en',
                 response_language VARCHAR(10) NOT NULL DEFAULT 'auto',
                 is_active BOOLEAN NOT NULL DEFAULT true,
@@ -504,6 +569,18 @@ class TenantService
                 -- array literal). JSONB accepts what the cast actually
                 -- sends, matching attributes.
                 tags JSONB DEFAULT '[]',
+                -- Is this genuine? -- the most common customer question in
+                -- both real interviews this was built from. Seller-entered
+                -- data ONLY (synced from a WordPress admin-configured field
+                -- mapping -- see Hamman_Product_Sync::authenticity_fields()),
+                -- never something the model infers; a NULL here must always
+                -- read as not-recorded, never as a genuine/not-genuine
+                -- verdict. See rag_service._authenticity_rule().
+                authenticity_status VARCHAR(255),
+                brand VARCHAR(255),
+                official_distributor VARCHAR(255),
+                warranty_period VARCHAR(255),
+                country_of_origin VARCHAR(255),
                 embedding_status VARCHAR(20) DEFAULT 'pending',
                 synced_at TIMESTAMPTZ DEFAULT now(),
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -634,6 +711,7 @@ class TenantService
                 negative_feedback BIGINT NOT NULL DEFAULT 0,
                 products_recommended BIGINT NOT NULL DEFAULT 0,
                 conversions BIGINT NOT NULL DEFAULT 0,
+                intent_counts JSONB NOT NULL DEFAULT '{}',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 UNIQUE(chatbot_id, date)
@@ -686,6 +764,27 @@ class TenantService
             )
         ");
         DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_leads_lookup ON {$s}.leads(chatbot_id, status, created_at)");
+
+        // Revenue attribution (doc-04, prerequisite for Intent analytics) —
+        // see fixSchema()'s matching block for the full rationale on
+        // conversation_id and the UNIQUE(chatbot_id, woo_order_id) idempotency
+        // guarantee.
+        DB::statement("
+            CREATE TABLE IF NOT EXISTS {$s}.orders (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                chatbot_id UUID NOT NULL REFERENCES {$s}.chatbots(id) ON DELETE CASCADE,
+                conversation_id UUID NULL REFERENCES {$s}.conversations(id) ON DELETE SET NULL,
+                woo_order_id BIGINT NOT NULL,
+                total DECIMAL(14,4) NOT NULL DEFAULT 0,
+                currency VARCHAR(10) NOT NULL DEFAULT 'IRT',
+                status VARCHAR(30) NOT NULL DEFAULT 'pending',
+                line_items JSONB NOT NULL DEFAULT '[]',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE(chatbot_id, woo_order_id)
+            )
+        ");
+        DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_orders_conv ON {$s}.orders(conversation_id)");
+        DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_orders_lookup ON {$s}.orders(chatbot_id, created_at)");
 
         DB::statement("SET search_path TO public");
     }

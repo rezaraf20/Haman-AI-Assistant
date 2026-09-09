@@ -11,6 +11,7 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 CACHE_KEY = "hamman:llm_provider_profiles:active"
+TOOL_CALLING_CACHE_KEY = "hamman:llm_provider_profiles:tool_calling"
 CACHE_TTL_SECONDS = 45
 
 # A dead provider left active in the failover chain doesn't just do nothing —
@@ -42,13 +43,16 @@ def _decrypt_api_key(value: str) -> str:
         return value
 
 
-def _fetch_from_db(db: Session) -> List[dict]:
-    rows = db.execute(text("""
+def _fetch_from_db(db: Session, tool_calling_only: bool = False) -> List[dict]:
+    where_clause = "WHERE is_active = true"
+    if tool_calling_only:
+        where_clause += " AND supports_tool_calling = true"
+    rows = db.execute(text(f"""
         SELECT name, provider, base_url, model_name, api_key, priority,
                max_tokens_response, timeout_seconds,
                input_price_per_1m_toman, output_price_per_1m_toman
         FROM public.llm_provider_profiles
-        WHERE is_active = true
+        {where_clause}
         ORDER BY priority ASC
     """)).mappings().fetchall()
     profiles = [dict(r) for r in rows]
@@ -83,6 +87,28 @@ def get_active_profiles(db: Session) -> List[dict]:
         _redis.set(CACHE_KEY, json.dumps(profiles), ex=CACHE_TTL_SECONDS)
     except Exception as e:
         logger.warning(f"llm_provider_profiles cache write failed: {e}")
+    return profiles
+
+
+def get_active_tool_calling_profiles(db: Session) -> List[dict]:
+    """Same shape and Redis-caching pattern as get_active_profiles(), but
+    filtered to profiles an admin has explicitly marked capable of tool
+    calling (LlmProviderProfileResource's "Tool Calling" toggle) — a real,
+    separate lever from the regular chat failover priority order, since
+    the cheapest/fastest model for a plain answer (llama-3.1-8b-instant,
+    notably) is known-weak at tool calling specifically."""
+    try:
+        cached = _redis.get(TOOL_CALLING_CACHE_KEY)
+        if cached is not None:
+            return json.loads(cached)
+    except Exception as e:
+        logger.warning(f"tool-calling profiles cache read failed, querying DB: {e}")
+
+    profiles = _fetch_from_db(db, tool_calling_only=True)
+    try:
+        _redis.set(TOOL_CALLING_CACHE_KEY, json.dumps(profiles), ex=CACHE_TTL_SECONDS)
+    except Exception as e:
+        logger.warning(f"tool-calling profiles cache write failed: {e}")
     return profiles
 
 
@@ -129,7 +155,7 @@ def record_outcome(db: Session, profile_name: str, success: bool) -> None:
                 # it here, requests would keep routing to a provider this
                 # same function just disabled for up to that long.
                 try:
-                    _redis.delete(CACHE_KEY)
+                    _redis.delete(CACHE_KEY, TOOL_CALLING_CACHE_KEY)
                 except Exception as cache_err:
                     logger.warning(f"Failed to invalidate provider cache after auto-disable: {cache_err}")
         db.commit()

@@ -75,6 +75,8 @@ return [
     'plan' => 'Plan',
     'priority' => 'Priority',
     'priority_help' => 'A lower number is tried first.',
+    'supports_tool_calling' => 'Tool Calling',
+    'supports_tool_calling_help' => "Whether this model is capable enough to be used for the tool-calling path (live stock/price lookups, etc.) — separate from the regular chat failover chain's priority, since it's usually a stronger, more expensive model than what's used for plain answers.",
     'profile_saved' => 'Your information was saved',
     'provider' => 'Provider',
     'provider_name_placeholder' => 'e.g. "Groq (llama-3.1-8b-instant)"',

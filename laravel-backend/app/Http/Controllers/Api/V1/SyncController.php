@@ -43,6 +43,15 @@ class SyncController extends BaseApiController {
             'products.*.attachments'        => 'nullable|array|max:20',
             'products.*.attachments.*.url'  => 'required_with:products.*.attachments|string',
             'products.*.attachments.*.name' => 'nullable|string',
+            // "Is this genuine?" fields — see Hamman_Product_Sync::
+            // authenticity_fields() on the plugin side. Each is whatever the
+            // seller actually recorded (via the admin-configured field
+            // mapping) or absent entirely; never guessed here either.
+            'products.*.authenticity_status'  => 'nullable|string|max:255',
+            'products.*.brand'                => 'nullable|string|max:255',
+            'products.*.official_distributor' => 'nullable|string|max:255',
+            'products.*.warranty_period'      => 'nullable|string|max:255',
+            'products.*.country_of_origin'    => 'nullable|string|max:255',
         ]);
         $t = app('current_tenant');
         return $this->accepted($this->jobArr($this->svc->syncProducts($d['chatbot_id'], $d['products'], $t->schema_name)));

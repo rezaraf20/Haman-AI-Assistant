@@ -7,6 +7,18 @@ class Hamman_Product_Sync {
     const MAX_BATCH_BYTES = 80000;
     const FETCH_PAGE_SIZE = 50;
 
+    // "Is this genuine?" — the single most common question across both real
+    // customer interviews this was built from (electronics parts AND
+    // cosmetics). MUST be a data field the seller actually entered, never
+    // something the model infers — see the admin-configured mapping this
+    // reads from (Sync tab, hamman_field_mapping option) and
+    // authenticity_fields() below. Shared with class-hamman-admin.php's
+    // settings form so both sides list the exact same 5 fields.
+    const AUTHENTICITY_FIELDS = [
+        'authenticity_status', 'brand', 'official_distributor',
+        'warranty_period', 'country_of_origin',
+    ];
+
     public function __construct( private Hamman_Api_Client $api ) {}
 
     public function sync_all( string $cid ): array {
@@ -53,7 +65,7 @@ class Hamman_Product_Sync {
             $term = get_term($cid,'product_cat');
             if ($term && !is_wp_error($term)) $cats[] = ['id'=>$term->term_id,'name'=>$term->name];
         }
-        return [
+        $base = [
             'id'=>$p->get_id(),'name'=>$p->get_name(),'slug'=>$p->get_slug(),'sku'=>$p->get_sku(),
             'type'=>$p->get_type(),'status'=>$p->get_status(),
             'description'=>wp_strip_all_tags($p->get_description()),
@@ -68,6 +80,58 @@ class Hamman_Product_Sync {
             'tags'=>wp_get_post_terms($p->get_id(),'product_tag',['fields'=>'names']),
             'attachments'=>$this->product_pdf_attachments($p),
         ];
+        return array_merge( $base, $this->authenticity_fields( $p ) );
+    }
+
+    /**
+     * "Is this genuine?" — real, seller-entered data only, never something
+     * the model infers from a description or reviews (see rag_service.
+     * _authenticity_rule() on the Python side, which enforces this at
+     * answer time too). Every store names its custom fields differently, so
+     * this reads from the admin-configured mapping (Sync tab,
+     * hamman_field_mapping option: field => {type: 'meta'|'attribute', key})
+     * rather than guessing a field name — a semantic field with no mapping,
+     * or whose mapped source is empty for this specific product, comes back
+     * null, never a guess pulled from an unrelated field.
+     */
+    private function authenticity_fields( \WC_Product $p ): array {
+        $mapping = get_option( 'hamman_field_mapping', [] );
+        if ( ! is_array( $mapping ) ) $mapping = [];
+
+        $out = [];
+        foreach ( self::AUTHENTICITY_FIELDS as $field ) {
+            $out[ $field ] = $this->read_mapped_field( $p, is_array( $mapping[ $field ] ?? null ) ? $mapping[ $field ] : null );
+        }
+        return $out;
+    }
+
+    private function read_mapped_field( \WC_Product $p, ?array $conf ): ?string {
+        if ( ! $conf || empty( $conf['key'] ) ) return null;
+        $key  = (string) $conf['key'];
+        $type = $conf['type'] ?? '';
+
+        if ( 'meta' === $type ) {
+            $value = get_post_meta( $p->get_id(), $key, true );
+            $value = is_array( $value ) ? implode( ', ', $value ) : (string) $value;
+        } elseif ( 'attribute' === $type ) {
+            $value = $this->read_attribute_value( $p, $key );
+        } else {
+            return null;
+        }
+
+        $value = trim( wp_strip_all_tags( $value ) );
+        return '' !== $value ? $value : null;
+    }
+
+    private function read_attribute_value( \WC_Product $p, string $attribute_name ): string {
+        $attributes = $p->get_attributes();
+        if ( ! isset( $attributes[ $attribute_name ] ) ) return '';
+        $attribute = $attributes[ $attribute_name ];
+        if ( $attribute->is_taxonomy() ) {
+            $terms = wc_get_product_terms( $p->get_id(), $attribute->get_name(), [ 'fields' => 'names' ] );
+            return implode( ', ', $terms );
+        }
+        return implode( ', ', $attribute->get_options() );
     }
 
     /**
