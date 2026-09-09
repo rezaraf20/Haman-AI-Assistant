@@ -299,6 +299,7 @@
             if (block.type === 'product_cards') renderProductCards(block.products);
             else if (block.type === 'product_compare') renderCompareTable(block.products, block.attribute_rows);
             else if (block.type === 'cart_links') renderCartLinks(block.items);
+            else if (block.type === 'add_to_cart') renderAddToCartIntent(block.items);
         });
         if (wasNearBottom) scrollToBottom(false);
     }
@@ -321,6 +322,183 @@
             wrap.appendChild(btn);
         });
         msgs.appendChild(wrap);
+    }
+
+    // ── add_to_cart (Store API, same-origin) ───────────────────────────
+    // Unlike renderCartLinks() above, this button never navigates anywhere
+    // — clicking it calls WooCommerce's own Store API directly, same-origin,
+    // with the browser's own cookies + a nonce the plugin already embedded
+    // in CFG at page-render time (see class-hamman-public.php). Nothing is
+    // added to the cart until this exact click handler runs; the tool
+    // result rendered here is pure intent (see product_tools.add_to_cart).
+    function storeApiAvailable() {
+        return !!(CFG.storeApiUrl && CFG.storeApiNonce);
+    }
+
+    function classicCartUrl(productId, quantity) {
+        return window.location.origin + '/?add-to-cart=' + encodeURIComponent(productId) +
+            '&quantity=' + encodeURIComponent(quantity || 1);
+    }
+
+    function renderAddToCartIntent(items) {
+        if (!items || !items.length) return;
+        var wrap = document.createElement('div');
+        wrap.className = 'hm-atc-items';
+        items.forEach(function (it) {
+            var row = document.createElement('div');
+            row.className = 'hm-atc-item';
+
+            var nameEl = document.createElement('span');
+            nameEl.className = 'hm-atc-name';
+            var qtyText = (it.quantity && it.quantity > 1) ? ' × ' + it.quantity : '';
+            nameEl.textContent = (it.name || '') + qtyText;
+            row.appendChild(nameEl);
+
+            if (!storeApiAvailable()) {
+                // Store API not available at all (old WooCommerce / Store
+                // API disabled) — degrade straight to the classic link,
+                // the exact same fallback build_cart_url already uses,
+                // built client-side since the widget already knows its own
+                // origin (no server round trip needed for this).
+                var link = document.createElement('a');
+                link.className = 'hm-cart-link-btn';
+                link.href = classicCartUrl(it.product_id, it.quantity);
+                link.target = '_blank';
+                link.rel = 'noopener';
+                link.textContent = CFG.i18n.addToCartLabel;
+                row.appendChild(link);
+            } else {
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'hm-atc-btn';
+                btn.textContent = CFG.i18n.addToCartLabel;
+                var statusEl = document.createElement('span');
+                statusEl.className = 'hm-atc-status';
+                statusEl.hidden = true;
+                btn.addEventListener('click', function () {
+                    handleAddToCartClick(it, btn, statusEl);
+                });
+                row.appendChild(btn);
+                row.appendChild(statusEl);
+            }
+            wrap.appendChild(row);
+        });
+        msgs.appendChild(wrap);
+    }
+
+    // The one function in this whole file that actually mutates the
+    // customer's real cart — and it only ever runs from inside a real
+    // 'click' event listener (see renderAddToCartIntent() above), never
+    // automatically when a tool result arrives. isRetry guards the one
+    // nonce-refresh-and-retry (see handleAddToCartClick()) from looping.
+    function addToCartViaStoreApi(item, isRetry) {
+        var targetId = item.variation_id || item.product_id;
+        return fetch(CFG.storeApiUrl + 'cart/add-item', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Nonce': CFG.storeApiNonce },
+            body: JSON.stringify({ id: targetId, quantity: item.quantity || 1 }),
+        }).then(function (r) {
+            return r.json().catch(function () { return {}; }).then(function (data) {
+                return { ok: r.ok, status: r.status, data: data, headers: r.headers };
+            });
+        });
+    }
+
+    function refreshStoreApiNonce() {
+        return fetch(CFG.storeApiUrl + 'cart', { method: 'GET' })
+            .then(function (r) {
+                // Store API convention: a fresh nonce comes back on every
+                // response as a header — checked under both names actually
+                // seen in the wild, since this isn't pinned to one exact
+                // WooCommerce version.
+                var fresh = r.headers.get('Nonce') || r.headers.get('X-WC-Store-API-Nonce');
+                if (fresh) CFG.storeApiNonce = fresh;
+                return !!fresh;
+            })
+            .catch(function () { return false; });
+    }
+
+    function handleAddToCartClick(item, btnEl, statusEl) {
+        btnEl.disabled = true;
+        var originalLabel = btnEl.textContent;
+        btnEl.textContent = CFG.i18n.addingToCartLabel;
+
+        function attempt(isRetry) {
+            addToCartViaStoreApi(item, isRetry).then(function (res) {
+                if (res.ok) {
+                    onAddToCartSuccess(item, btnEl, statusEl, res.data);
+                    return;
+                }
+                var code = String((res.data && (res.data.code || res.data.message)) || '').toLowerCase();
+                var isNonceIssue = (res.status === 401 || res.status === 403) && !isRetry;
+                if (isNonceIssue) {
+                    refreshStoreApiNonce().then(function (refreshed) {
+                        if (refreshed) { attempt(true); return; }
+                        onAddToCartFailure(item, btnEl, statusEl, originalLabel, code);
+                    });
+                    return;
+                }
+                onAddToCartFailure(item, btnEl, statusEl, originalLabel, code);
+            }).catch(function () {
+                // Network-level failure (Store API route missing entirely —
+                // old WooCommerce or the API disabled — or genuinely
+                // offline): fall back to the classic link rather than
+                // just showing an error, same posture as build_cart_url's
+                // "zero risk" fallback the task deliberately kept around
+                // for exactly this case.
+                replaceWithClassicLink(item, btnEl);
+            });
+        }
+        attempt(false);
+    }
+
+    function onAddToCartSuccess(item, btnEl, statusEl, cartData) {
+        var count = (cartData && typeof cartData.items_count === 'number') ? cartData.items_count : null;
+        btnEl.hidden = true;
+        statusEl.hidden = false;
+        var countText = count !== null ? CFG.i18n.itemsInCartLabel.replace(':count', count) : '';
+        var viewCartHtml = CFG.cartUrl ? ' <a href="' + esc(CFG.cartUrl) + '" target="_blank" rel="noopener">' + esc(CFG.i18n.viewCartLabel) + '</a>' : '';
+        var checkoutHtml = CFG.checkoutUrl ? ' <a href="' + esc(CFG.checkoutUrl) + '" target="_blank" rel="noopener">' + esc(CFG.i18n.checkoutLabel) + '</a>' : '';
+        statusEl.innerHTML = '✓ ' + esc(countText) + viewCartHtml + checkoutHtml;
+
+        // Real, confirmed outcome — see ChatController::cartEvent() and
+        // tool_calling_service.py's docstring on why this is logged HERE,
+        // never at tool-call time. Fire-and-forget: this must never block
+        // or fail the UI the customer already sees succeed.
+        fetch(H.apiUrl + '/chat/cart-event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chatbot_id: H.chatbotId, conversation_id: convId,
+                product_id: item.product_id, variation_id: item.variation_id || null,
+            }),
+        }).catch(function () { /* best-effort — the real cart add already succeeded regardless */ });
+    }
+
+    function onAddToCartFailure(item, btnEl, statusEl, originalLabel, code) {
+        btnEl.disabled = false;
+        btnEl.textContent = originalLabel;
+        statusEl.hidden = false;
+        var msg;
+        if (code.indexOf('stock') !== -1) {
+            msg = CFG.i18n.outOfStockAddErrorLabel;
+        } else if (code.indexOf('variation') !== -1 || code.indexOf('attribute') !== -1) {
+            msg = CFG.i18n.chooseVariantLabel;
+        } else {
+            msg = CFG.i18n.genericAddErrorLabel;
+        }
+        statusEl.textContent = msg;
+        statusEl.className = 'hm-atc-status hm-atc-error';
+    }
+
+    function replaceWithClassicLink(item, btnEl) {
+        var link = document.createElement('a');
+        link.className = 'hm-cart-link-btn';
+        link.href = classicCartUrl(item.product_id, item.quantity);
+        link.target = '_blank';
+        link.rel = 'noopener';
+        link.textContent = CFG.i18n.addToCartLabel;
+        btnEl.replaceWith(link);
     }
 
     function renderProductCards(products) {

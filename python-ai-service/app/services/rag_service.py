@@ -246,35 +246,58 @@ def _product_display_rule(enabled_tools: Optional[List[str]], is_fa: bool) -> st
     )
 
 
-_CART_LINK_TOOL_NAMES = {"build_cart_url"}
+_CART_LINK_TOOL_NAMES = {"build_cart_url", "add_to_cart"}
 
 
 def _cart_link_rule(enabled_tools: Optional[List[str]], is_fa: bool) -> str:
-    """build_cart_url builds a link the CUSTOMER must click for anything to
-    actually happen — this server never adds anything to a cart itself
-    (see product_tools.build_cart_url's docstring). The one failure mode
-    that matters here isn't a wrong price or a stale fact, it's the model
-    describing the add as already done ("I've added it to your cart") when
-    nothing has happened yet — that's simply false until the customer
-    clicks, so this gets its own explicit rule rather than folding into
-    _product_display_rule's more general "don't re-describe" guidance."""
-    if not enabled_tools or not (_CART_LINK_TOOL_NAMES & set(enabled_tools)):
+    """build_cart_url/add_to_cart both build something the CUSTOMER must
+    click for anything to actually happen — this server never adds
+    anything to a cart itself (see product_tools.add_to_cart's docstring:
+    the real Store API call only fires in the customer's own browser,
+    after a real click). The one failure mode that matters here isn't a
+    wrong price or a stale fact, it's the model describing the add as
+    already done ("I've added it to your cart") when nothing has happened
+    yet — that's simply false until the customer clicks, so this gets its
+    own explicit rule rather than folding into _product_display_rule's
+    more general "don't re-describe" guidance. add_to_cart also needs its
+    own variant-selection clause: unlike build_cart_url (a plain link
+    WooCommerce resolves itself), add_to_cart requires a real variation_id
+    up front for a variable product, so the model must ask rather than
+    guess one."""
+    enabled = set(enabled_tools or [])
+    if not (_CART_LINK_TOOL_NAMES & enabled):
         return ""
+    has_add_to_cart = "add_to_cart" in enabled
     if is_fa:
-        return (
-            "\n\nوقتی از ابزار build_cart_url استفاده می‌کنی، دکمه‌های واقعی «افزودن به سبد خرید» "
-            "به‌طور مستقیم در ویجت نمایش داده می‌شود — لینک خام را در متن خودت تکرار نکن. مهم‌تر از آن: "
-            "تا وقتی کاربر خودش روی آن دکمه کلیک نکند، هیچ‌چیز واقعاً به سبد خرید اضافه نشده — هرگز نگو "
-            "«اضافه کردم» یا «به سبد شما اضافه شد»؛ به‌جایش بگو چیزی مثل «برای افزودن به سبد خرید روی "
-            "دکمه‌ی زیر کلیک کنید»."
+        rule = (
+            "\n\nوقتی از ابزار build_cart_url یا add_to_cart استفاده می‌کنی، دکمه‌های واقعی «افزودن به سبد "
+            "خرید» به‌طور مستقیم در ویجت نمایش داده می‌شود — لینک یا دکمه را در متن خودت دوباره توصیف نکن. "
+            "مهم‌تر از آن: تا وقتی کاربر خودش روی آن دکمه کلیک نکند، هیچ‌چیز واقعاً به سبد خرید اضافه نشده — "
+            "هرگز نگو «اضافه کردم» یا «به سبد شما اضافه شد»؛ به‌جایش بگو چیزی مثل «برای افزودن به سبد خرید "
+            "روی دکمه‌ی زیر کلیک کنید»."
         )
-    return (
-        "\n\nWhen you use build_cart_url, real 'Add to cart' buttons are rendered directly in the "
-        "chat widget — do not repeat the raw link as text. More importantly: nothing is actually "
-        "added to the customer's cart until they click that button themselves — never say you've "
-        "already added it or that it's now in their cart; say something like 'click below to add "
-        "it to your cart' instead."
+        if has_add_to_cart:
+            rule += (
+                "\n\nبرای add_to_cart، اگر محصول متغیر است (سایز/رنگ/...) و هنوز نمی‌دانی کاربر کدام گزینه "
+                "را می‌خواهد، هرگز variation_id را حدس نزن — اول از کاربر بپرس کدام سایز/رنگ را می‌خواهد "
+                "(یا از ابزار get_product_variants استفاده کن)، و فقط بعد از آن add_to_cart را صدا بزن."
+            )
+        return rule
+    rule = (
+        "\n\nWhen you use build_cart_url or add_to_cart, real 'Add to cart' buttons are rendered "
+        "directly in the chat widget — do not re-describe the link/button in your own text. More "
+        "importantly: nothing is actually added to the customer's cart until they click that "
+        "button themselves — never say you've already added it or that it's now in their cart; say "
+        "something like 'click below to add it to your cart' instead."
     )
+    if has_add_to_cart:
+        rule += (
+            "\n\nFor add_to_cart specifically: if the product is variable (size/color/etc.) and you "
+            "don't yet know which option the customer wants, never guess a variation_id — ask the "
+            "customer which one they want first (or call get_product_variants), and only then call "
+            "add_to_cart."
+        )
+    return rule
 
 
 def _live_pricing_rule(enabled_tools: Optional[List[str]], is_fa: bool) -> str:

@@ -488,6 +488,17 @@ class WidgetBlockTest(unittest.TestCase):
     def test_build_widget_block_ignores_empty_cart_items(self):
         self.assertIsNone(tool_calling_service._build_widget_block("build_cart_url", {"items": []}))
 
+    def test_build_widget_block_add_to_cart_shape(self):
+        items = [{"product_id": 12, "variation_id": None, "quantity": 1, "name": "Widget"}]
+        block = tool_calling_service._build_widget_block("add_to_cart", {"items": items})
+        self.assertEqual(block, {"type": "add_to_cart", "items": items})
+
+    def test_build_widget_block_ignores_add_to_cart_error_result(self):
+        self.assertIsNone(tool_calling_service._build_widget_block("add_to_cart", {"error": "items must be a non-empty list."}))
+
+    def test_build_widget_block_ignores_empty_add_to_cart_items(self):
+        self.assertIsNone(tool_calling_service._build_widget_block("add_to_cart", {"items": []}))
+
     def test_log_cart_links_logs_one_event_per_item(self):
         with patch("app.services.rag_service._log_event") as mock_log:
             tool_calling_service._log_cart_links(
@@ -606,6 +617,54 @@ class WidgetBlockTest(unittest.TestCase):
         event_types = [c[0][3] for c in mock_log.call_args_list]
         self.assertIn("tool_called", event_types)
         self.assertIn("cart_link_generated", event_types)
+
+    def test_run_tool_calling_pipeline_returns_add_to_cart_intent_and_logs_nothing_but_tool_called(self):
+        """The critical architectural guarantee behind add_to_cart: the
+        tool call itself must NEVER log a cart_add_succeeded (or any other
+        "it happened" event) — nothing has actually happened yet. Only
+        tool_called (which just records the call was made, same as any
+        other tool) is expected here; the real cart_add_succeeded only
+        ever comes from ChatController::cartEvent(), after a genuine
+        browser-side Store API success."""
+        atc_tool = Tool(
+            name="add_to_cart", description="test", access_level="read",
+            parameters={"type": "object", "properties": {"items": {"type": "array"}}, "required": ["items"]},
+            handler=lambda db, chatbot_id, **kw: {
+                "items": [{"product_id": 12, "variation_id": None, "quantity": 1, "name": "Widget"}],
+            },
+        )
+
+        tool_call_message = {
+            "content": None,
+            "tool_calls": [{"id": "call_1", "function": {"name": "add_to_cart", "arguments": '{"items": [{"product_id": 12, "name": "Widget"}]}'}}],
+        }
+        final_message = {"content": "Click below to add it to your cart.", "tool_calls": None}
+        call_sequence = [
+            (tool_call_message, {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}),
+            (final_message, {"prompt_tokens": 20, "completion_tokens": 8, "total_tokens": 28}),
+        ]
+
+        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature):
+            message, usage = call_sequence.pop(0)
+            return message, "groq/test-tool-model", usage, 0.0
+
+        with patch.object(tool_calling_service, "get_enabled_tools", return_value=[atc_tool]), \
+             patch.object(tool_calling_service, "to_openai_schema", return_value=[{"type": "function", "function": {"name": "add_to_cart"}}]), \
+             patch.object(tool_calling_service, "_tool_calling_chat", side_effect=fake_tool_calling_chat), \
+             patch("app.services.rag_service._log_event") as mock_log:
+            result = tool_calling_service.run_tool_calling_pipeline(
+                db=MagicMock(), chatbot_id="chatbot-1", conversation_id="conv-1",
+                query="add that to my cart", history=[], system_prompt_text="system prompt",
+                max_tokens=800, temperature=0.3, enabled_tool_names=["add_to_cart"],
+            )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["widget_blocks"], [{
+            "type": "add_to_cart",
+            "items": [{"product_id": 12, "variation_id": None, "quantity": 1, "name": "Widget"}],
+        }])
+        event_types = [c[0][3] for c in mock_log.call_args_list]
+        self.assertEqual(event_types, ["tool_called"], "add_to_cart must log nothing beyond tool_called — no cart_add_succeeded until a real browser click confirms it.")
 
 
 if __name__ == "__main__":

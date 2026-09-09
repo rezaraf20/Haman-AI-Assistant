@@ -50,24 +50,37 @@ TOOL_RATE_LIMIT_MAX_PER_MINUTE = 10
 TOOL_RATE_LIMIT_KEY_PREFIX = "hamman:tool_rate_limit:"
 
 # Tools whose successful result must render as an actual widget UI element
-# (product cards / a comparison table / one-click "add to cart" buttons)
+# (product cards / a comparison table / one-click "add to cart" controls)
 # rather than as text the model paraphrases — see hamman-widget.js's
-# renderProductCards()/renderCompareTable()/renderCartLinks(). Every
-# product shown this way also gets a conversation_event (product_mentioned
-# or cart_link_generated — revenue-attribution input, doc-04's acceptance
-# criterion), logged for exactly what actually ended up in the rendered
-# block, never merely fetched/considered.
-_RENDERABLE_TOOLS = {"recommend_products", "compare_products", "build_cart_url"}
+# renderProductCards()/renderCompareTable()/renderCartLinks()/
+# renderAddToCartIntent(). Every product shown this way also gets a
+# conversation_event (product_mentioned or cart_link_generated —
+# revenue-attribution input, doc-04's acceptance criterion), logged for
+# exactly what actually ended up in the rendered block, never merely
+# fetched/considered.
+#
+# add_to_cart is the one exception: it logs NOTHING here. Its result is
+# pure intent (see product_tools.add_to_cart's docstring) — nothing has
+# actually happened yet, since the real Store API call only fires in the
+# customer's own browser after they click the rendered button. The
+# matching cart_add_succeeded event is logged separately, from a real
+# confirmed browser-side success reported back via a dedicated Laravel
+# endpoint (ChatController::cartEvent()) — never from this tool call
+# itself, which would overcount offers the customer never actually acted on.
+_RENDERABLE_TOOLS = {"recommend_products", "compare_products", "build_cart_url", "add_to_cart"}
 
 
 def _build_widget_block(fn_name: str, result: dict) -> Optional[dict]:
     if fn_name not in _RENDERABLE_TOOLS or not isinstance(result, dict):
         return None
-    if fn_name == "build_cart_url":
+    if fn_name in ("build_cart_url", "add_to_cart"):
         if "error" in result:
             return None
         items = result.get("items") or []
-        return {"type": "cart_links", "items": items} if items else None
+        if not items:
+            return None
+        block_type = "cart_links" if fn_name == "build_cart_url" else "add_to_cart"
+        return {"type": block_type, "items": items}
     if not result.get("live"):
         return None
     products = result.get("products") or []
@@ -306,6 +319,8 @@ def run_tool_calling_pipeline(
                 widget_blocks.append(block)
                 if block["type"] == "cart_links":
                     _log_cart_links(db, conversation_id, chatbot_id, block["items"])
+                elif block["type"] == "add_to_cart":
+                    pass  # intent only — see cartEvent()/cart_add_succeeded for the real outcome
                 else:
                     _log_product_mentions(db, conversation_id, chatbot_id, fn_name, block["products"])
             messages.append({

@@ -605,3 +605,102 @@ register(Tool(
     handler=build_cart_url,
     access_level="read",
 ))
+
+
+def add_to_cart(db: Session, chatbot_id: str, items: List[dict]) -> dict:
+    """The richer sibling of build_cart_url — the widget itself runs on the
+    shop's own domain, so it's same-origin with the cart and can call
+    WooCommerce's Store API (wp-json/wc/store/v1/cart/add-item) directly
+    with the browser's own cookies. No cart token, no buyer-identity
+    question, no nonce handling here at all: this tool makes ZERO HTTP
+    calls to the store (unlike every live-query tool in this module) and
+    returns pure INTENT — product_id, variation_id, quantity, and a
+    display name — for the widget to render as a real "Add to cart" button.
+    The actual add only happens in the customer's own browser, and only
+    after they click that button (see hamman-widget.js's
+    handleAddToCartClick()); this function never adds anything itself.
+
+    name is required from the model rather than looked up here, since a
+    live lookup would defeat the "zero HTTP calls" property this tool is
+    for — the model already knows the product's name from whatever
+    context (recommend_products, search_products, get_product_availability,
+    conversation history) it identified this product_id from in the first
+    place.
+    """
+    if not isinstance(items, list) or not items:
+        return {"error": "items must be a non-empty list."}
+    if len(items) > MAX_CART_ITEMS:
+        return {"error": f"At most {MAX_CART_ITEMS} items are supported."}
+
+    result_items = []
+    for raw in items:
+        if not isinstance(raw, dict):
+            return {"error": "Each item must be an object with product_id and name."}
+        pid = _validate_product_id(raw.get("product_id"))
+        if pid is None:
+            return {"error": "Invalid product_id in items."}
+
+        variation_id = raw.get("variation_id")
+        if variation_id is not None:
+            variation_id = _validate_product_id(variation_id)
+            if variation_id is None:
+                return {"error": "Invalid variation_id in items."}
+
+        qty = raw.get("quantity", 1)
+        try:
+            qty = int(qty)
+        except (TypeError, ValueError):
+            return {"error": "Invalid quantity in items."}
+        qty = max(1, min(qty, MAX_CART_QUANTITY))
+
+        name = raw.get("name")
+        if not isinstance(name, str) or not name.strip():
+            return {"error": "Each item requires a name for display."}
+
+        result_items.append({
+            "product_id": pid, "variation_id": variation_id,
+            "quantity": qty, "name": name.strip()[:200],
+        })
+
+    return {"items": result_items}
+
+
+register(Tool(
+    name="add_to_cart",
+    description=(
+        "Offer to add specific products directly to the customer's cart, inline in the chat — "
+        "the customer sees a real 'Add to cart' button and must click it themselves; nothing is "
+        "added until they do. Use this instead of build_cart_url whenever it's enabled, for "
+        "products already identified by numeric product ID (from an earlier search/recommendation "
+        "or the conversation). For a VARIABLE product (one with size/color/etc. options), you "
+        "must know the specific variation_id before calling this — if you don't have it yet, ask "
+        "the customer which option they want (or call get_product_variants) FIRST, never guess a "
+        "variation. Always include the product's real name for display, and never call this for a "
+        "product you haven't confirmed is in stock."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "product_id": {"type": "integer", "description": "The numeric WooCommerce product ID."},
+                        "variation_id": {"type": "integer", "description": "The specific variation ID, required for a variable product — never guessed."},
+                        "quantity": {"type": "integer", "description": "How many of this product to add (default 1)."},
+                        "name": {"type": "string", "description": "The product's real name, for display on the Add to Cart button.", "maxLength": 200},
+                    },
+                    "required": ["product_id", "name"],
+                    "additionalProperties": False,
+                },
+                "minItems": 1, "maxItems": 5,
+                "description": "The products (and optional quantities/variations) to offer adding to the cart.",
+            },
+        },
+        "required": ["items"],
+        "additionalProperties": False,
+    },
+    handler=add_to_cart,
+    access_level="read",
+))

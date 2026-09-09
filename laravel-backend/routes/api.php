@@ -35,6 +35,8 @@ Route::prefix('v1')->group(function () {
             ->middleware(['chatbot.domain', 'throttle:chat-message']);
         Route::post('feedback', [ChatController::class, 'submitFeedback'])
             ->middleware('throttle:chat-message');
+        Route::post('cart-event', [ChatController::class, 'cartEvent'])
+            ->middleware('throttle:chat-message');
     });
 
     // ── Plugin API (API Key) ───────────────────────────

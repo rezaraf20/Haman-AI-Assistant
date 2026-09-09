@@ -350,6 +350,70 @@
     opacity: .9;
 }
 
+/* ── Inline add-to-cart (add_to_cart, Store API) ────────────────────── */
+/* Same-origin Store API calls happen only from inside .hm-atc-btn's own
+ * click handler (see handleAddToCartClick() in hamman-widget.js) — never
+ * automatically. .hm-atc-status starts hidden and is only ever revealed
+ * after a real response (success or error) to that click. */
+.hm-atc-items {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-self: stretch;
+}
+
+.hm-atc-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 10px;
+    padding: 8px 10px;
+}
+
+.hm-atc-name {
+    font-size: 13px;
+    color: #0F172A;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.hm-atc-btn {
+    background: var(--hm-primary);
+    color: var(--hm-primary-contrast);
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    min-height: 36px;
+    flex-shrink: 0;
+}
+
+.hm-atc-btn:disabled {
+    opacity: .6;
+    cursor: default;
+}
+
+.hm-atc-status {
+    font-size: 12px;
+    color: #166534;
+}
+
+.hm-atc-status a {
+    color: var(--hm-primary);
+    text-decoration: underline;
+    margin-inline-start: 6px;
+}
+
+.hm-atc-status.hm-atc-error {
+    color: #991B1B;
+}
+
 /* Typing indicator: three animated dots shown while waiting for a response. */
 .hm-typing {
     align-self: flex-start;

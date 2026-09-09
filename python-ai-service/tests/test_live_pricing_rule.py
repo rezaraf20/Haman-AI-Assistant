@@ -126,6 +126,29 @@ class CartLinkRuleTest(unittest.TestCase):
         fa_rule = _cart_link_rule(["build_cart_url"], is_fa=True)
         self.assertNotEqual(en_rule, fa_rule)
 
+    def test_present_when_add_to_cart_enabled(self):
+        rule = _cart_link_rule(["add_to_cart"], is_fa=False)
+        self.assertNotEqual(rule, "")
+
+    def test_add_to_cart_adds_the_variant_selection_clause_english(self):
+        rule = _cart_link_rule(["add_to_cart"], is_fa=False)
+        self.assertIn("never guess a variation_id", rule)
+
+    def test_add_to_cart_adds_the_variant_selection_clause_persian(self):
+        rule = _cart_link_rule(["add_to_cart"], is_fa=True)
+        self.assertIn("variation_id را حدس نزن", rule)
+
+    def test_build_cart_url_alone_has_no_variant_selection_clause(self):
+        # build_cart_url has no variation_id concept at all — the extra
+        # clause is specific to add_to_cart and must not leak in otherwise.
+        rule = _cart_link_rule(["build_cart_url"], is_fa=False)
+        self.assertNotIn("variation_id", rule)
+
+    def test_both_tools_enabled_still_produces_one_combined_rule(self):
+        rule = _cart_link_rule(["build_cart_url", "add_to_cart"], is_fa=False)
+        self.assertIn("never say you've already added it", rule)
+        self.assertIn("never guess a variation_id", rule)
+
 
 if __name__ == "__main__":
     unittest.main()

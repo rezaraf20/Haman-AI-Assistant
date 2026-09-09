@@ -299,4 +299,47 @@ class ChatController extends BaseApiController
 
         return $this->ok(['message' => 'Feedback recorded']);
     }
+
+    /**
+     * The add_to_cart tool (doc-04) never adds anything itself — the real
+     * WooCommerce Store API call happens in the customer's own browser,
+     * same-origin with the shop, after they click a real "Add to cart"
+     * button (see hamman-widget.js's handleAddToCartClick()). This is the
+     * widget reporting back a REAL, CONFIRMED success so cart_add_succeeded
+     * reflects an actual outcome, not merely an offer that was shown —
+     * unlike cart_link_generated (build_cart_url), which logs at offer
+     * time since there's no way to observe a click on an external link.
+     * conversation_id is re-validated against this chatbot's own
+     * conversations table before anything is logged — a client-side value
+     * is never trusted blindly, same posture as SyncService::recordOrder().
+     */
+    public function cartEvent(Request $req): JsonResponse
+    {
+        $d = $req->validate([
+            'chatbot_id'      => 'required|uuid',
+            'conversation_id' => 'required|uuid',
+            'product_id'      => 'required|integer|min:1',
+            'variation_id'    => 'nullable|integer|min:1',
+        ]);
+
+        $index = $this->setSchemaFromChatbot($d['chatbot_id'], $req->attributes->get('chatbot_index'));
+        if (!$index) return $this->notFound('Chatbot not found');
+
+        $conv = Conversation::where('id', $d['conversation_id'])->where('chatbot_id', $d['chatbot_id'])->first();
+        if (!$conv) return $this->notFound('Conversation not found');
+
+        DB::table('conversation_events')->insert([
+            'id'              => (string) \Illuminate\Support\Str::uuid(),
+            'conversation_id' => $conv->id,
+            'chatbot_id'      => $d['chatbot_id'],
+            'event_type'      => 'cart_add_succeeded',
+            'payload'         => json_encode([
+                'product_id'   => $d['product_id'],
+                'variation_id' => $d['variation_id'] ?? null,
+            ]),
+            'created_at'      => now(),
+        ]);
+
+        return $this->ok(['message' => 'Recorded']);
+    }
 }
