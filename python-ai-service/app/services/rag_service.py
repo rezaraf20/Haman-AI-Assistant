@@ -245,6 +245,37 @@ def _product_display_rule(enabled_tools: Optional[List[str]], is_fa: bool) -> st
     )
 
 
+_CART_LINK_TOOL_NAMES = {"build_cart_url"}
+
+
+def _cart_link_rule(enabled_tools: Optional[List[str]], is_fa: bool) -> str:
+    """build_cart_url builds a link the CUSTOMER must click for anything to
+    actually happen — this server never adds anything to a cart itself
+    (see product_tools.build_cart_url's docstring). The one failure mode
+    that matters here isn't a wrong price or a stale fact, it's the model
+    describing the add as already done ("I've added it to your cart") when
+    nothing has happened yet — that's simply false until the customer
+    clicks, so this gets its own explicit rule rather than folding into
+    _product_display_rule's more general "don't re-describe" guidance."""
+    if not enabled_tools or not (_CART_LINK_TOOL_NAMES & set(enabled_tools)):
+        return ""
+    if is_fa:
+        return (
+            "\n\nوقتی از ابزار build_cart_url استفاده می‌کنی، دکمه‌های واقعی «افزودن به سبد خرید» "
+            "به‌طور مستقیم در ویجت نمایش داده می‌شود — لینک خام را در متن خودت تکرار نکن. مهم‌تر از آن: "
+            "تا وقتی کاربر خودش روی آن دکمه کلیک نکند، هیچ‌چیز واقعاً به سبد خرید اضافه نشده — هرگز نگو "
+            "«اضافه کردم» یا «به سبد شما اضافه شد»؛ به‌جایش بگو چیزی مثل «برای افزودن به سبد خرید روی "
+            "دکمه‌ی زیر کلیک کنید»."
+        )
+    return (
+        "\n\nWhen you use build_cart_url, real 'Add to cart' buttons are rendered directly in the "
+        "chat widget — do not repeat the raw link as text. More importantly: nothing is actually "
+        "added to the customer's cart until they click that button themselves — never say you've "
+        "already added it or that it's now in their cart; say something like 'click below to add "
+        "it to your cart' instead."
+    )
+
+
 def _live_pricing_rule(enabled_tools: Optional[List[str]], is_fa: bool) -> str:
     """A wrong price is the worst mistake a shop's bot can make — worse
     than no answer. This rule exists specifically because sys_p already
@@ -1080,6 +1111,7 @@ async def run_rag_pipeline_stream(
     sys_p += _business_name_rule(business_name, is_fa_question)
     sys_p += _live_pricing_rule(enabled_tools, is_fa_question)
     sys_p += _product_display_rule(enabled_tools, is_fa_question)
+    sys_p += _cart_link_rule(enabled_tools, is_fa_question)
     sys_p += _authenticity_rule(authenticity_unknown_message, is_fa_question)
     if system_prompt:
         sys_p += f"\n\n{system_prompt}"
@@ -1263,6 +1295,7 @@ async def run_rag_pipeline(
     sys_p += _business_name_rule(business_name, is_fa_question)
     sys_p += _live_pricing_rule(enabled_tools, is_fa_question)
     sys_p += _product_display_rule(enabled_tools, is_fa_question)
+    sys_p += _cart_link_rule(enabled_tools, is_fa_question)
     sys_p += _authenticity_rule(authenticity_unknown_message, is_fa_question)
     if system_prompt:
         sys_p += f"\n\n{system_prompt}"

@@ -321,6 +321,35 @@
     white-space: normal;
 }
 
+/* ── Cart links (build_cart_url) ────────────────────────────────────── */
+/* Real buttons, not a text link — clicking one navigates to the store's
+ * own ?add-to-cart=ID URL, which WooCommerce itself handles; nothing here
+ * adds anything on its own. */
+.hm-cart-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-self: stretch;
+}
+
+.hm-cart-link-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--hm-primary);
+    color: var(--hm-primary-contrast);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    min-height: 36px;
+}
+
+.hm-cart-link-btn:hover, .hm-cart-link-btn:focus-visible {
+    opacity: .9;
+}
+
 /* Typing indicator: three animated dots shown while waiting for a response. */
 .hm-typing {
     align-self: flex-start;

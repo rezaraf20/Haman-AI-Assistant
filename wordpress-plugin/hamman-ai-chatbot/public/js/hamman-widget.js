@@ -284,8 +284,29 @@
         blocks.forEach(function (block) {
             if (block.type === 'product_cards') renderProductCards(block.products);
             else if (block.type === 'product_compare') renderCompareTable(block.products, block.attribute_rows);
+            else if (block.type === 'cart_links') renderCartLinks(block.items);
         });
         if (wasNearBottom) scrollToBottom(false);
+    }
+
+    // build_cart_url's items are plain WooCommerce ?add-to-cart=ID GET
+    // links — the click itself is what adds the item, this button is just
+    // real UI for that link, not something that adds anything on its own.
+    function renderCartLinks(items) {
+        if (!items || !items.length) return;
+        var wrap = document.createElement('div');
+        wrap.className = 'hm-cart-links';
+        items.forEach(function (it) {
+            var btn = document.createElement('a');
+            btn.className = 'hm-cart-link-btn';
+            btn.href = it.url;
+            btn.target = '_blank';
+            btn.rel = 'noopener';
+            var qtyText = (it.quantity && it.quantity > 1) ? ' × ' + it.quantity : '';
+            btn.textContent = CFG.i18n.addToCartLabel + qtyText;
+            wrap.appendChild(btn);
+        });
+        msgs.appendChild(wrap);
     }
 
     function renderProductCards(products) {

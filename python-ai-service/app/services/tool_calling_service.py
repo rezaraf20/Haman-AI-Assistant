@@ -50,17 +50,25 @@ TOOL_RATE_LIMIT_MAX_PER_MINUTE = 10
 TOOL_RATE_LIMIT_KEY_PREFIX = "hamman:tool_rate_limit:"
 
 # Tools whose successful result must render as an actual widget UI element
-# (product cards / a comparison table) rather than as text the model
-# paraphrases — see hamman-widget.js's renderProductCards()/
-# renderCompareTable(). Every product that ends up in one of these blocks
-# also gets a product_mentioned conversation_event (revenue-attribution
-# input, doc-04's acceptance criterion), logged for exactly the products
-# actually shown, never merely fetched/considered.
-_RENDERABLE_TOOLS = {"recommend_products", "compare_products"}
+# (product cards / a comparison table / one-click "add to cart" buttons)
+# rather than as text the model paraphrases — see hamman-widget.js's
+# renderProductCards()/renderCompareTable()/renderCartLinks(). Every
+# product shown this way also gets a conversation_event (product_mentioned
+# or cart_link_generated — revenue-attribution input, doc-04's acceptance
+# criterion), logged for exactly what actually ended up in the rendered
+# block, never merely fetched/considered.
+_RENDERABLE_TOOLS = {"recommend_products", "compare_products", "build_cart_url"}
 
 
 def _build_widget_block(fn_name: str, result: dict) -> Optional[dict]:
-    if fn_name not in _RENDERABLE_TOOLS or not isinstance(result, dict) or not result.get("live"):
+    if fn_name not in _RENDERABLE_TOOLS or not isinstance(result, dict):
+        return None
+    if fn_name == "build_cart_url":
+        if "error" in result:
+            return None
+        items = result.get("items") or []
+        return {"type": "cart_links", "items": items} if items else None
+    if not result.get("live"):
         return None
     products = result.get("products") or []
     if not products:
@@ -79,6 +87,16 @@ def _log_product_mentions(db: Session, conversation_id: Optional[str], chatbot_i
             continue
         _log_event(db, conversation_id, chatbot_id, "product_mentioned", {
             "product_id": p.get("product_id"), "name": p.get("name"), "source": source,
+        })
+
+
+def _log_cart_links(db: Session, conversation_id: Optional[str], chatbot_id: str, items: List[dict]) -> None:
+    from app.services.rag_service import _log_event
+    for item in items:
+        if not isinstance(item, dict) or not item.get("product_id"):
+            continue
+        _log_event(db, conversation_id, chatbot_id, "cart_link_generated", {
+            "product_id": item.get("product_id"), "quantity": item.get("quantity"), "url": item.get("url"),
         })
 
 
@@ -286,7 +304,10 @@ def run_tool_calling_pipeline(
             block = _build_widget_block(fn_name, result)
             if block:
                 widget_blocks.append(block)
-                _log_product_mentions(db, conversation_id, chatbot_id, fn_name, block["products"])
+                if block["type"] == "cart_links":
+                    _log_cart_links(db, conversation_id, chatbot_id, block["items"])
+                else:
+                    _log_product_mentions(db, conversation_id, chatbot_id, fn_name, block["products"])
             messages.append({
                 "role": "tool",
                 "tool_call_id": call.get("id", ""),

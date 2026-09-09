@@ -71,6 +71,8 @@ class Hamman_Public {
             'inStockLabel'         => 'موجود',
             'outOfStockLabel'      => 'ناموجود',
             'viewProductLabel'     => 'مشاهده محصول',
+            // build_cart_url tool — see renderCartLinks() in hamman-widget.js.
+            'addToCartLabel'       => 'افزودن به سبد خرید',
         ] : [
             'dialogLabel'          => 'Chat with AI assistant',
             'closeLabel'           => 'Close chat',
@@ -81,6 +83,7 @@ class Hamman_Public {
             'inStockLabel'         => 'In stock',
             'outOfStockLabel'      => 'Out of stock',
             'viewProductLabel'     => 'View product',
+            'addToCartLabel'       => 'Add to cart',
         ];
 
         return [

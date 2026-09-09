@@ -19,8 +19,14 @@ from the last sync, not live).
                              was one of a cosmetics shop's three most
                              common questions).
   compare_products            a feature-by-feature table for 2-5 products.
+  build_cart_url              one-click WooCommerce "add to cart" links,
+                             the deliberately SAFE half of doc-04's "Add
+                             to cart + cart URL" item — see its own
+                             docstring for why real cart mutation and
+                             order-status lookup are both out of scope
+                             for now.
 
-All five call the WordPress plugin's own live-query REST endpoint (more
+The first five call the WordPress plugin's own live-query REST endpoint (more
 control than WooCommerce's own REST API, no extra customer-supplied
 consumer key, reuses the webhook_secret trust relationship that already
 exists for outbound sync webhooks) with a short timeout.
@@ -95,6 +101,20 @@ def _resolve_site(db: Session, chatbot_id: str) -> Optional[dict]:
     if not row or not row.primary_domain or not row.webhook_secret:
         return None
     return {"domain": row.primary_domain, "secret": row.webhook_secret}
+
+
+def _resolve_domain(db: Session, chatbot_id: str) -> Optional[str]:
+    """Domain-only lookup, deliberately lighter than _resolve_site() — used
+    by build_cart_url(), which never makes a live HTTP call to the store at
+    all (see its own docstring), so it has no use for webhook_secret and
+    shouldn't fail for a chatbot that has a domain on file but hasn't
+    necessarily completed the webhook/live-query setup yet."""
+    row = db.execute(text("""
+        SELECT primary_domain FROM public.chatbot_index WHERE chatbot_id = CAST(:cid AS uuid)
+    """), {"cid": chatbot_id}).fetchone()
+    if not row or not row.primary_domain:
+        return None
+    return row.primary_domain
 
 
 def _query_live(domain: str, secret: str, action: str, params: dict) -> Optional[dict]:
@@ -388,6 +408,53 @@ def compare_products(db: Session, chatbot_id: str, product_ids: List[int]) -> di
     return {"live": True, "currency": live.get("currency", "IRT"), "products": products_out, "attribute_rows": attribute_rows}
 
 
+MAX_CART_ITEMS = 5
+MAX_CART_QUANTITY = 20
+
+
+def build_cart_url(db: Session, chatbot_id: str, items: List[dict]) -> dict:
+    """The deliberately SAFE half of doc-04's "Add to cart + cart URL" item
+    — actually adding to a cart needs a cart token/nonce from Woo's Store
+    API and opens the question of who the "cart" even belongs to, both
+    explicitly deferred. This tool does something much simpler and lower-
+    risk instead: it builds WooCommerce's own native, nonce-free
+    ?add-to-cart=<id>&quantity=<n> GET link, the same URL scheme WooCommerce
+    themes have always used for their own "Add to cart" buttons — the
+    customer's own click is what actually adds it, WooCommerce handles the
+    whole thing itself. No live call to the store at all (unlike every
+    other tool in this module) — just the domain already on file plus IDs
+    the model already knows, so this needs no webhook/live-query setup.
+    """
+    if not isinstance(items, list) or not items:
+        return {"error": "items must be a non-empty list."}
+    if len(items) > MAX_CART_ITEMS:
+        return {"error": f"At most {MAX_CART_ITEMS} items are supported."}
+
+    domain = _resolve_domain(db, chatbot_id)
+    if not domain:
+        return {"error": "no_site_domain", "note": "No store domain is on file for this chatbot — a cart link can't be built.", "items": []}
+
+    result_items = []
+    for raw in items:
+        if not isinstance(raw, dict):
+            return {"error": "Each item must be an object with a product_id."}
+        pid = _validate_product_id(raw.get("product_id"))
+        if pid is None:
+            return {"error": "Invalid product_id in items."}
+        qty = raw.get("quantity", 1)
+        try:
+            qty = int(qty)
+        except (TypeError, ValueError):
+            return {"error": "Invalid quantity in items."}
+        qty = max(1, min(qty, MAX_CART_QUANTITY))  # never 0/negative, never absurdly large
+        result_items.append({
+            "product_id": pid, "quantity": qty,
+            "url": f"https://{domain}/?add-to-cart={pid}&quantity={qty}",
+        })
+
+    return {"items": result_items}
+
+
 register(Tool(
     name="get_product_availability",
     description=(
@@ -500,5 +567,41 @@ register(Tool(
         "additionalProperties": False,
     },
     handler=compare_products,
+    access_level="read",
+))
+
+register(Tool(
+    name="build_cart_url",
+    description=(
+        "Build one-click links that add specific products directly to the customer's "
+        "WooCommerce cart — the customer clicks the link/button and WooCommerce itself adds "
+        "the item, no login or checkout step from you. Use this when a customer wants to buy "
+        "or add products they (or you, from an earlier search/recommendation) already "
+        "identified by numeric product ID. This does NOT check stock or price — call "
+        "get_product_availability first if you need to confirm those, and don't offer a cart "
+        "link for a product you haven't confirmed is in stock."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "product_id": {"type": "integer", "description": "The numeric WooCommerce product ID."},
+                        "quantity": {"type": "integer", "description": "How many of this product to add (default 1)."},
+                    },
+                    "required": ["product_id"],
+                    "additionalProperties": False,
+                },
+                "minItems": 1, "maxItems": 5,
+                "description": "The products (and optional quantities) to build cart links for.",
+            },
+        },
+        "required": ["items"],
+        "additionalProperties": False,
+    },
+    handler=build_cart_url,
     access_level="read",
 ))

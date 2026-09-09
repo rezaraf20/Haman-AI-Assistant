@@ -12,7 +12,7 @@ test_grounding_no_fabricated_claims.py.
 """
 import unittest
 
-from app.services.rag_service import _live_pricing_rule, _product_display_rule
+from app.services.rag_service import _live_pricing_rule, _product_display_rule, _cart_link_rule
 
 
 class LivePricingRuleTest(unittest.TestCase):
@@ -95,6 +95,35 @@ class ProductDisplayRuleTest(unittest.TestCase):
     def test_language_selection_follows_is_fa_flag(self):
         en_rule = _product_display_rule(["recommend_products"], is_fa=False)
         fa_rule = _product_display_rule(["recommend_products"], is_fa=True)
+        self.assertNotEqual(en_rule, fa_rule)
+
+
+class CartLinkRuleTest(unittest.TestCase):
+    """build_cart_url's link only actually adds anything once the customer
+    clicks it — the model must never claim the item is already in the
+    cart, since nothing has happened server-side at all yet. See
+    product_tools.build_cart_url's own docstring for why real cart
+    mutation is explicitly out of scope for now."""
+
+    def test_absent_when_cart_tool_not_enabled(self):
+        self.assertEqual(_cart_link_rule(None, is_fa=False), "")
+        self.assertEqual(_cart_link_rule(["get_product_availability"], is_fa=False), "")
+
+    def test_present_when_build_cart_url_enabled(self):
+        rule = _cart_link_rule(["build_cart_url"], is_fa=False)
+        self.assertNotEqual(rule, "")
+
+    def test_english_rule_forbids_claiming_already_added(self):
+        rule = _cart_link_rule(["build_cart_url"], is_fa=False)
+        self.assertIn("never say you've already added it", rule)
+
+    def test_persian_rule_forbids_claiming_already_added(self):
+        rule = _cart_link_rule(["build_cart_url"], is_fa=True)
+        self.assertIn("هرگز نگو", rule)
+
+    def test_language_selection_follows_is_fa_flag(self):
+        en_rule = _cart_link_rule(["build_cart_url"], is_fa=False)
+        fa_rule = _cart_link_rule(["build_cart_url"], is_fa=True)
         self.assertNotEqual(en_rule, fa_rule)
 
 
