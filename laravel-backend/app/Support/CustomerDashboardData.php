@@ -90,12 +90,41 @@ class CustomerDashboardData {
         // own 30-day window alone would clip).
         $queryStart = min($monthStart, $chartStart);
 
-        $dailyRows = DB::table('analytics_daily')
+        // Ungrouped/raw rather than a GROUP BY SUM aggregate — this also
+        // carries intent_counts (see below), which can't be summed
+        // server-side by a plain SUM() the way the numeric columns can.
+        // Fetching once and reducing in PHP keeps this at one query total
+        // instead of a second round trip just for the jsonb column
+        // (DashboardWidgetsTest enforces a hard query-count budget on this
+        // whole cached computation).
+        $analyticsRaw = DB::table('analytics_daily')
             ->where('date', '>=', $queryStart)
-            ->selectRaw('date, SUM(total_conversations) as convs, SUM(user_messages) as questions, SUM(unanswered_count) as unanswered')
-            ->groupBy('date')
-            ->get()
-            ->keyBy(fn ($r) => $r->date instanceof \DateTimeInterface ? $r->date->format('Y-m-d') : substr($r->date, 0, 10));
+            ->get(['date', 'total_conversations', 'user_messages', 'unanswered_count', 'intent_counts']);
+
+        $dailyRows = collect();
+        $intentDailyRows = [];
+        $intentTotals = [];
+        foreach ($analyticsRaw as $row) {
+            $dateKey = $row->date instanceof \DateTimeInterface ? $row->date->format('Y-m-d') : substr($row->date, 0, 10);
+            if (!$dailyRows->has($dateKey)) {
+                $dailyRows->put($dateKey, (object) ['convs' => 0, 'questions' => 0, 'unanswered' => 0]);
+            }
+            $agg = $dailyRows->get($dateKey);
+            $agg->convs += (int) $row->total_conversations;
+            $agg->questions += (int) $row->user_messages;
+            $agg->unanswered += (int) $row->unanswered_count;
+
+            // doc-04 "Intent analytics" — {intent: count} per day, summed
+            // across every chatbot this tenant has (this row set is one row
+            // per chatbot per date, so a tenant with several chatbots can
+            // have more than one row for the same date).
+            $counts = json_decode($row->intent_counts ?? '{}', true) ?: [];
+            foreach ($counts as $intent => $cnt) {
+                $intentDailyRows[$dateKey][$intent] = ($intentDailyRows[$dateKey][$intent] ?? 0) + (int) $cnt;
+                $intentTotals[$intent] = ($intentTotals[$intent] ?? 0) + (int) $cnt;
+            }
+        }
+        arsort($intentTotals);
 
         $monthQuestions = 0;
         $monthUnanswered = 0;
@@ -137,29 +166,6 @@ class CustomerDashboardData {
             ->limit(5)
             ->get()
             ->toArray();
-
-        // doc-04 "Intent analytics" — {intent: count} per day, summed
-        // across every chatbot this tenant has (analytics_daily is one row
-        // per chatbot per date, so a tenant with several chatbots can have
-        // more than one row for the same date). Done in PHP rather than a
-        // SQL-side jsonb aggregate: 30 days x a handful of chatbots is a
-        // trivial row count, and there's no portable "sum these jsonb
-        // objects together" operator worth reaching for at this size.
-        $intentRaw = DB::table('analytics_daily')
-            ->where('date', '>=', $chartStart)
-            ->get(['date', 'intent_counts']);
-
-        $intentDailyRows = [];
-        $intentTotals = [];
-        foreach ($intentRaw as $row) {
-            $dateKey = $row->date instanceof \DateTimeInterface ? $row->date->format('Y-m-d') : substr($row->date, 0, 10);
-            $counts = json_decode($row->intent_counts ?? '{}', true) ?: [];
-            foreach ($counts as $intent => $cnt) {
-                $intentDailyRows[$dateKey][$intent] = ($intentDailyRows[$dateKey][$intent] ?? 0) + (int) $cnt;
-                $intentTotals[$intent] = ($intentTotals[$intent] ?? 0) + (int) $cnt;
-            }
-        }
-        arsort($intentTotals);
 
         return compact(
             'chatbotStatuses',
