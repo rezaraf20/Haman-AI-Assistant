@@ -103,15 +103,35 @@ class TrendsTest extends TestCase
 
     // ── Performance: the whole point of reading pre-aggregated data ──────
 
+    /**
+     * Uses the connection's own query log rather than DB::listen(): a
+     * listener registered inside a loop keeps firing for every later
+     * iteration, and a `use (&$count)` counter is the same variable each
+     * time round, so the "count" silently becomes a multiple of the real
+     * one. The log is reset per measurement and cannot drift that way.
+     *
+     * @return array<int, string> the SQL run during $work
+     */
+    private function captureQueries(callable $work): array
+    {
+        $connection = DB::connection();
+        $connection->flushQueryLog();
+        $connection->enableQueryLog();
+        try {
+            $work();
+            return array_column($connection->getQueryLog(), 'query');
+        } finally {
+            $connection->disableQueryLog();
+            $connection->flushQueryLog();
+        }
+    }
+
     public function test_the_page_never_touches_the_messages_table(): void
     {
         $ctx = $this->makeTenant();
         $this->seedBusyTenant($ctx);
 
-        $queries = [];
-        DB::listen(function ($q) use (&$queries) { $queries[] = $q->sql; });
-
-        app(TrendsService::class)->get($ctx['schema'], '1y');
+        $queries = $this->captureQueries(fn () => app(TrendsService::class)->get($ctx['schema'], '1y'));
 
         $touchedMessages = array_filter($queries, fn ($sql) => preg_match('/\bfrom\s+"?messages"?/i', $sql));
         $this->assertEmpty($touchedMessages, 'Trends must read analytics_daily/events only, never scan messages: ' . implode(' | ', $touchedMessages));
@@ -124,12 +144,13 @@ class TrendsTest extends TestCase
 
         foreach (array_keys(TrendsService::RANGES) as $range) {
             Cache::flush();
-            $count = 0;
-            DB::listen(function () use (&$count) { $count++; });
+            $queries = $this->captureQueries(fn () => app(TrendsService::class)->get($ctx['schema'], $range));
 
-            app(TrendsService::class)->get($ctx['schema'], $range);
-
-            $this->assertLessThan(15, $count, "Range {$range} used {$count} queries; the budget is under 15.");
+            $this->assertLessThan(
+                15,
+                count($queries),
+                "Range {$range} used " . count($queries) . " queries; the budget is under 15."
+            );
         }
     }
 
@@ -140,11 +161,9 @@ class TrendsTest extends TestCase
 
         app(TrendsService::class)->get($ctx['schema'], '1y');
 
-        $count = 0;
-        DB::listen(function () use (&$count) { $count++; });
-        app(TrendsService::class)->get($ctx['schema'], '1y');
+        $queries = $this->captureQueries(fn () => app(TrendsService::class)->get($ctx['schema'], '1y'));
 
-        $this->assertEquals(0, $count, 'A one-year range must be served from cache on the second call.');
+        $this->assertCount(0, $queries, 'A one-year range must be served from cache on the second call.');
     }
 
     // ── Low data is an answer, not an empty chart ────────────────────────
@@ -234,7 +253,10 @@ class TrendsTest extends TestCase
     {
         $ctx = $this->makeTenant();
         $this->seedBusyTenant($ctx);
-        $this->addDay($ctx['schema'], $ctx['chatbotId'], now()->toDateString(), 5, ['warranty_new' => 9]);
+        // Day 25 is inside the 30-day window but outside the days
+        // seedBusyTenant() already wrote — analytics_daily is unique per
+        // (chatbot_id, date), so it has to be a day of its own.
+        $this->addDay($ctx['schema'], $ctx['chatbotId'], now()->subDays(25)->toDateString(), 5, ['warranty_new' => 9]);
 
         $data = app(TrendsService::class)->get($ctx['schema'], '30d');
         $new = collect($data['intents'])->firstWhere('intent', 'warranty_new');

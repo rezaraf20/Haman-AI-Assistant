@@ -181,8 +181,10 @@ class TrendsService
 
         if (!$row || !$row->first_date) return ['days' => 0, 'first_date' => null];
 
+        // diffInDays() returns a float on this Carbon version, and this
+        // value is rendered straight into "N days of data collected".
         return [
-            'days' => Carbon::parse($row->first_date)->diffInDays(now()) + 1,
+            'days' => (int) floor(Carbon::parse($row->first_date)->diffInDays(now())) + 1,
             'first_date' => $row->first_date,
         ];
     }
