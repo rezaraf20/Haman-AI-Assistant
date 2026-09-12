@@ -411,6 +411,29 @@ class TenantService
             DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_orders_conv ON {$schemaName}.orders(conversation_id)");
             DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_orders_lookup ON {$schemaName}.orders(chatbot_id, created_at)");
         } catch (\Throwable $e) {}
+        // doc-07's "actions" item: rule-derived, zero-cost suggestions.
+        // fingerprint is what makes a dismissal stick — the daily job
+        // recomputes the same finding with a fresh count and must update
+        // that row rather than resurrect it as a new one.
+        try {
+            DB::statement("
+                CREATE TABLE IF NOT EXISTS {$schemaName}.suggestions (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    chatbot_id UUID NOT NULL REFERENCES {$schemaName}.chatbots(id) ON DELETE CASCADE,
+                    type VARCHAR(50) NOT NULL,
+                    fingerprint VARCHAR(255) NOT NULL,
+                    params JSONB NOT NULL DEFAULT '{}',
+                    count INTEGER NOT NULL DEFAULT 0,
+                    source_conversation_ids JSONB NOT NULL DEFAULT '[]',
+                    status VARCHAR(20) NOT NULL DEFAULT 'active',
+                    computed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    dismissed_at TIMESTAMPTZ,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    UNIQUE(chatbot_id, fingerprint)
+                )
+            ");
+            DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_suggestions_active ON {$schemaName}.suggestions(chatbot_id, status, count DESC)");
+        } catch (\Throwable $e) {}
         // create_payment_link (doc-04) — true only for an order Laravel
         // itself created via ChatController::createPaymentLink(); an order
         // that merely got cookie-attributed after a normal checkout (the
@@ -807,8 +830,27 @@ class TenantService
                 UNIQUE(chatbot_id, woo_order_id)
             )
         ");
+        DB::statement("
+            CREATE TABLE IF NOT EXISTS {$s}.suggestions (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                chatbot_id UUID NOT NULL REFERENCES {$s}.chatbots(id) ON DELETE CASCADE,
+                type VARCHAR(50) NOT NULL,
+                -- Stable identity for one finding across daily recomputes,
+                -- so dismissing it dismisses it for good (doc-07).
+                fingerprint VARCHAR(255) NOT NULL,
+                params JSONB NOT NULL DEFAULT '{}',
+                count INTEGER NOT NULL DEFAULT 0,
+                source_conversation_ids JSONB NOT NULL DEFAULT '[]',
+                status VARCHAR(20) NOT NULL DEFAULT 'active',
+                computed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                dismissed_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                UNIQUE(chatbot_id, fingerprint)
+            )
+        ");
         DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_orders_conv ON {$s}.orders(conversation_id)");
         DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_orders_lookup ON {$s}.orders(chatbot_id, created_at)");
+        DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_suggestions_active ON {$s}.suggestions(chatbot_id, status, count DESC)");
 
         DB::statement("SET search_path TO public");
     }

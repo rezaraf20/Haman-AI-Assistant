@@ -15,7 +15,10 @@
  *     TextSimilarity.php is the same case one step further: its Persian
  *     stopword list and Arabic->Persian character map are the linguistic
  *     data that makes matching work at all. Translating them would break
- *     the thing they exist to do.
+ *     the thing they exist to do. SuggestionEngine.php's TOPIC_RULES are
+ *     the same: a corpus of Persian phrases the rules match customer
+ *     questions against, never text shown to anyone. Every sentence that
+ *     IS shown for a suggestion lives in lang/{fa,en}/suggestions.php.
  *   - A line ending in the `// i18n:widget` marker: scattered single lines
  *     (e.g. a widget-content fallback string inside a controller) that are
  *     the same widget-language exemption but don't warrant excluding their
@@ -30,6 +33,7 @@ $exemptFiles = [
     DIRECTORY_SEPARATOR . 'Support' . DIRECTORY_SEPARATOR . 'WidgetDefaults.php',
     DIRECTORY_SEPARATOR . 'Support' . DIRECTORY_SEPARATOR . 'Numbers.php',
     DIRECTORY_SEPARATOR . 'Support' . DIRECTORY_SEPARATOR . 'TextSimilarity.php',
+    DIRECTORY_SEPARATOR . 'Services' . DIRECTORY_SEPARATOR . 'SuggestionEngine.php',
 ];
 
 $findings = [];
