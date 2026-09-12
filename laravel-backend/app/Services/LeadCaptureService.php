@@ -44,16 +44,71 @@ class LeadCaptureService {
             'contact'         => $parsed['contact'],
             'contact_type'    => $parsed['contact_type'],
             'question'        => $conv->pending_lead_question,
+            'requested_item'  => $conv->pending_lead_item,
+            'type'            => $conv->pending_lead_type ?: 'unanswered',
             'status'          => 'new',
         ]);
 
-        $conv->update(['pending_lead_question' => null]);
+        $conv->update([
+            'pending_lead_question' => null,
+            'pending_lead_type'     => null,
+            'pending_lead_item'     => null,
+        ]);
+
+        // The thank-you differs by mode: promising to text someone when a
+        // product is restocked is a commitment the shop can keep, and the
+        // same sentence would be a lie for something it has never carried.
+        $thanks = match ($lead->type) {
+            'out_of_stock'    => $texts['lead_capture_out_of_stock_thanks'] ?? $texts['lead_capture_thanks'],
+            'not_in_catalog'  => $texts['lead_capture_not_in_catalog_thanks'] ?? $texts['lead_capture_thanks'],
+            default           => $texts['lead_capture_thanks'],
+        };
 
         return [
-            'response'      => $texts['lead_capture_thanks'],
+            'response'      => $thanks,
             'finish_reason' => 'lead_captured',
             'lead'          => $lead,
         ];
+    }
+
+    /**
+     * The two product-driven modes (doc "out_of_stock" / "not_in_catalog").
+     * Called when a tool call showed the customer wanted something the shop
+     * cannot sell them right now — see tool_calling_service._detect_lead_signal()
+     * for where the signal is produced.
+     *
+     * Returns the sentence to append to the bot's own answer, or null when
+     * this mode is switched off for this chatbot. Appended rather than
+     * replacing: the customer still deserves the real answer ("that one is
+     * out of stock") before being offered a callback.
+     */
+    public function promptForItem(Conversation $conv, Chatbot $chatbot, string $mode, string $item, string $question): ?string {
+        if (!self::isModeEnabled($chatbot, $mode)) return null;
+
+        $texts = array_merge(WidgetDefaults::forLanguage($chatbot->language), $chatbot->widget_config ?? []);
+        $key = $mode === 'out_of_stock' ? 'lead_capture_out_of_stock_prompt' : 'lead_capture_not_in_catalog_prompt';
+
+        $conv->update([
+            'pending_lead_question' => $question,
+            'pending_lead_type'     => $mode,
+            'pending_lead_item'     => mb_substr($item, 0, 255),
+        ]);
+
+        return str_replace(':item', $item, $texts[$key]);
+    }
+
+    /**
+     * Each mode is switched off independently, and both are off unless the
+     * merchant turns them on — a shop that does not want a phone number
+     * collected every time something is out of stock must not get one just
+     * because it enabled lead capture for unanswered questions.
+     */
+    public static function isModeEnabled(Chatbot $chatbot, string $mode): bool {
+        if (!self::isEnabled($chatbot)) return false;
+        $key = $mode === 'out_of_stock'
+            ? 'lead_capture_out_of_stock_enabled'
+            : 'lead_capture_not_in_catalog_enabled';
+        return (bool) ($chatbot->widget_config[$key] ?? false);
     }
 
     /** Called when a fresh (non-contact-attempt) query comes back
@@ -159,6 +214,7 @@ class LeadCaptureService {
             'contact'         => $parsed['contact'],
             'contact_type'    => $parsed['contact_type'],
             'question'        => $this->summarizeRecentHistory($recentHistory) ?? $message,
+            'type'            => 'volunteered',
             'status'          => 'new',
         ]);
 

@@ -385,6 +385,15 @@ class TenantService
             ");
             DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_leads_lookup ON {$schemaName}.leads(chatbot_id, status, created_at)");
         } catch (\Throwable $e) {}
+        // out_of_stock / not_in_catalog lead modes: without the item name on
+        // the row itself, a merchant reading the lead list has no idea what
+        // to call the person back about.
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.leads ADD COLUMN IF NOT EXISTS requested_item VARCHAR(255)");
+            DB::statement("ALTER TABLE {$schemaName}.leads ADD COLUMN IF NOT EXISTS type VARCHAR(30) NOT NULL DEFAULT 'unanswered'");
+            DB::statement("ALTER TABLE {$schemaName}.conversations ADD COLUMN IF NOT EXISTS pending_lead_type VARCHAR(30)");
+            DB::statement("ALTER TABLE {$schemaName}.conversations ADD COLUMN IF NOT EXISTS pending_lead_item VARCHAR(255)");
+        } catch (\Throwable $e) {}
         // Revenue attribution (doc-04, prerequisite for Intent analytics) —
         // see createTenantTables()'s matching block and SyncService::
         // recordOrder(). conversation_id is nullable and only ever set when
@@ -672,6 +681,11 @@ class TenantService
                 -- Cleared once resolved (lead captured or an invalid
                 -- attempt exhausted the flow).
                 pending_lead_question TEXT,
+                -- Which flow armed the pending question, and what the
+                -- customer asked for — both have to survive to the next
+                -- turn, since that is when the lead row is written.
+                pending_lead_type VARCHAR(30),
+                pending_lead_item VARCHAR(255),
                 ended_at TIMESTAMPTZ,
                 started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -801,6 +815,13 @@ class TenantService
                 contact VARCHAR(255) NOT NULL,
                 contact_type VARCHAR(10) NOT NULL,
                 question TEXT,
+                -- What the customer actually wanted, when the lead came
+                -- from an out-of-stock or not-stocked moment. Without it
+                -- the merchant knows someone wants a callback but not
+                -- what about.
+                requested_item VARCHAR(255),
+                -- unanswered | volunteered | out_of_stock | not_in_catalog
+                type VARCHAR(30) NOT NULL DEFAULT 'unanswered',
                 status VARCHAR(20) NOT NULL DEFAULT 'new',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             )

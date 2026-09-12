@@ -18,6 +18,19 @@
             </x-filament::button>
         </div>
 
+        {{-- Lead type is its own axis: a shop chasing restock requests
+             wants only those, regardless of contacted/closed status. --}}
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="text-sm text-gray-500">{{ __('leads.filter_type') }}:</span>
+            @foreach ($this->typeOptions() as $value => $label)
+                <button
+                    type="button"
+                    wire:click="setTypeFilter('{{ $value }}')"
+                    class="px-3 py-1.5 rounded-lg text-sm {{ $typeFilter === $value ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' }}"
+                >{{ $label }}</button>
+            @endforeach
+        </div>
+
         <x-filament::section>
             @if (empty($leads))
                 <p class="text-sm text-gray-500">{{ __('leads.empty') }}</p>
@@ -27,6 +40,8 @@
                         <thead>
                             <tr class="text-start text-gray-500 border-b">
                                 <th class="py-2 pe-4 text-start">{{ __('leads.col_contact') }}</th>
+                                <th class="py-2 pe-4 text-start">{{ __('leads.col_type') }}</th>
+                                <th class="py-2 pe-4 text-start">{{ __('leads.col_requested_item') }}</th>
                                 <th class="py-2 pe-4 text-start">{{ __('leads.col_question') }}</th>
                                 <th class="py-2 pe-4 text-start">{{ __('common.status') }}</th>
                                 <th class="py-2 pe-4 text-start">{{ __('common.created_at') }}</th>
@@ -40,6 +55,20 @@
                                         <span dir="ltr" class="inline-block">{{ $lead->contact }}</span>
                                         <span class="text-xs text-gray-400">({{ $lead->contact_type === 'email' ? __('common.email') : __('panel.mobile_number') }})</span>
                                     </td>
+                                    <td class="py-2 pe-4">
+                                        @php
+                                            $typeColor = match ($lead->type ?? 'unanswered') {
+                                                'out_of_stock'   => 'bg-warning-100 text-warning-700',
+                                                'not_in_catalog' => 'bg-danger-100 text-danger-700',
+                                                'volunteered'    => 'bg-success-100 text-success-700',
+                                                default          => 'bg-gray-100 text-gray-700',
+                                            };
+                                        @endphp
+                                        <span class="px-2 py-0.5 rounded text-xs {{ $typeColor }}">
+                                            {{ $this->typeLabel($lead->type ?? 'unanswered') }}
+                                        </span>
+                                    </td>
+                                    <td class="py-2 pe-4 font-medium">{{ $lead->requested_item ?: '—' }}</td>
                                     <td class="py-2 pe-4 max-w-xs truncate" title="{{ $lead->question }}">{{ $lead->question }}</td>
                                     <td class="py-2 pe-4">
                                         @php

@@ -59,6 +59,11 @@ class ChatService {
         if ($promptText = $this->leadCapturePromptIfApplicable($conv, $chatbot, $result, $msg)) {
             $result['response'] = $promptText;
             $result['finish_reason'] = 'lead_capture_prompt';
+        } elseif ($itemPrompt = $this->leadCaptureItemPromptIfApplicable($conv, $chatbot, $result, $msg)) {
+            // Appended, not swapped: the customer still gets the real
+            // answer ("that one is out of stock") before the offer.
+            $result['response'] = trim($result['response'] . "\n\n" . $itemPrompt);
+            $result['finish_reason'] = 'lead_capture_prompt';
         }
         $this->notifyIfUnanswered($chatbot, $result, $msg);
 
@@ -121,6 +126,10 @@ class ChatService {
             $onDelta("\n\n" . $promptText);
             $result['response'] .= "\n\n" . $promptText;
             $result['finish_reason'] = 'lead_capture_prompt';
+        } elseif ($itemPrompt = $this->leadCaptureItemPromptIfApplicable($conv, $chatbot, $result, $msg)) {
+            $onDelta("\n\n" . $itemPrompt);
+            $result['response'] .= "\n\n" . $itemPrompt;
+            $result['finish_reason'] = 'lead_capture_prompt';
         }
         $this->notifyIfUnanswered($chatbot, $result, $msg);
 
@@ -164,6 +173,29 @@ class ChatService {
         if (!($result['is_unanswered'] ?? false)) return null;
         if (!LeadCaptureService::isEnabled($chatbot)) return null;
         return $this->leadCapture->promptForContact($conv, $chatbot, $question);
+    }
+
+    /**
+     * The out_of_stock / not_in_catalog modes. Unlike the unanswered case,
+     * the bot DID answer — it just answered "we can't sell you that right
+     * now", which is the moment a shop can still save the sale by offering
+     * to call back. The signal comes from the tool call itself
+     * (tool_calling_service._detect_lead_signal), not from is_unanswered.
+     *
+     * Returns null unless the specific mode is switched on for this
+     * chatbot: a merchant who wants lead capture for unanswered questions
+     * has not thereby asked for a phone number every time something is out
+     * of stock.
+     */
+    private function leadCaptureItemPromptIfApplicable(Conversation $conv, Chatbot $chatbot, array $result, string $question): ?string {
+        $signal = $result['lead_signal'] ?? null;
+        if (!is_array($signal)) return null;
+
+        $mode = $signal['mode'] ?? null;
+        $item = trim((string) ($signal['item'] ?? ''));
+        if (!in_array($mode, ['out_of_stock', 'not_in_catalog'], true) || $item === '') return null;
+
+        return $this->leadCapture->promptForItem($conv, $chatbot, $mode, $item, $question);
     }
 
     /** @return array{response:string,chunk_ids:array,scores:array,prompt_tokens:int,completion_tokens:int,total_tokens:int,cost_toman:int,model:string,latency_ms:int,is_fallback:bool,is_unanswered:bool,finish_reason:string} */

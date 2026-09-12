@@ -97,6 +97,14 @@ class WidgetDefaults {
             'lead_capture_prompt'  => 'الان جوابش را ندارم. شماره تماس یا ایمیلتان را بگذارید تا همکاران در اولین فرصت باهاتون تماس بگیرند.',
             'lead_capture_thanks'  => 'متشکریم! اطلاعات شما ثبت شد و همکاران به‌زودی با شما تماس می‌گیرند.',
             'lead_capture_invalid' => 'این یک شماره تماس یا ایمیل معتبر به نظر نمی‌رسد. لطفاً دوباره وارد کنید (مثال: ۰۹۱۲۳۴۵۶۷۸۹ یا you@example.com).',
+            // :item is replaced with what the customer actually asked for.
+            // Both modes are off unless the merchant turns them on.
+            'lead_capture_out_of_stock_enabled'   => false,
+            'lead_capture_not_in_catalog_enabled' => false,
+            'lead_capture_out_of_stock_prompt' => 'اگر شماره‌تان را بگذارید، به‌محض شارژ شدن «:item» خبرتان می‌کنم.',
+            'lead_capture_out_of_stock_thanks' => 'ثبت شد! به‌محض موجود شدن، خبرتان می‌کنیم.',
+            'lead_capture_not_in_catalog_prompt' => 'فعلاً «:item» را نداریم. اگر شماره‌تان را بگذارید، در صورت تأمین به شما اطلاع می‌دهیم.',
+            'lead_capture_not_in_catalog_thanks' => 'ثبت شد! اگر این مورد را تأمین کنیم، به شما خبر می‌دهیم.',
         ];
     }
 
@@ -115,6 +123,12 @@ class WidgetDefaults {
             'lead_capture_prompt'  => "I don't have an answer for that right now. Leave your phone number or email and our team will get back to you shortly.",
             'lead_capture_thanks'  => "Thanks! We've got your details and our team will be in touch soon.",
             'lead_capture_invalid' => "That doesn't look like a valid phone number or email. Please try again (e.g. +1 555 123 4567 or you@example.com).",
+            'lead_capture_out_of_stock_enabled'   => false,
+            'lead_capture_not_in_catalog_enabled' => false,
+            'lead_capture_out_of_stock_prompt' => 'Leave your phone number and I\'ll let you know as soon as ":item" is back in stock.',
+            'lead_capture_out_of_stock_thanks' => "Got it! We'll let you know the moment it's back in stock.",
+            'lead_capture_not_in_catalog_prompt' => 'We don\'t carry ":item" at the moment. Leave your number and we\'ll let you know if we start stocking it.',
+            'lead_capture_not_in_catalog_thanks' => "Got it! We'll be in touch if we start stocking that.",
         ];
     }
 }

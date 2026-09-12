@@ -110,6 +110,60 @@ def _build_widget_block(fn_name: str, result: dict) -> Optional[dict]:
     return {"type": "product_compare", "products": products, "attribute_rows": result.get("attribute_rows", [])}
 
 
+_IN_STOCK_STATUSES = {"instock", "onbackorder"}
+
+
+def _detect_lead_signal(fn_name: str, args: dict, result: dict) -> Optional[dict]:
+    """Spots the two moments where a shop loses a sale it could still save:
+    the customer wanted something real that happens to be out of stock, and
+    the customer wanted something the shop does not carry at all.
+
+    Both are worth a callback, and they are NOT the same thing — "we'll
+    text you when it's back" is a promise the shop can keep; for something
+    it never stocked, the honest version is "we'll let you know if we get
+    it". Hence two modes rather than one, with their own copy and their own
+    off switch (LeadCaptureService on the Laravel side owns both).
+
+    Returns {"mode": ..., "item": ...} or None. `item` is what the customer
+    actually asked for, because a lead that only says "someone asked about
+    something" tells the merchant nothing they can act on.
+    """
+    if not isinstance(result, dict) or "error" in result:
+        return None
+
+    if fn_name == "get_product_availability":
+        # A live lookup that came back empty: the store genuinely has no
+        # such product. Only trust this when the check really ran live —
+        # an unreachable store must never be reported as "not stocked".
+        if result.get("live") and result.get("found") is False:
+            asked = args.get("sku") or args.get("product_id")
+            return {"mode": "not_in_catalog", "item": str(asked)} if asked else None
+
+        if result.get("found") and result.get("live"):
+            status = str(result.get("stock_status") or "").strip().lower()
+            if status and status not in _IN_STOCK_STATUSES:
+                name = result.get("name") or args.get("sku")
+                return {"mode": "out_of_stock", "item": str(name)} if name else None
+
+    if fn_name == "search_products":
+        if not result.get("live"):
+            return None
+        asked = args.get("brand") or args.get("query") or args.get("category")
+        results = result.get("results") or []
+        if not results:
+            return {"mode": "not_in_catalog", "item": str(asked)} if asked else None
+
+        # Everything that matched is out of stock — the demand is real and
+        # the shop simply cannot fulfil it today.
+        statuses = [str(r.get("stock_status") or "").strip().lower() for r in results if isinstance(r, dict)]
+        if statuses and all(s and s not in _IN_STOCK_STATUSES for s in statuses):
+            first = next((r.get("name") for r in results if isinstance(r, dict) and r.get("name")), None)
+            item = first or asked
+            return {"mode": "out_of_stock", "item": str(item)} if item else None
+
+    return None
+
+
 def _log_product_mentions(db: Session, conversation_id: Optional[str], chatbot_id: str, source: str, products: List[dict]) -> None:
     from app.services.rag_service import _log_event
     for p in products:
@@ -281,6 +335,9 @@ def run_tool_calling_pipeline(
     model_used = "n/a"
     executed = 0
     widget_blocks: List[dict] = []
+    # First signal wins: if a turn touched several products, the merchant
+    # gets one callback offer about one thing, not a pile of them.
+    lead_signal: Optional[dict] = None
 
     # +1: guarantees one final call with tools disabled once the execution
     # budget is spent, so the turn always ends in a real text answer
@@ -320,6 +377,7 @@ def run_tool_calling_pipeline(
                 "model": model_used, "latency_ms": latency_ms,
                 "is_fallback": False, "is_unanswered": False, "finish_reason": "tool_stop",
                 "widget_blocks": widget_blocks,
+                "lead_signal": lead_signal,
             }
 
         messages.append({"role": "assistant", "content": message.get("content"), "tool_calls": tool_calls})
@@ -333,6 +391,15 @@ def run_tool_calling_pipeline(
             executed += 1
             result = _execute_tool_call(db, chatbot_id, conversation_id, call, tools)
             fn_name = call.get("function", {}).get("name", "")
+
+            if lead_signal is None:
+                try:
+                    call_args = json.loads(call.get("function", {}).get("arguments") or "{}")
+                except (ValueError, TypeError):
+                    call_args = {}
+                if isinstance(call_args, dict):
+                    lead_signal = _detect_lead_signal(fn_name, call_args, result)
+
             block = _build_widget_block(fn_name, result)
             if block:
                 widget_blocks.append(block)

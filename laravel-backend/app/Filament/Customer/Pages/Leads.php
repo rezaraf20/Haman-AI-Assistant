@@ -21,6 +21,10 @@ class Leads extends Page {
     protected static ?string $navigationIcon = 'heroicon-o-user-plus';
 
     public string $statusFilter = 'all'; // all | new | contacted | closed
+    /** all | unanswered | volunteered | out_of_stock | not_in_catalog —
+     *  a shop chasing restock requests wants to see only those, not every
+     *  lead the bot ever collected. */
+    public string $typeFilter = 'all';
 
     public static function getNavigationLabel(): string { return __('leads.nav'); }
     public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_chatbots'); }
@@ -42,6 +46,9 @@ class Leads extends Page {
         if ($this->statusFilter !== 'all') {
             $query->where('status', $this->statusFilter);
         }
+        if ($this->typeFilter !== 'all') {
+            $query->where('type', $this->typeFilter);
+        }
         $leads = $query->limit(200)->get();
         DB::statement('SET search_path TO public');
         return $leads->all();
@@ -49,6 +56,33 @@ class Leads extends Page {
 
     public function setStatusFilter(string $status): void {
         $this->statusFilter = $status;
+    }
+
+    public function setTypeFilter(string $type): void {
+        $this->typeFilter = $type;
+    }
+
+    public function typeOptions(): array {
+        return [
+            'all'            => __('leads.type_all'),
+            'out_of_stock'   => __('leads.type_out_of_stock'),
+            'not_in_catalog' => __('leads.type_not_in_catalog'),
+            'unanswered'     => __('leads.type_unanswered'),
+            'volunteered'    => __('leads.type_volunteered'),
+        ];
+    }
+
+    /** A plain match rather than a lang-key guess: __() hands back the key
+     *  itself for an unknown type, so a bad value would render as
+     *  "leads.type_x" instead of something a human can read. */
+    public function typeLabel(?string $type): string {
+        return match ($type) {
+            'out_of_stock'   => __('leads.type_out_of_stock'),
+            'not_in_catalog' => __('leads.type_not_in_catalog'),
+            'volunteered'    => __('leads.type_volunteered'),
+            'unanswered'     => __('leads.type_unanswered'),
+            default          => (string) $type,
+        };
     }
 
     public function markContacted(string $leadId): void {
@@ -68,10 +102,7 @@ class Leads extends Page {
     }
 
     public function conversationUrl(string $conversationId): string {
-        // No dedicated single-conversation view page exists in the
-        // customer portal today — DemandGap is the closest existing
-        // destination for "go look at what visitors asked".
-        return DemandGap::getUrl();
+        return Conversations::getUrl() . '?id=' . urlencode($conversationId);
     }
 
     public function exportCsv() {
@@ -80,11 +111,14 @@ class Leads extends Page {
         $leads = DB::table('leads')->orderByDesc('created_at')->get();
         DB::statement('SET search_path TO public');
 
-        $csv = "id,contact,contact_type,question,status,created_at\n";
+        // requested_item is the column whoever makes the call actually
+        // needs — "someone wants a callback" is useless without "about what".
+        $csv = "\xEF\xBB\xBFid,contact,contact_type,type,requested_item,question,status,created_at\n";
         foreach ($leads as $lead) {
             $csv .= implode(',', array_map(
                 fn ($v) => '"' . str_replace('"', '""', (string) $v) . '"',
-                [$lead->id, $lead->contact, $lead->contact_type, $lead->question, $lead->status, $lead->created_at]
+                [$lead->id, $lead->contact, $lead->contact_type, $lead->type ?? '',
+                 $lead->requested_item ?? '', $lead->question, $lead->status, $lead->created_at]
             )) . "\n";
         }
 
