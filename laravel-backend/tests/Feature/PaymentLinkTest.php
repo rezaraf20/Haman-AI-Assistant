@@ -89,7 +89,12 @@ class PaymentLinkTest extends TestCase
 
     private function fakeLiveQuery(int $previewTotal = 90000, ?string $currency = 'IRT', int $orderId = 501): void
     {
-        Http::fake(function ($request) use ($previewTotal, $currency, $orderId) {
+        // WooCommerce allocates a fresh order id for every draft order, so
+        // the fake must too — orders has UNIQUE(chatbot_id, woo_order_id),
+        // and a fake that reuses one id would fail for a reason no real
+        // store can ever hit (caught exactly that way the first time).
+        $nextOrderId = $orderId;
+        Http::fake(function ($request) use ($previewTotal, $currency, &$nextOrderId) {
             $body = json_decode($request->body(), true);
             if (($body['action'] ?? null) === 'preview_order') {
                 return Http::response([
@@ -98,6 +103,7 @@ class PaymentLinkTest extends TestCase
                 ], 200);
             }
             if (($body['action'] ?? null) === 'create_draft_order') {
+                $orderId = $nextOrderId++;
                 return Http::response([
                     'order_id' => $orderId,
                     'key' => 'wc_order_' . Str::random(16),
