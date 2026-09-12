@@ -260,17 +260,22 @@ class OrderStatusTest extends TestCase
     private function sendAndCaptureCode(string $chatbotId, string $conversationId): string
     {
         $this->requestCode($chatbotId, $conversationId)->assertOk();
-        // The real code is only ever in the SMS, so read it from the
-        // outbound request the gateway received.
-        $code = null;
-        Http::assertSent(function ($request) use (&$code) {
+        // The code is stored hashed and never returned to the caller, so
+        // the only way to learn it is the same way the customer does —
+        // out of the message that was actually sent. In plain-SMS mode
+        // that is a full sentence around the digits; in pattern mode the
+        // gateway receives the bare code, hence the regex either way.
+        $body = null;
+        Http::assertSent(function ($request) use (&$body) {
             if (str_contains($request->url(), 'payamak-panel.com')) {
-                $code = $request['text'];
+                $body = $request['text'];
                 return true;
             }
             return false;
         });
-        return (string) $code;
+        $this->assertNotNull($body, 'An SMS should have been sent.');
+        $this->assertSame(1, preg_match('/\b(\d{5})\b/', (string) $body, $m), 'The message must carry a 5-digit code.');
+        return $m[1];
     }
 
     private function verify(string $chatbotId, string $conversationId, string $code)
