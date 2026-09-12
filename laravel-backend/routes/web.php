@@ -7,6 +7,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\PaymentController;
 use App\Http\Middleware\SetLocale;
+use App\Services\TrendsService;
 
 // Zarinpal redirects the end user's browser here after payment — deliberately
 // outside any auth guard (see PaymentController for why that's safe).
@@ -36,3 +37,29 @@ Route::get('/portal/login', function () {
 
     return view('auth.otp-login-page', ['method' => $method]);
 })->name('portal.login')->middleware(SetLocale::class);
+
+/**
+ * The Trends report as a standalone, print-styled page — this is the "PDF"
+ * half of the report's export.
+ *
+ * Deliberately a print stylesheet the browser turns into a PDF rather than
+ * a server-side PDF library: the report is mostly Persian, and the PHP PDF
+ * libraries available here either cannot shape Arabic-script glyphs or
+ * cannot lay them out right-to-left, which would hand the merchant a
+ * beautifully formatted page of broken text to show their buying team.
+ * The browser's own engine renders it correctly, and "Save as PDF" is one
+ * keystroke from here.
+ */
+Route::get('/portal/trends/print', function () {
+    $range = request()->query('range', '30d');
+    if (!array_key_exists($range, TrendsService::RANGES)) $range = '30d';
+
+    $tenant = auth()->user()->tenant;
+    $data = app(TrendsService::class)->get($tenant->schema_name, $range);
+
+    return view('reports.trends-print', [
+        'data'        => $data,
+        'range'       => $range,
+        'tenantName'  => $tenant->name,
+    ]);
+})->middleware(['web', 'auth', SetLocale::class])->name('portal.trends.print');

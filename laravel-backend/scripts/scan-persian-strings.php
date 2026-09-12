@@ -12,6 +12,10 @@
  *     separate mechanism from the admin/customer panel's lang/ files that
  *     this scanner is guarding — see that class's docblock. Numbers.php's
  *     Persian digit *glyphs* (۰۱۲…) are data, not translatable UI text.
+ *     TextSimilarity.php is the same case one step further: its Persian
+ *     stopword list and Arabic->Persian character map are the linguistic
+ *     data that makes matching work at all. Translating them would break
+ *     the thing they exist to do.
  *   - A line ending in the `// i18n:widget` marker: scattered single lines
  *     (e.g. a widget-content fallback string inside a controller) that are
  *     the same widget-language exemption but don't warrant excluding their
@@ -25,6 +29,7 @@ $persianPattern = '/[\x{0600}-\x{06FF}]/u';
 $exemptFiles = [
     DIRECTORY_SEPARATOR . 'Support' . DIRECTORY_SEPARATOR . 'WidgetDefaults.php',
     DIRECTORY_SEPARATOR . 'Support' . DIRECTORY_SEPARATOR . 'Numbers.php',
+    DIRECTORY_SEPARATOR . 'Support' . DIRECTORY_SEPARATOR . 'TextSimilarity.php',
 ];
 
 $findings = [];
