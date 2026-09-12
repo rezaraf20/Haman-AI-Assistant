@@ -4,6 +4,7 @@ namespace App\Filament\Customer\Pages;
 use App\Services\SuggestionEngine;
 use Filament\Pages\Page;
 use Filament\Notifications\Notification;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -24,26 +25,39 @@ class Suggestions extends Page
     public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_chatbots'); }
     public function getTitle(): string { return __('suggestions.nav'); }
 
-    /** A count badge is the honest way to say "you have things to act on". */
+    /**
+     * A count badge is the honest way to say "you have things to act on",
+     * but this runs on EVERY page of the panel and Filament asks more than
+     * once per render. Computing it cost three statements a time and blew
+     * the customer dashboard's query budget — caught by that page's own
+     * guard, not by inspection.
+     *
+     * So it is strictly a READ of a value someone else wrote: the nightly
+     * job publishes the count, dismiss() republishes it. A cold cache
+     * simply shows no badge until the next run, which is a far better
+     * trade than three queries on every page a merchant ever opens.
+     */
     public static function getNavigationBadge(): ?string
     {
-        $count = static::activeCount();
+        $tenant = auth()->user()?->tenant;
+        if (!$tenant) return null;
+
+        $count = (int) Cache::get(self::badgeCacheKey($tenant->schema_name), 0);
         return $count > 0 ? (string) $count : null;
     }
 
-    private static function activeCount(): int
+    public static function badgeCacheKey(string $schema): string
     {
-        $tenant = auth()->user()?->tenant;
-        if (!$tenant) return 0;
+        return "suggestions:badge:{$schema}";
+    }
 
-        DB::statement("SET search_path TO {$tenant->schema_name}, public");
-        try {
-            return DB::table('suggestions')->where('status', 'active')->count();
-        } catch (\Throwable $e) {
-            return 0;
-        } finally {
-            DB::statement('SET search_path TO public');
-        }
+    /** Published by whoever just changed the underlying rows. */
+    public static function publishBadgeCount(string $schema, int $count): void
+    {
+        // Comfortably longer than the daily rebuild interval, so the badge
+        // survives until it is next republished rather than silently
+        // vanishing mid-afternoon.
+        Cache::put(self::badgeCacheKey($schema), $count, 60 * 60 * 30);
     }
 
     public function getSuggestions(): array
@@ -130,9 +144,12 @@ class Suggestions extends Page
                 'status' => 'dismissed',
                 'dismissed_at' => now(),
             ]);
+            $remaining = DB::table('suggestions')->where('status', 'active')->count();
         } finally {
             DB::statement('SET search_path TO public');
         }
+
+        self::publishBadgeCount($tenant->schema_name, $remaining);
 
         Notification::make()->title(__('suggestions.dismissed'))->success()->send();
     }

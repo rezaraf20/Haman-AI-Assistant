@@ -2,6 +2,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Tenant;
+use App\Filament\Customer\Pages\Suggestions;
 use App\Services\SuggestionEngine;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -51,6 +52,14 @@ class GenerateSuggestionsCommand extends Command
                         $this->line("  {$schema} / {$chatbotId}: {$written} suggestion(s)");
                     }
                 }
+
+                // The nav badge never queries — it only reads what this job
+                // publishes (see Suggestions::getNavigationBadge()), because
+                // it renders on every page of the panel.
+                Suggestions::publishBadgeCount(
+                    $schema,
+                    DB::table('suggestions')->where('status', 'active')->count()
+                );
             } catch (\Throwable $e) {
                 $this->error("  {$schema}: {$e->getMessage()}");
             } finally {

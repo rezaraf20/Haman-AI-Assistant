@@ -106,12 +106,13 @@ class SuggestionEngine
      */
     private function repeatedQuestions(string $chatbotId, $since): array
     {
-        $rows = DB::table('messages as m')
-            ->join('conversations as c', 'c.id', '=', 'm.conversation_id')
-            ->where('c.chatbot_id', $chatbotId)
-            ->where('m.role', 'user')
-            ->where('m.created_at', '>=', $since)
-            ->selectRaw('m.content, m.conversation_id')
+        // messages carries chatbot_id itself, so no join to conversations
+        // is needed to scope this to one bot.
+        $rows = DB::table('messages')
+            ->where('chatbot_id', $chatbotId)
+            ->where('role', 'user')
+            ->where('created_at', '>=', $since)
+            ->select('content', 'conversation_id')
             ->limit(5000)
             ->get();
 

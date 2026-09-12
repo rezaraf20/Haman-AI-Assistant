@@ -69,8 +69,9 @@ class SuggestionsTest extends TestCase
             'created_at' => now()->subDays($daysAgo), 'updated_at' => now()->subDays($daysAgo),
         ]);
         DB::table('messages')->insert([
-            'id' => (string) Str::uuid(), 'conversation_id' => $convId, 'role' => 'user',
-            'content' => $text, 'created_at' => now()->subDays($daysAgo), 'updated_at' => now()->subDays($daysAgo),
+            'id' => (string) Str::uuid(), 'conversation_id' => $convId,
+            'chatbot_id' => $ctx['chatbotId'], 'role' => 'user',
+            'content' => $text, 'created_at' => now()->subDays($daysAgo),
         ]);
         DB::statement('SET search_path TO public');
         return $convId;
@@ -80,8 +81,9 @@ class SuggestionsTest extends TestCase
     {
         DB::statement("SET search_path TO {$ctx['schema']}, public");
         DB::table('messages')->insert([
-            'id' => (string) Str::uuid(), 'conversation_id' => $convId, 'role' => 'user',
-            'content' => $text, 'created_at' => now()->subDay(), 'updated_at' => now()->subDay(),
+            'id' => (string) Str::uuid(), 'conversation_id' => $convId,
+            'chatbot_id' => $ctx['chatbotId'], 'role' => 'user',
+            'content' => $text, 'created_at' => now()->subDay(),
         ]);
         DB::statement('SET search_path TO public');
     }
@@ -96,7 +98,7 @@ class SuggestionsTest extends TestCase
         }
     }
 
-    private function run(array $ctx): void
+    private function runGenerator(array $ctx): void
     {
         $this->artisan('hamman:generate-suggestions', ['--tenant' => $ctx['schema']])->run();
     }
@@ -273,11 +275,11 @@ class SuggestionsTest extends TestCase
         $ctx = $this->makeTenant();
         for ($i = 0; $i < 4; $i++) $this->ask($ctx, 'هزینه ارسال چقدر است؟');
 
-        $this->run($ctx);
+        $this->runGenerator($ctx);
         $this->assertCount(1, $this->stored($ctx));
 
         // Re-running must refresh, not duplicate.
-        $this->run($ctx);
+        $this->runGenerator($ctx);
         $this->assertCount(1, $this->stored($ctx));
     }
 
@@ -285,7 +287,7 @@ class SuggestionsTest extends TestCase
     {
         $ctx = $this->makeTenant();
         for ($i = 0; $i < 4; $i++) $this->ask($ctx, 'هزینه ارسال چقدر است؟');
-        $this->run($ctx);
+        $this->runGenerator($ctx);
 
         $id = $this->stored($ctx)[0]->id;
         $this->actingAs($ctx['user'], 'web');
@@ -295,7 +297,7 @@ class SuggestionsTest extends TestCase
 
         // More people ask, the count would rise — it still must not return.
         for ($i = 0; $i < 4; $i++) $this->ask($ctx, 'هزینه ارسال چقدر است؟');
-        $this->run($ctx);
+        $this->runGenerator($ctx);
 
         $this->assertEmpty($this->stored($ctx), 'The nightly rebuild must not resurrect a dismissed suggestion.');
         $this->assertCount(1, $this->stored($ctx, 'dismissed'));
@@ -317,7 +319,7 @@ class SuggestionsTest extends TestCase
         foreach ($topics as $q => $n) {
             for ($i = 0; $i < $n; $i++) $this->ask($ctx, $q);
         }
-        $this->run($ctx);
+        $this->runGenerator($ctx);
 
         $this->actingAs($ctx['user'], 'web');
         $shown = app(\App\Filament\Customer\Pages\Suggestions::class)->getSuggestions();
@@ -334,7 +336,7 @@ class SuggestionsTest extends TestCase
     {
         $ctx = $this->makeTenant();
         for ($i = 0; $i < 4; $i++) $this->ask($ctx, 'هزینه ارسال چقدر است؟', 2);
-        $this->run($ctx);
+        $this->runGenerator($ctx);
         $this->assertCount(1, $this->stored($ctx));
 
         // Age every message out of the 90-day window.
@@ -342,7 +344,7 @@ class SuggestionsTest extends TestCase
         DB::table('messages')->update(['created_at' => now()->subDays(200)]);
         DB::statement('SET search_path TO public');
 
-        $this->run($ctx);
+        $this->runGenerator($ctx);
 
         $this->assertEmpty($this->stored($ctx));
         $this->assertCount(1, $this->stored($ctx, 'stale'), 'Dropping below threshold must not delete the row — that would lose a dismissal.');
@@ -354,7 +356,7 @@ class SuggestionsTest extends TestCase
     {
         $ctx = $this->makeTenant();
         for ($i = 0; $i < 4; $i++) $this->ask($ctx, 'هزینه ارسال به شیراز چقدر است؟');
-        $this->run($ctx);
+        $this->runGenerator($ctx);
 
         $response = $this->actingAs($ctx['user'], 'web')->get('/portal/suggestions');
 
