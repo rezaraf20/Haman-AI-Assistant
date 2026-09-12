@@ -301,6 +301,7 @@
             else if (block.type === 'cart_links') renderCartLinks(block.items);
             else if (block.type === 'add_to_cart') renderAddToCartIntent(block.items);
             else if (block.type === 'payment_link_preview') renderPaymentLinkPreview(block);
+            else if (block.type === 'order_status_otp') renderOrderStatusOtp(block);
         });
         if (wasNearBottom) scrollToBottom(false);
     }
@@ -537,6 +538,214 @@
         wrap.appendChild(statusEl);
 
         msgs.appendChild(wrap);
+    }
+
+    // get_order_status, phase 1. Nothing has been sent or looked up when
+    // this renders — the tool returns intent only. Sending an SMS costs
+    // the merchant money, so it takes a real click, exactly like the
+    // payment-link button below.
+    function renderOrderStatusOtp(block) {
+        if (!block.contact) return;
+        var wrap = document.createElement('div');
+        wrap.className = 'hm-order-status';
+
+        var prompt = document.createElement('div');
+        prompt.className = 'hm-order-status-prompt';
+        prompt.textContent = CFG.i18n.sendCodeToLabel + ' ' + block.contact;
+        wrap.appendChild(prompt);
+
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'hm-order-status-btn';
+        btn.textContent = CFG.i18n.sendCodeLabel;
+        var statusEl = document.createElement('div');
+        statusEl.className = 'hm-order-status-msg';
+        statusEl.hidden = true;
+        btn.addEventListener('click', function () {
+            handleSendOrderStatusCode(block, btn, statusEl, wrap);
+        });
+        wrap.appendChild(btn);
+        wrap.appendChild(statusEl);
+
+        msgs.appendChild(wrap);
+    }
+
+    function setOrderStatusError(statusEl, text) {
+        statusEl.hidden = false;
+        statusEl.className = 'hm-order-status-msg hm-order-status-error';
+        statusEl.textContent = text;
+    }
+
+    // Asks the server to send a code. The server refuses — without
+    // sending anything — unless this number actually appears on an order
+    // at this store, which is the whole reason this cannot be abused as a
+    // free SMS sender. This call carries no trust of its own.
+    function handleSendOrderStatusCode(block, btnEl, statusEl, wrap) {
+        btnEl.disabled = true;
+        btnEl.textContent = CFG.i18n.sendingCodeLabel;
+
+        fetch(H.apiUrl + '/chat/order-status/request-code', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chatbot_id: H.chatbotId,
+                conversation_id: convId,
+                contact: block.contact,
+            }),
+        })
+            .then(function (r) {
+                return r.json().catch(function () { return {}; }).then(function (data) {
+                    return { ok: r.ok, data: data };
+                });
+            })
+            .then(function (res) {
+                var payload = res.ok && res.data && res.data.data;
+                if (payload && payload.sent) {
+                    btnEl.hidden = true;
+                    statusEl.hidden = true;
+                    renderOrderStatusCodeInput(block, wrap);
+                    return;
+                }
+                btnEl.disabled = false;
+                btnEl.textContent = CFG.i18n.sendCodeLabel;
+                // "No orders for that number" is a normal, expected answer,
+                // not a failure — and importantly it means nothing was sent.
+                if (payload && payload.sent === false) {
+                    setOrderStatusError(statusEl, CFG.i18n.noOrdersFoundLabel);
+                } else {
+                    setOrderStatusError(statusEl, CFG.i18n.orderStatusErrorLabel);
+                }
+            })
+            .catch(function () {
+                btnEl.disabled = false;
+                btnEl.textContent = CFG.i18n.sendCodeLabel;
+                setOrderStatusError(statusEl, CFG.i18n.orderStatusErrorLabel);
+            });
+    }
+
+    // The code gets its own field here, deliberately: a code typed into
+    // the chat itself would be sent to the model and stored in message
+    // history. It never leaves this form.
+    function renderOrderStatusCodeInput(block, wrap) {
+        var form = document.createElement('div');
+        form.className = 'hm-order-status-verify';
+
+        var label = document.createElement('div');
+        label.className = 'hm-order-status-prompt';
+        label.textContent = CFG.i18n.enterCodeLabel;
+        form.appendChild(label);
+
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.inputMode = 'numeric';
+        input.autocomplete = 'one-time-code';
+        input.maxLength = 10;
+        input.className = 'hm-order-status-input';
+        form.appendChild(input);
+
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'hm-order-status-btn';
+        btn.textContent = CFG.i18n.verifyCodeLabel;
+        form.appendChild(btn);
+
+        var msg = document.createElement('div');
+        msg.className = 'hm-order-status-msg';
+        msg.hidden = true;
+        form.appendChild(msg);
+
+        btn.addEventListener('click', function () {
+            handleVerifyOrderStatusCode(block, input, btn, msg, form);
+        });
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') btn.click();
+        });
+
+        wrap.appendChild(form);
+        input.focus();
+    }
+
+    function handleVerifyOrderStatusCode(block, inputEl, btnEl, msgEl, form) {
+        var code = (inputEl.value || '').trim();
+        if (!code) return;
+        btnEl.disabled = true;
+        inputEl.disabled = true;
+        btnEl.textContent = CFG.i18n.verifyingCodeLabel;
+
+        fetch(H.apiUrl + '/chat/order-status/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chatbot_id: H.chatbotId,
+                conversation_id: convId,
+                contact: block.contact,
+                code: code,
+            }),
+        })
+            .then(function (r) {
+                return r.json().catch(function () { return {}; }).then(function (data) {
+                    return { ok: r.ok, data: data };
+                });
+            })
+            .then(function (res) {
+                var orders = res.ok && res.data && res.data.data && res.data.data.orders;
+                if (orders) {
+                    form.hidden = true;
+                    renderOrderList(orders, form.parentNode);
+                    return;
+                }
+                btnEl.disabled = false;
+                inputEl.disabled = false;
+                inputEl.value = '';
+                btnEl.textContent = CFG.i18n.verifyCodeLabel;
+                setOrderStatusError(msgEl, CFG.i18n.codeIncorrectLabel);
+            })
+            .catch(function () {
+                btnEl.disabled = false;
+                inputEl.disabled = false;
+                btnEl.textContent = CFG.i18n.verifyCodeLabel;
+                setOrderStatusError(msgEl, CFG.i18n.orderStatusErrorLabel);
+            });
+    }
+
+    // Status, tracking code and item names only — that is everything the
+    // server is willing to send, and the plugin never puts an address or
+    // payment reference on the wire in the first place.
+    function renderOrderList(orders, wrap) {
+        var list = document.createElement('div');
+        list.className = 'hm-order-list';
+        if (!orders.length) {
+            list.textContent = CFG.i18n.noOrdersFoundLabel;
+            wrap.appendChild(list);
+            return;
+        }
+        orders.forEach(function (o) {
+            var card = document.createElement('div');
+            card.className = 'hm-order-card';
+            var head = '<div class="hm-order-head"><span dir="ltr">#' + esc(o.number || '') + '</span>'
+                + '<span class="hm-order-state">' + esc(orderStatusLabel(o.status)) + '</span></div>';
+            var meta = '';
+            if (o.date_created) {
+                meta += '<div class="hm-order-meta"><span dir="ltr">' + esc(o.date_created) + '</span></div>';
+            }
+            if (o.tracking) {
+                meta += '<div class="hm-order-meta">' + esc(CFG.i18n.trackingLabel) + ': <span dir="ltr">' + esc(o.tracking) + '</span></div>';
+            }
+            var items = (o.items && o.items.length)
+                ? '<ul class="hm-order-items">' + o.items.map(function (it) {
+                    var qty = (it.quantity && it.quantity > 1) ? ' × ' + it.quantity : '';
+                    return '<li>' + esc(it.name || '') + qty + '</li>';
+                }).join('') + '</ul>'
+                : '';
+            card.innerHTML = head + meta + items;
+            list.appendChild(card);
+        });
+        wrap.appendChild(list);
+    }
+
+    function orderStatusLabel(status) {
+        var map = CFG.i18n.orderStatuses || {};
+        return map[status] || status || '';
     }
 
     // The one function in this file that creates a real WooCommerce

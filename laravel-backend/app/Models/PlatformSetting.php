@@ -9,6 +9,7 @@ class PlatformSetting extends Model {
         'zarinpal_merchant_id', 'zarinpal_sandbox',
         'melipayamak_username', 'melipayamak_password', 'melipayamak_sender',
         'melipayamak_use_pattern', 'melipayamak_pattern_id',
+        'sms_cost_toman',
     ];
     protected $casts = ['zarinpal_sandbox' => 'boolean', 'melipayamak_use_pattern' => 'boolean'];
 

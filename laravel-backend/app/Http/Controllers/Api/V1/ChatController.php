@@ -3,9 +3,15 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Services\ChatService;
 use App\Services\PaymentLinkService;
+use App\Services\OrderStatusService;
+use App\Services\SmsService;
+use App\Services\WalletService;
+use App\Models\OrderStatusOtp;
+use App\Models\PlatformSetting;
 use App\Models\Tenant\{Chatbot, Conversation};
 use Illuminate\Http\{Request, JsonResponse};
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use App\Support\WidgetDefaults;
@@ -22,7 +28,22 @@ class ChatController extends BaseApiController
     private const MAX_PAYMENT_LINKS_PER_CONVERSATION = 3;
     private const MAX_PAYMENT_LINKS_PER_IP_PER_DAY = 5;
 
-    public function __construct(private ChatService $svc, private PaymentLinkService $paymentLinks) {}
+    // get_order_status (doc-04). Every one of these is an anti-abuse
+    // control first and a UX limit second: an OTP flow reachable from an
+    // anonymous public chat widget, that spends the MERCHANT's money per
+    // send, is exactly the shape of thing that gets turned into a free
+    // SMS-harassment tool if any of them is missing.
+    private const MAX_CODES_PER_CONTACT_PER_HOUR = 3;
+    private const MAX_CODES_PER_CHATBOT_PER_DAY = 100;
+    private const MAX_CODE_REQUESTS_PER_IP_PER_DAY = 20;
+    private const ORDER_STATUS_CODE_TTL_MINUTES = 5;
+    private const MAX_ORDER_STATUS_VERIFY_ATTEMPTS = 3;
+
+    public function __construct(
+        private ChatService $svc,
+        private PaymentLinkService $paymentLinks,
+        private OrderStatusService $orderStatus,
+    ) {}
 
     // $preResolved lets callers reuse the chatbot_index row
     // ValidateChatbotDomain already looked up and stashed on the request
@@ -489,5 +510,219 @@ class ChatController extends BaseApiController
             'total'         => $total,
             'currency'      => $currency,
         ]);
+    }
+
+    /**
+     * get_order_status, phase 1 (doc-04): send a verification code — but
+     * only to a contact that actually appears on an order at THIS store.
+     *
+     * That one rule is the whole reason this endpoint can exist safely. An
+     * anonymous visitor can type any phone number into a public chat
+     * widget; without the order check, this endpoint would be a free
+     * SMS-harassment tool billed to the merchant. So the order check runs
+     * BEFORE a single message is sent or a single toman is spent, and a
+     * contact with no orders here costs the merchant nothing at all.
+     *
+     * Deliberately NOT reachable from the model: the Python get_order_status
+     * tool only returns intent for the widget to render. Sending an SMS
+     * needs a real human click, exactly like add_to_cart and
+     * create_payment_link before it.
+     */
+    public function requestOrderStatusCode(Request $req): JsonResponse
+    {
+        $d = $req->validate([
+            'chatbot_id'      => 'required|uuid',
+            'conversation_id' => 'required|uuid',
+            'contact'         => 'required|string|max:255',
+        ]);
+
+        $index = $this->setSchemaFromChatbot($d['chatbot_id'], $req->attributes->get('chatbot_index'));
+        if (!$index) return $this->notFound('Chatbot not found');
+
+        $conv = Conversation::where('id', $d['conversation_id'])->where('chatbot_id', $d['chatbot_id'])->first();
+        if (!$conv) return $this->notFound('Conversation not found');
+
+        $chatbot = Chatbot::find($d['chatbot_id']);
+        if (!$chatbot) return $this->notFound('Chatbot not found');
+        if (!in_array('get_order_status', $chatbot->enabled_tools ?? [], true)) {
+            return $this->forbidden('Order status lookup is not enabled for this chatbot.');
+        }
+
+        // Email would need a mail transport this platform does not have
+        // (there is no config/mail.php and no Mailable anywhere), so a
+        // non-phone contact is refused rather than silently dropped.
+        $phone = OrderStatusOtp::normalizePhone($d['contact']);
+        if ($phone === null) {
+            return $this->badRequest('Please enter a valid mobile number.');
+        }
+
+        // Bounds how often one visitor can make this store's database do
+        // an order lookup at all — counted on every attempt, including the
+        // ones that never result in an SMS.
+        $ipKey = 'hamman-order-status-ip:' . $req->ip();
+        if (RateLimiter::tooManyAttempts($ipKey, self::MAX_CODE_REQUESTS_PER_IP_PER_DAY)) {
+            return $this->tooManyRequests('Too many requests today.', RateLimiter::availableIn($ipKey));
+        }
+        RateLimiter::hit($ipKey, 86400);
+
+        // Per-contact and per-chatbot caps count REAL sends (rows only
+        // exist when a message actually went out), so a flood of lookups
+        // for contacts with no orders can never exhaust a real customer's
+        // allowance.
+        $contactSends = OrderStatusOtp::where('contact', $phone)
+            ->where('created_at', '>=', now()->subHour())
+            ->count();
+        if ($contactSends >= self::MAX_CODES_PER_CONTACT_PER_HOUR) {
+            return $this->tooManyRequests('Too many code requests for this number. Please try again later.');
+        }
+
+        $chatbotSends = OrderStatusOtp::where('chatbot_id', $d['chatbot_id'])
+            ->where('created_at', '>=', now()->subDay())
+            ->count();
+        if ($chatbotSends >= self::MAX_CODES_PER_CHATBOT_PER_DAY) {
+            return $this->tooManyRequests('This store has reached its daily verification limit.');
+        }
+
+        $tenant = app('current_tenant');
+        $domain = $index->primary_domain ?? null;
+        $secret = $tenant?->getWebhookSecret();
+        if (!$domain || !$secret) {
+            return $this->badRequest('No store connection is on file for this chatbot.');
+        }
+
+        // THE gate. null means the store could not be reached — which is
+        // not the same as "no orders", but both mean no SMS.
+        $hasOrders = $this->orderStatus->hasOrders($domain, $secret, $phone, 'phone');
+        if ($hasOrders === null) {
+            return $this->badRequest('Could not check orders right now. Please try again.');
+        }
+        if ($hasOrders === false) {
+            // Deliberately a 200 with sent=false, not an error: the widget
+            // shows a plain "no orders found for that number" message. No
+            // code row is written and no SMS is sent, so this costs the
+            // merchant nothing.
+            return $this->ok(['sent' => false, 'reason' => 'no_orders']);
+        }
+
+        $cost = (int) (PlatformSetting::current()->sms_cost_toman ?? 0);
+        if ($cost > 0 && (int) $tenant->wallet_balance_toman < $cost) {
+            return $this->badRequest('This store cannot send a verification code right now.');
+        }
+
+        $code = (string) random_int(10000, 99999);
+        if (!app(SmsService::class)->sendCode($phone, $code)) {
+            // Nothing is charged and no code row is written when the
+            // message never left — the customer can simply try again.
+            return $this->badRequest('Could not send the code right now. Please try again.');
+        }
+
+        OrderStatusOtp::create([
+            'chatbot_id'      => $d['chatbot_id'],
+            'tenant_id'       => $tenant->id,
+            'conversation_id' => $conv->id,
+            'contact'         => $phone,
+            'contact_type'    => 'phone',
+            'code_hash'       => Hash::make($code),
+            'ip'              => $req->ip(),
+            'expires_at'      => now()->addMinutes(self::ORDER_STATUS_CODE_TTL_MINUTES),
+        ]);
+
+        // The merchant pays for their own customers' lookups, and sees it
+        // in the same wallet ledger as everything else they're billed for.
+        if ($cost > 0) {
+            app(WalletService::class)->applyCompletedTransaction(
+                $tenant, 'sms_otp', -$cost,
+                ['description' => __('wallet.sms_otp_description', ['phone' => $this->maskPhone($phone)])],
+            );
+        }
+
+        return $this->ok([
+            'sent'       => true,
+            'contact'    => $this->maskPhone($phone),
+            'expires_in' => self::ORDER_STATUS_CODE_TTL_MINUTES * 60,
+        ]);
+    }
+
+    /**
+     * get_order_status, phase 2 (doc-04): verify the code, then return the
+     * customer's own orders — status, tracking code and item names only.
+     *
+     * The sanitising happens at the WordPress end (see the plugin's
+     * get_orders_for_contact()), so a shipping address or a payment
+     * reference never crosses the wire in the first place.
+     */
+    public function verifyOrderStatusCode(Request $req): JsonResponse
+    {
+        $d = $req->validate([
+            'chatbot_id'      => 'required|uuid',
+            'conversation_id' => 'required|uuid',
+            'contact'         => 'required|string|max:255',
+            'code'            => 'required|string|max:10',
+        ]);
+
+        $index = $this->setSchemaFromChatbot($d['chatbot_id'], $req->attributes->get('chatbot_index'));
+        if (!$index) return $this->notFound('Chatbot not found');
+
+        $conv = Conversation::where('id', $d['conversation_id'])->where('chatbot_id', $d['chatbot_id'])->first();
+        if (!$conv) return $this->notFound('Conversation not found');
+
+        $phone = OrderStatusOtp::normalizePhone($d['contact']);
+        if ($phone === null) return $this->badRequest('Please enter a valid mobile number.');
+
+        // Scoped to this chatbot: a code minted for one store can never be
+        // redeemed at another, even within the same tenant.
+        $otp = OrderStatusOtp::where('chatbot_id', $d['chatbot_id'])
+            ->where('contact', $phone)
+            ->whereNull('consumed_at')
+            ->latest('created_at')
+            ->first();
+
+        if (!$otp) return $this->badRequest('Please request a code first.');
+        if ($otp->expires_at->isPast()) return $this->badRequest('This code has expired. Please request a new one.');
+        if ($otp->attempts >= self::MAX_ORDER_STATUS_VERIFY_ATTEMPTS) {
+            return $this->tooManyRequests('Too many incorrect attempts. Please request a new code.');
+        }
+
+        if (!Hash::check($d['code'], $otp->code_hash)) {
+            $otp->increment('attempts');
+            return $this->badRequest('That code is not correct.');
+        }
+
+        $otp->update(['consumed_at' => now()]);
+
+        $tenant = app('current_tenant');
+        $domain = $index->primary_domain ?? null;
+        $secret = $tenant?->getWebhookSecret();
+        $orders = ($domain && $secret)
+            ? $this->orderStatus->fetchOrders($domain, $secret, $phone, 'phone')
+            : null;
+
+        if ($orders === null) {
+            return $this->badRequest('Could not load your orders right now. Please try again.');
+        }
+
+        // Only the count and the order numbers are recorded — never the
+        // contact, and never the order contents.
+        DB::table('conversation_events')->insert([
+            'id'              => (string) Str::uuid(),
+            'conversation_id' => $conv->id,
+            'chatbot_id'      => $d['chatbot_id'],
+            'event_type'      => 'order_status_viewed',
+            'payload'         => json_encode([
+                'order_count'   => count($orders),
+                'order_numbers' => array_map(fn ($o) => $o['number'], $orders),
+            ]),
+            'created_at'      => now(),
+        ]);
+
+        return $this->ok(['orders' => $orders]);
+    }
+
+    /** 09123456789 -> 0912***6789, for anything a human or a ledger reads. */
+    private function maskPhone(string $phone): string
+    {
+        return strlen($phone) >= 11
+            ? substr($phone, 0, 4) . '***' . substr($phone, -4)
+            : $phone;
     }
 }

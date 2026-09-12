@@ -845,3 +845,61 @@ register(Tool(
     handler=create_payment_link,
     access_level="read",
 ))
+
+
+def get_order_status(db: Session, chatbot_id: str, contact: str) -> dict:
+    """get_order_status (doc-04) — returns INTENT ONLY, and makes no HTTP
+    call of any kind.
+
+    Everything that matters here happens in Laravel, deliberately:
+    ChatController::requestOrderStatusCode() checks that the contact
+    actually appears on an order at this store BEFORE sending anything,
+    enforces the per-contact/per-chatbot/per-IP caps, and bills the SMS to
+    the merchant's wallet. If this tool could send a code itself, a model
+    talked into calling it in a loop would be a free SMS-harassment tool
+    paid for by the shop — so it cannot. The widget renders a confirm
+    button, and only a real human click reaches Laravel.
+
+    This is also why no order data is returned here: the customer has not
+    proved they control the contact yet. That only happens after the code
+    is verified, via a separate endpoint this tool never touches.
+    """
+    if not isinstance(contact, str) or not contact.strip():
+        return {"error": "A mobile number is required."}
+
+    cleaned = contact.strip()[:255]
+    # A plausible Iranian mobile is the only thing the send path accepts
+    # (App\Models\OrderStatusOtp::normalizePhone) — reject here too so the
+    # model gets a useful correction instead of a dead-end click.
+    digits = re.sub(r"\D+", "", cleaned)
+    if len(digits) < 10 or digits[-10] != "9":
+        return {"error": "That does not look like a valid Iranian mobile number."}
+
+    return {"contact": "0" + digits[-10:]}
+
+
+register(Tool(
+    name="get_order_status",
+    description=(
+        "Start looking up a customer's own order status. Use this when a customer asks where "
+        "their order is, or about a delivery/tracking code, AND has given their mobile number. "
+        "Ask for the mobile number they used on the order if they have not given it yet. This "
+        "tool does NOT look up any order and does NOT send anything — it only prepares a "
+        "confirmation the customer must click, after which they receive a verification code by "
+        "SMS and, once they enter it, see their own orders. Never claim to have found, sent, or "
+        "checked anything yourself, and never ask for or repeat a verification code in the chat."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "contact": {
+                "type": "string",
+                "description": "The mobile number the customer says they used on the order.",
+            },
+        },
+        "required": ["contact"],
+        "additionalProperties": False,
+    },
+    handler=get_order_status,
+    access_level="read",
+))

@@ -71,6 +71,8 @@ return [
     'owner_info_section' => 'Account Owner Info',
     'pattern_id' => 'Pattern (Body) ID',
     'pattern_id_help' => 'The numeric ID of your registered pattern in the Melipayamak panel — its template must have exactly one variable, filled with the OTP code.',
+    'sms_cost_toman' => 'Cost Per SMS (Toman)',
+    'sms_cost_toman_help' => "Charged to the tenant's own wallet for each order-status verification SMS, and shown in their wallet ledger. Zero means free (the platform absorbs the cost).",
     'phone_not_editable' => 'Mobile number cannot be edited.',
     'plan' => 'Plan',
     'priority' => 'Priority',

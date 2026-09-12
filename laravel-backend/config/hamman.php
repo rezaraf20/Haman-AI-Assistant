@@ -45,6 +45,6 @@ return [
     // this from the plugin source itself, so it's a manual value on purpose
     // rather than something that could silently drift from reality.
     'wp_plugin' => [
-        'latest_version' => env('HAMMAN_WP_PLUGIN_LATEST_VERSION', '1.7.0'),
+        'latest_version' => env('HAMMAN_WP_PLUGIN_LATEST_VERSION', '1.8.0'),
     ],
 ];

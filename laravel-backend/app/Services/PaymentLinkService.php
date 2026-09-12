@@ -1,8 +1,6 @@
 <?php
 namespace App\Services;
 
-use Illuminate\Support\Facades\Http;
-
 /**
  * create_payment_link (doc-04) — Laravel calls the WordPress plugin's
  * live-query endpoint DIRECTLY here, unlike every other live-query tool
@@ -18,7 +16,7 @@ use Illuminate\Support\Facades\Http;
  */
 class PaymentLinkService
 {
-    const TIMEOUT_SECONDS = 5;
+    public function __construct(private LiveQueryClient $live) {}
 
     /** Read-only — computes live price/name/total for a proposed order
      * without creating anything. Returns null on ANY failure (unreachable
@@ -27,7 +25,7 @@ class PaymentLinkService
      * invent a total of its own. */
     public function previewOrder(string $domain, string $secret, array $items): ?array
     {
-        return $this->call($domain, $secret, 'preview_order', ['items' => $items]);
+        return $this->live->call($domain, $secret, 'preview_order', ['items' => $items]);
     }
 
     /** The one call in this whole class that actually creates a real
@@ -39,26 +37,6 @@ class PaymentLinkService
     {
         $payload = ['items' => $items];
         if (!empty($customer)) $payload['customer'] = $customer;
-        return $this->call($domain, $secret, 'create_draft_order', $payload);
-    }
-
-    private function call(string $domain, string $secret, string $action, array $params): ?array
-    {
-        $body = json_encode(array_merge(['action' => $action], $params), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        if ($body === false) return null;
-        $signature = 'sha256=' . hash_hmac('sha256', $body, $secret);
-
-        try {
-            $response = Http::withBody($body, 'application/json')
-                ->withHeaders(['X-Hamman-Signature' => $signature])
-                ->timeout(self::TIMEOUT_SECONDS)
-                ->post("https://{$domain}/wp-json/hamman/v1/live-query");
-        } catch (\Throwable $e) {
-            return null;
-        }
-
-        if (!$response->successful()) return null;
-        $data = $response->json();
-        return is_array($data) ? $data : null;
+        return $this->live->call($domain, $secret, 'create_draft_order', $payload);
     }
 }

@@ -25,6 +25,7 @@ class Hamman_Live_Query_Handler {
     const MAX_COMPARE_PRODUCTS      = 5;
     const MAX_ORDER_ITEMS           = 10;
     const MAX_ITEM_QUANTITY         = 20;
+    const MAX_ORDERS_RETURNED       = 5;
 
     public function register_routes(): void {
         register_rest_route( 'hamman/v1', '/live-query', [
@@ -65,6 +66,10 @@ class Hamman_Live_Query_Handler {
                 return $this->preview_order( $body );
             case 'create_draft_order':
                 return $this->create_draft_order( $body );
+            case 'contact_has_orders':
+                return $this->contact_has_orders( $body );
+            case 'get_orders_for_contact':
+                return $this->get_orders_for_contact( $body );
             default:
                 return new WP_REST_Response( [ 'error' => 'Unknown action' ], 400 );
         }
@@ -567,5 +572,130 @@ class Hamman_Live_Query_Handler {
             'total'         => (float) $order->get_total(),
             'currency'      => $order->get_currency(),
         ], 200 );
+    }
+
+    /**
+     * Iranian mobile numbers reach WooCommerce in whatever shape the
+     * customer typed them at checkout (09..., +989..., 00989..., 9...),
+     * so an exact-match lookup on one spelling would silently miss a real
+     * customer's real order. Reduce to the trailing 10 digits (9XXXXXXXXX)
+     * and let the caller fan out over the spellings that produces.
+     */
+    private function phone_variants( string $phone ): array {
+        $digits = preg_replace( '/\D+/', '', $phone );
+        if ( strlen( $digits ) < 10 ) return [];
+        $core = substr( $digits, -10 ); // 9XXXXXXXXX
+        if ( $core[0] !== '9' ) return [];
+        return [ '0' . $core, $core, '+98' . $core, '0098' . $core, '98' . $core ];
+    }
+
+    /**
+     * Every order matching a phone/email, newest first, capped. Returns
+     * WC_Order objects - callers decide what (if anything) may leave this
+     * site. Deliberately queries only billing_phone/billing_email: a
+     * customer proving control of a contact proves nothing about orders
+     * placed under a different one.
+     */
+    private function find_orders_for_contact( array $body ): array {
+        $type    = ( $body['contact_type'] ?? '' ) === 'email' ? 'email' : 'phone';
+        $contact = sanitize_text_field( (string) ( $body['contact'] ?? '' ) );
+        if ( $contact === '' ) return [];
+
+        $found = [];
+        if ( 'email' === $type ) {
+            if ( ! is_email( $contact ) ) return [];
+            $found = wc_get_orders( [
+                'billing_email' => $contact,
+                'limit'         => self::MAX_ORDERS_RETURNED,
+                'orderby'       => 'date',
+                'order'         => 'DESC',
+                'status'        => array_keys( wc_get_order_statuses() ),
+            ] );
+        } else {
+            foreach ( $this->phone_variants( $contact ) as $variant ) {
+                $batch = wc_get_orders( [
+                    'billing_phone' => $variant,
+                    'limit'         => self::MAX_ORDERS_RETURNED,
+                    'orderby'       => 'date',
+                    'order'         => 'DESC',
+                    'status'        => array_keys( wc_get_order_statuses() ),
+                ] );
+                foreach ( $batch as $order ) {
+                    $found[ $order->get_id() ] = $order;
+                }
+                if ( count( $found ) >= self::MAX_ORDERS_RETURNED ) break;
+            }
+            $found = array_values( $found );
+        }
+
+        usort( $found, function ( $a, $b ) {
+            return $b->get_date_created()->getTimestamp() <=> $a->get_date_created()->getTimestamp();
+        } );
+
+        return array_slice( $found, 0, self::MAX_ORDERS_RETURNED );
+    }
+
+    /**
+     * The anti-abuse gate, and the whole reason this is a separate action
+     * from get_orders_for_contact(): the server asks "is it even worth
+     * sending an SMS to this number?" BEFORE spending the merchant's money,
+     * and this response is structurally incapable of leaking order content
+     * - it is a boolean and a count, nothing else, no matter what the
+     * caller asks for.
+     */
+    private function contact_has_orders( array $body ): WP_REST_Response {
+        $orders = $this->find_orders_for_contact( $body );
+        return new WP_REST_Response( [
+            'found' => ! empty( $orders ),
+            'count' => count( $orders ),
+        ], 200 );
+    }
+
+    /**
+     * Called only after the server has verified the customer actually
+     * controls this contact (OTP). Sanitising happens HERE, at the source,
+     * so a shipping address or a payment reference never crosses the wire
+     * at all rather than being fetched and then dropped somewhere later:
+     * status, tracking number and item names are the whole contract.
+     */
+    private function get_orders_for_contact( array $body ): WP_REST_Response {
+        $out = [];
+        foreach ( $this->find_orders_for_contact( $body ) as $order ) {
+            $items = [];
+            foreach ( $order->get_items() as $item ) {
+                $items[] = [
+                    'name'     => $item->get_name(),
+                    'quantity' => (int) $item->get_quantity(),
+                ];
+            }
+            $out[] = [
+                'number'       => $order->get_order_number(),
+                'status'       => $order->get_status(),
+                'date_created' => $order->get_date_created() ? $order->get_date_created()->date( 'Y-m-d' ) : null,
+                'tracking'     => $this->order_tracking_code( $order ),
+                'items'        => $items,
+            ];
+        }
+        return new WP_REST_Response( [ 'orders' => $out ], 200 );
+    }
+
+    /**
+     * WooCommerce core has no tracking-number field, so this reads the meta
+     * keys the common shipping/tracking plugins actually write, and returns
+     * null rather than inventing anything when none of them is present.
+     */
+    private function order_tracking_code( WC_Order $order ): ?string {
+        foreach ( [ '_tracking_number', '_wc_shipment_tracking_number', '_hamman_tracking', 'tracking_code' ] as $key ) {
+            $value = $order->get_meta( $key );
+            if ( is_string( $value ) && $value !== '' ) {
+                return sanitize_text_field( $value );
+            }
+        }
+        // WooCommerce Shipment Tracking stores an array of tracking items.
+        $items = $order->get_meta( '_wc_shipment_tracking_items' );
+        if ( is_array( $items ) && ! empty( $items[0]['tracking_number'] ) ) {
+            return sanitize_text_field( (string) $items[0]['tracking_number'] );
+        }
+        return null;
     }
 }

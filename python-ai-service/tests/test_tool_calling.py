@@ -530,6 +530,18 @@ class WidgetBlockTest(unittest.TestCase):
             "create_payment_link", {"items": [{"product_id": 12}], "total": None},
         ))
 
+    def test_build_widget_block_order_status_shape(self):
+        block = tool_calling_service._build_widget_block("get_order_status", {"contact": "09121234567"})
+        self.assertEqual(block, {"type": "order_status_otp", "contact": "09121234567"})
+
+    def test_build_widget_block_ignores_order_status_error_result(self):
+        self.assertIsNone(tool_calling_service._build_widget_block(
+            "get_order_status", {"error": "That does not look like a valid Iranian mobile number."},
+        ))
+
+    def test_build_widget_block_ignores_order_status_without_a_contact(self):
+        self.assertIsNone(tool_calling_service._build_widget_block("get_order_status", {}))
+
     def test_log_cart_links_logs_one_event_per_item(self):
         with patch("app.services.rag_service._log_event") as mock_log:
             tool_calling_service._log_cart_links(
@@ -745,6 +757,48 @@ class WidgetBlockTest(unittest.TestCase):
         }])
         event_types = [c[0][3] for c in mock_log.call_args_list]
         self.assertEqual(event_types, ["tool_called"], "create_payment_link must log nothing beyond tool_called — no payment_link_created until a real confirmed click creates the order.")
+
+    def test_run_tool_calling_pipeline_returns_order_status_intent_and_sends_nothing(self):
+        """get_order_status is the case where "intent only" protects the
+        merchant's wallet rather than their stock or their orders: a model
+        that could send an SMS by itself would be a free harassment tool
+        billed to the shop. So the pipeline may produce a button and
+        nothing else — no SMS, no lookup, and no order_status_viewed
+        event, which only ever comes from a verified code."""
+        order_tool = Tool(
+            name="get_order_status", description="test", access_level="read",
+            parameters={"type": "object", "properties": {"contact": {"type": "string"}}, "required": ["contact"]},
+            handler=lambda db, chatbot_id, **kw: {"contact": "09121234567"},
+        )
+
+        tool_call_message = {
+            "content": None,
+            "tool_calls": [{"id": "call_1", "function": {"name": "get_order_status", "arguments": '{"contact": "09121234567"}'}}],
+        }
+        final_message = {"content": "Tap the button and I'll text you a code.", "tool_calls": None}
+        call_sequence = [
+            (tool_call_message, {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}),
+            (final_message, {"prompt_tokens": 20, "completion_tokens": 8, "total_tokens": 28}),
+        ]
+
+        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature):
+            message, usage = call_sequence.pop(0)
+            return message, "groq/test-tool-model", usage, 0.0
+
+        with patch.object(tool_calling_service, "get_enabled_tools", return_value=[order_tool]), \
+             patch.object(tool_calling_service, "to_openai_schema", return_value=[{"type": "function", "function": {"name": "get_order_status"}}]), \
+             patch.object(tool_calling_service, "_tool_calling_chat", side_effect=fake_tool_calling_chat), \
+             patch("app.services.rag_service._log_event") as mock_log:
+            result = tool_calling_service.run_tool_calling_pipeline(
+                db=MagicMock(), chatbot_id="chatbot-1", conversation_id="conv-1",
+                query="where is my order?", history=[], system_prompt_text="system prompt",
+                max_tokens=800, temperature=0.3, enabled_tool_names=["get_order_status"],
+            )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["widget_blocks"], [{"type": "order_status_otp", "contact": "09121234567"}])
+        event_types = [c[0][3] for c in mock_log.call_args_list]
+        self.assertEqual(event_types, ["tool_called"], "get_order_status must log nothing beyond tool_called — order_status_viewed only follows a verified code.")
 
 
 if __name__ == "__main__":

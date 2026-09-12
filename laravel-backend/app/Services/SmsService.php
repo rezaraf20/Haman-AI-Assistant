@@ -72,6 +72,18 @@ class SmsService {
     }
 
     /**
+     * get_order_status (doc-04) — sends an already-minted code for the chat
+     * order-status flow. Deliberately NOT routed through sendOtp(): that
+     * method owns the portal-login otp_verifications table and its own
+     * cooldown, while this flow stores its code (hashed) in
+     * order_status_otps and enforces much stricter, tenant-billed caps of
+     * its own in ChatController. All this shares is the transport.
+     */
+    public function sendCode(string $phone, string $code): bool {
+        return $this->send($phone, $code)['ok'];
+    }
+
+    /**
      * Melipayamak's legacy REST API (username+password), NOT the newer
      * console.melipayamak.com GUID-key endpoint — verified directly against
      * the live account: the console-key endpoint rejected these credentials

@@ -70,7 +70,8 @@ TOOL_RATE_LIMIT_KEY_PREFIX = "hamman:tool_rate_limit:"
 # matching cart_add_succeeded/payment_link_created events are logged
 # separately, only once each real outcome is confirmed — never from
 # these tool calls, which would overcount offers never acted on.
-_RENDERABLE_TOOLS = {"recommend_products", "compare_products", "build_cart_url", "add_to_cart", "create_payment_link"}
+_RENDERABLE_TOOLS = {"recommend_products", "compare_products", "build_cart_url", "add_to_cart",
+                     "create_payment_link", "get_order_status"}
 
 
 def _build_widget_block(fn_name: str, result: dict) -> Optional[dict]:
@@ -95,6 +96,10 @@ def _build_widget_block(fn_name: str, result: dict) -> Optional[dict]:
             "total": result["total"], "currency": result.get("currency", "IRT"),
             "customer": result.get("customer"),
         }
+    if fn_name == "get_order_status":
+        if "error" in result or not result.get("contact"):
+            return None
+        return {"type": "order_status_otp", "contact": result["contact"]}
     if not result.get("live"):
         return None
     products = result.get("products") or []
@@ -337,6 +342,8 @@ def run_tool_calling_pipeline(
                     pass  # intent only — see cartEvent()/cart_add_succeeded for the real outcome
                 elif block["type"] == "payment_link_preview":
                     pass  # preview only — see createPaymentLink()/payment_link_created for the real outcome
+                elif block["type"] == "order_status_otp":
+                    pass  # intent only — no SMS and no lookup happened yet; see order_status_viewed
                 else:
                     _log_product_mentions(db, conversation_id, chatbot_id, fn_name, block["products"])
             messages.append({

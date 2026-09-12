@@ -336,6 +336,40 @@ def _payment_link_rule(enabled_tools: Optional[List[str]], is_fa: bool) -> str:
     )
 
 
+_ORDER_STATUS_TOOL_NAMES = {"get_order_status"}
+
+
+def _order_status_rule(enabled_tools: Optional[List[str]], is_fa: bool) -> str:
+    """get_order_status returns intent only — no code has been sent and no
+    order has been looked up when the tool call returns (see
+    product_tools.get_order_status). Three things must never happen: the
+    model claiming it already found/sent something, the model asking the
+    customer to type the verification code into the chat (the widget has
+    its own field, and a code pasted into chat is stored in message
+    history), and the model inventing an order status it has not been
+    given."""
+    if not enabled_tools or not (_ORDER_STATUS_TOOL_NAMES & set(enabled_tools)):
+        return ""
+    if is_fa:
+        return (
+            "\n\nبرای پیگیری سفارش، اول شماره‌ی موبایلی را که مشتری هنگام ثبت سفارش وارد کرده بپرس، بعد "
+            "ابزار get_order_status را صدا بزن. این ابزار هیچ پیامکی نمی‌فرستد و هیچ سفارشی را پیدا نمی‌کند — "
+            "فقط یک دکمه‌ی تأیید در ویجت نمایش داده می‌شود. پس هرگز نگو «کد را فرستادم» یا «سفارشتان را پیدا "
+            "کردم». کد تأیید فیلد مخصوص خودش را در ویجت دارد: هرگز از مشتری نخواه کد را در چت بنویسد و هرگز "
+            "کدی را در پاسخت تکرار نکن. وضعیت سفارش، کد رهگیری و اقلام بعد از تأیید کد مستقیماً در ویجت "
+            "نمایش داده می‌شوند — آن‌ها را در متن خودت بازنویسی نکن و هیچ‌وقت وضعیتی را که به تو داده نشده حدس نزن."
+        )
+    return (
+        "\n\nFor order tracking, first ask for the mobile number the customer used on the order, "
+        "then call get_order_status. That tool sends nothing and finds nothing — it only renders a "
+        "confirm button in the widget. So never say 'I've sent the code' or 'I found your order'. "
+        "The verification code has its own field in the widget: never ask the customer to type it "
+        "into the chat, and never repeat a code back in your reply. The order status, tracking code "
+        "and items are rendered directly in the widget once the code is verified — do not restate "
+        "them in your own text, and never guess a status you were not given."
+    )
+
+
 def _live_pricing_rule(enabled_tools: Optional[List[str]], is_fa: bool) -> str:
     """A wrong price is the worst mistake a shop's bot can make — worse
     than no answer. This rule exists specifically because sys_p already
@@ -1181,6 +1215,7 @@ async def run_rag_pipeline_stream(
     sys_p += _product_display_rule(enabled_tools, is_fa_question)
     sys_p += _cart_link_rule(enabled_tools, is_fa_question)
     sys_p += _payment_link_rule(enabled_tools, is_fa_question)
+    sys_p += _order_status_rule(enabled_tools, is_fa_question)
     sys_p += _authenticity_rule(authenticity_unknown_message, is_fa_question)
     if system_prompt:
         sys_p += f"\n\n{system_prompt}"
@@ -1374,6 +1409,7 @@ async def run_rag_pipeline(
     sys_p += _product_display_rule(enabled_tools, is_fa_question)
     sys_p += _cart_link_rule(enabled_tools, is_fa_question)
     sys_p += _payment_link_rule(enabled_tools, is_fa_question)
+    sys_p += _order_status_rule(enabled_tools, is_fa_question)
     sys_p += _authenticity_rule(authenticity_unknown_message, is_fa_question)
     if system_prompt:
         sys_p += f"\n\n{system_prompt}"

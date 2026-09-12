@@ -12,7 +12,10 @@ test_grounding_no_fabricated_claims.py.
 """
 import unittest
 
-from app.services.rag_service import _live_pricing_rule, _product_display_rule, _cart_link_rule, _payment_link_rule
+from app.services.rag_service import (
+    _live_pricing_rule, _product_display_rule, _cart_link_rule, _payment_link_rule,
+    _order_status_rule,
+)
 
 
 class LivePricingRuleTest(unittest.TestCase):
@@ -195,6 +198,47 @@ class PaymentLinkRuleTest(unittest.TestCase):
     def test_language_selection_follows_is_fa_flag(self):
         en_rule = _payment_link_rule(["create_payment_link"], is_fa=False)
         fa_rule = _payment_link_rule(["create_payment_link"], is_fa=True)
+        self.assertNotEqual(en_rule, fa_rule)
+
+
+class OrderStatusRuleTest(unittest.TestCase):
+    """get_order_status returns intent only — no code sent, no order
+    found. The two ways this goes wrong in practice are the model claiming
+    it already did something, and the model asking for the code in chat
+    (which would put a live credential into stored message history)."""
+
+    def test_absent_when_the_tool_is_not_enabled(self):
+        self.assertEqual(_order_status_rule(None, is_fa=False), "")
+        self.assertEqual(_order_status_rule(["create_payment_link"], is_fa=False), "")
+
+    def test_present_when_enabled(self):
+        self.assertNotEqual(_order_status_rule(["get_order_status"], is_fa=False), "")
+
+    def test_english_rule_forbids_claiming_the_code_was_sent(self):
+        rule = _order_status_rule(["get_order_status"], is_fa=False)
+        self.assertIn("sends nothing and finds nothing", rule)
+        self.assertIn("I've sent the code", rule)
+
+    def test_english_rule_forbids_asking_for_the_code_in_chat(self):
+        rule = _order_status_rule(["get_order_status"], is_fa=False)
+        self.assertIn("never ask the customer to type it", rule)
+        self.assertIn("never repeat a code back", rule)
+
+    def test_english_rule_forbids_guessing_a_status(self):
+        rule = _order_status_rule(["get_order_status"], is_fa=False)
+        self.assertIn("never guess a status", rule)
+
+    def test_persian_rule_forbids_claiming_the_code_was_sent(self):
+        rule = _order_status_rule(["get_order_status"], is_fa=True)
+        self.assertIn("کد را فرستادم", rule)
+
+    def test_persian_rule_forbids_asking_for_the_code_in_chat(self):
+        rule = _order_status_rule(["get_order_status"], is_fa=True)
+        self.assertIn("کد را در چت بنویسد", rule)
+
+    def test_language_selection_follows_is_fa_flag(self):
+        en_rule = _order_status_rule(["get_order_status"], is_fa=False)
+        fa_rule = _order_status_rule(["get_order_status"], is_fa=True)
         self.assertNotEqual(en_rule, fa_rule)
 
 
