@@ -2,16 +2,27 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Services\ChatService;
+use App\Services\PaymentLinkService;
 use App\Models\Tenant\{Chatbot, Conversation};
 use Illuminate\Http\{Request, JsonResponse};
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 use App\Support\WidgetDefaults;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ChatController extends BaseApiController
 {
-    public function __construct(private ChatService $svc) {}
+    // create_payment_link (doc-04) security caps — deliberately hardcoded
+    // rather than admin-configurable: the task's explicit "don't build
+    // this without" rules ask for these limits to exist and actually be
+    // enforced, not for a settings UI to tune them. max_payment_link_amount
+    // is the one cap the task explicitly calls out as per-chatbot
+    // configurable — that one lives on the chatbots table instead.
+    private const MAX_PAYMENT_LINKS_PER_CONVERSATION = 3;
+    private const MAX_PAYMENT_LINKS_PER_IP_PER_DAY = 5;
+
+    public function __construct(private ChatService $svc, private PaymentLinkService $paymentLinks) {}
 
     // $preResolved lets callers reuse the chatbot_index row
     // ValidateChatbotDomain already looked up and stashed on the request
@@ -341,5 +352,142 @@ class ChatController extends BaseApiController
         ]);
 
         return $this->ok(['message' => 'Recorded']);
+    }
+
+    /**
+     * create_payment_link (doc-04) — the ONE place a real WooCommerce
+     * order is ever created from a chat conversation. Reached only after
+     * a real customer click on a rendered "Confirm & Pay" button (see
+     * hamman-widget.js's handleConfirmPaymentLinkClick()) — the model-
+     * callable tool (product_tools.py's create_payment_link) only ever
+     * returns a live PREVIEW, never creates anything itself. Every
+     * security rule the task explicitly required is enforced HERE, in
+     * this exact order, before anything real is created — if the task
+     * says "don't build this without X", X is one of the checks below,
+     * not a comment promising it'll be added later.
+     */
+    public function createPaymentLink(Request $req): JsonResponse
+    {
+        $d = $req->validate([
+            'chatbot_id'           => 'required|uuid',
+            'conversation_id'      => 'required|uuid',
+            'items'                => 'required|array|min:1|max:10',
+            'items.*.product_id'   => 'required|integer|min:1',
+            'items.*.variation_id' => 'nullable|integer|min:1',
+            'items.*.quantity'     => 'nullable|integer|min:1|max:20',
+            'customer'             => 'nullable|array',
+            'customer.name'        => 'nullable|string|max:255',
+            'customer.phone'       => 'nullable|string|max:50',
+            'customer.email'       => 'nullable|email|max:255',
+        ]);
+
+        $index = $this->setSchemaFromChatbot($d['chatbot_id'], $req->attributes->get('chatbot_index'));
+        if (!$index) return $this->notFound('Chatbot not found');
+
+        $conv = Conversation::where('id', $d['conversation_id'])->where('chatbot_id', $d['chatbot_id'])->first();
+        if (!$conv) return $this->notFound('Conversation not found');
+
+        $chatbot = Chatbot::find($d['chatbot_id']);
+        if (!$chatbot) return $this->notFound('Chatbot not found');
+
+        // Rule: off by default — the merchant must consciously enable it,
+        // same opt-in gate every other tool in this system already uses.
+        if (!in_array('create_payment_link', $chatbot->enabled_tools ?? [], true)) {
+            return $this->forbidden('Payment links are not enabled for this chatbot.');
+        }
+        // Rule: a real cap must be explicitly configured on this chatbot —
+        // never a silent platform-wide default standing in for "the
+        // merchant turned this on". NULL means "not consciously set up
+        // yet", full stop, regardless of what enabled_tools says.
+        if ($chatbot->max_payment_link_amount === null) {
+            return $this->forbidden('Payment links are not configured for this chatbot.');
+        }
+
+        // Rule: cap on draft orders per conversation (lifetime for that
+        // conversation — a conversation is inherently short-lived, unlike
+        // the IP cap below which is explicitly per-day).
+        $convCount = DB::table('conversation_events')
+            ->where('conversation_id', $d['conversation_id'])
+            ->where('event_type', 'payment_link_created')
+            ->count();
+        if ($convCount >= self::MAX_PAYMENT_LINKS_PER_CONVERSATION) {
+            return $this->tooManyRequests('Too many payment links requested in this conversation.');
+        }
+
+        // Rule: cap on draft orders per IP per day.
+        $ipKey = 'hamman-payment-link:' . $d['chatbot_id'] . ':' . $req->ip();
+        if (RateLimiter::tooManyAttempts($ipKey, self::MAX_PAYMENT_LINKS_PER_IP_PER_DAY)) {
+            return $this->tooManyRequests('Too many payment links requested today.', RateLimiter::availableIn($ipKey));
+        }
+
+        $tenant = app('current_tenant');
+        $domain = $index->primary_domain ?? null;
+        $secret = $tenant?->getWebhookSecret();
+        if (!$domain || !$secret) {
+            return $this->badRequest('No store connection is on file for this chatbot.');
+        }
+
+        $items = array_map(function ($i) {
+            $item = ['product_id' => (int) $i['product_id'], 'quantity' => (int) ($i['quantity'] ?? 1)];
+            if (!empty($i['variation_id'])) $item['variation_id'] = (int) $i['variation_id'];
+            return $item;
+        }, $d['items']);
+
+        // Rule: recompute the total live, fresh, right now — never trust
+        // anything the client claims about price — and reject BEFORE ever
+        // creating a real order if it's over the configured cap. This is
+        // a genuinely fresh check, not a formality: stock/price may have
+        // changed in the time between the preview the customer saw and
+        // this exact click.
+        $preview = $this->paymentLinks->previewOrder($domain, $secret, $items);
+        if (!$preview || !isset($preview['total'])) {
+            return $this->badRequest($preview['error'] ?? 'Could not confirm this order right now. Please try again.');
+        }
+        if ((float) $preview['total'] > (float) $chatbot->max_payment_link_amount) {
+            return $this->forbidden('This order exceeds the payment link limit for this store.');
+        }
+
+        $result = $this->paymentLinks->createDraftOrder($domain, $secret, $items, $d['customer'] ?? null);
+        if (!$result || empty($result['order_id']) || empty($result['order_pay_url'])) {
+            return $this->badRequest('Could not create the order right now. Please try again.');
+        }
+
+        RateLimiter::hit($ipKey, 86400);
+
+        $total = (float) ($result['total'] ?? $preview['total']);
+        $currency = $result['currency'] ?? $preview['currency'] ?? 'IRT';
+
+        // SECURITY: order_key/order_pay_url exist only in $result, handed
+        // straight back to the browser in this response below, and are
+        // NEVER written to $fields, the event payload, or any log line in
+        // this method — only the numeric order_id is ever persisted.
+        DB::table('orders')->insert([
+            'id'              => (string) Str::uuid(),
+            'chatbot_id'      => $d['chatbot_id'],
+            'conversation_id' => $conv->id,
+            'woo_order_id'    => (int) $result['order_id'],
+            'total'           => $total,
+            'currency'        => $currency,
+            'status'          => 'pending',
+            'line_items'      => json_encode($items),
+            'created_by_bot'  => true,
+            'created_at'      => now(),
+        ]);
+
+        DB::table('conversation_events')->insert([
+            'id'              => (string) Str::uuid(),
+            'conversation_id' => $conv->id,
+            'chatbot_id'      => $d['chatbot_id'],
+            'event_type'      => 'payment_link_created',
+            'payload'         => json_encode(['order_id' => (int) $result['order_id'], 'total' => $total, 'currency' => $currency]),
+            'created_at'      => now(),
+        ]);
+
+        return $this->ok([
+            'order_id'      => (int) $result['order_id'],
+            'order_pay_url' => $result['order_pay_url'],
+            'total'         => $total,
+            'currency'      => $currency,
+        ]);
     }
 }

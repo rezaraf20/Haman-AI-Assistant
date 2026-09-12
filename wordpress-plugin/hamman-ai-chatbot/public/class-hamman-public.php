@@ -114,6 +114,13 @@ class Hamman_Public {
             'chooseVariantLabel'   => 'لطفاً ابتدا سایز/رنگ مورد نظر را مشخص کنید.',
             'outOfStockAddErrorLabel' => 'متأسفانه این کالا دیگر موجود نیست.',
             'genericAddErrorLabel' => 'افزودن به سبد خرید ممکن نشد. لطفاً دوباره تلاش کنید.',
+            // create_payment_link tool — see renderPaymentLinkPreview()/
+            // handleConfirmPaymentClick() in hamman-widget.js.
+            'orderTotalLabel'       => 'مبلغ کل',
+            'confirmAndPayLabel'    => 'تأیید و پرداخت',
+            'creatingOrderLabel'    => 'در حال ساخت سفارش...',
+            'payNowLabel'           => 'پرداخت',
+            'paymentLinkErrorLabel' => 'ساخت لینک پرداخت ممکن نشد. لطفاً دوباره تلاش کنید یا با پشتیبانی تماس بگیرید.',
         ] : [
             'dialogLabel'          => 'Chat with AI assistant',
             'closeLabel'           => 'Close chat',
@@ -132,6 +139,11 @@ class Hamman_Public {
             'chooseVariantLabel'   => 'Please choose a size/color first.',
             'outOfStockAddErrorLabel' => 'Sorry, this item is no longer in stock.',
             'genericAddErrorLabel' => "Couldn't add this to your cart. Please try again.",
+            'orderTotalLabel'       => 'Total',
+            'confirmAndPayLabel'    => 'Confirm & Pay',
+            'creatingOrderLabel'    => 'Creating order...',
+            'payNowLabel'           => 'Pay now',
+            'paymentLinkErrorLabel' => "Couldn't create a payment link. Please try again or contact support.",
         ];
 
         return [

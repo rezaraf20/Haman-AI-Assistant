@@ -300,6 +300,7 @@
             else if (block.type === 'product_compare') renderCompareTable(block.products, block.attribute_rows);
             else if (block.type === 'cart_links') renderCartLinks(block.items);
             else if (block.type === 'add_to_cart') renderAddToCartIntent(block.items);
+            else if (block.type === 'payment_link_preview') renderPaymentLinkPreview(block);
         });
         if (wasNearBottom) scrollToBottom(false);
     }
@@ -499,6 +500,112 @@
         link.rel = 'noopener';
         link.textContent = CFG.i18n.addToCartLabel;
         btnEl.replaceWith(link);
+    }
+
+    // ── create_payment_link (doc-04) ───────────────────────────────────
+    // The tool result is a PREVIEW only — real items/total, but no order
+    // exists yet. This renders that preview plus a real "Confirm & Pay"
+    // button; the actual order (and the real, one-time-use payment URL)
+    // is only ever created inside this button's own click handler, never
+    // automatically. The order_pay_url below is used only to set an
+    // <a href> and is never logged, stored, or referenced again after
+    // that — matching the task's own "never persist the key/URL" rule on
+    // this side of the wire too.
+    function renderPaymentLinkPreview(block) {
+        if (!block.items || !block.items.length || block.total == null) return;
+        var wrap = document.createElement('div');
+        wrap.className = 'hm-payment-preview';
+
+        var itemsHtml = '<ul class="hm-payment-items">' + block.items.map(function (it) {
+            var qtyText = (it.quantity && it.quantity > 1) ? ' × ' + it.quantity : '';
+            return '<li><span>' + esc(it.name || '') + qtyText + '</span><span>' + esc(formatPrice(it.line_total, block.currency)) + '</span></li>';
+        }).join('') + '</ul>';
+        var totalHtml = '<div class="hm-payment-total">' + esc(CFG.i18n.orderTotalLabel) + ': <strong>' + esc(formatPrice(block.total, block.currency)) + '</strong></div>';
+        wrap.innerHTML = itemsHtml + totalHtml;
+
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'hm-payment-confirm-btn';
+        btn.textContent = CFG.i18n.confirmAndPayLabel;
+        var statusEl = document.createElement('div');
+        statusEl.className = 'hm-payment-status';
+        statusEl.hidden = true;
+        btn.addEventListener('click', function () {
+            handleConfirmPaymentClick(block, btn, statusEl);
+        });
+        wrap.appendChild(btn);
+        wrap.appendChild(statusEl);
+
+        msgs.appendChild(wrap);
+    }
+
+    // The one function in this file that creates a real WooCommerce
+    // order — reached only from a real 'click' on the button
+    // renderPaymentLinkPreview() built above, never automatically.
+    // ChatController::createPaymentLink() re-checks everything (enabled,
+    // amount cap, per-conversation/per-IP-per-day limits, a fresh live
+    // total) server-side before creating anything; this call carries no
+    // trust of its own beyond "the customer clicked confirm".
+    function handleConfirmPaymentClick(block, btnEl, statusEl) {
+        btnEl.disabled = true;
+        var originalLabel = btnEl.textContent;
+        btnEl.textContent = CFG.i18n.creatingOrderLabel;
+
+        var items = block.items.map(function (it) {
+            var out = { product_id: it.product_id, quantity: it.quantity || 1 };
+            if (it.variation_id) out.variation_id = it.variation_id;
+            return out;
+        });
+        var payload = { chatbot_id: H.chatbotId, conversation_id: convId, items: items };
+        if (block.customer) payload.customer = block.customer;
+
+        fetch(H.apiUrl + '/chat/payment-link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        })
+            .then(function (r) {
+                return r.json().catch(function () { return {}; }).then(function (data) {
+                    return { ok: r.ok, data: data };
+                });
+            })
+            .then(function (res) {
+                var orderPayUrl = res.ok && res.data && res.data.data && res.data.data.order_pay_url;
+                if (orderPayUrl) {
+                    btnEl.hidden = true;
+                    statusEl.hidden = false;
+                    statusEl.className = 'hm-payment-status';
+                    // orderPayUrl lives only in this local variable and this
+                    // one href attribute — never assigned anywhere else,
+                    // never sent to console/localStorage/another request.
+                    statusEl.innerHTML = '';
+                    var payLink = document.createElement('a');
+                    payLink.href = orderPayUrl;
+                    payLink.target = '_blank';
+                    payLink.rel = 'noopener';
+                    payLink.textContent = CFG.i18n.payNowLabel;
+                    statusEl.appendChild(document.createTextNode('✓ '));
+                    statusEl.appendChild(payLink);
+                    return;
+                }
+                btnEl.disabled = false;
+                btnEl.textContent = originalLabel;
+                statusEl.hidden = false;
+                statusEl.className = 'hm-payment-status hm-payment-error';
+                // Never the raw server error string here — this widget
+                // never lets raw (always-English) backend error text reach
+                // a customer mid-conversation in another language; one
+                // translated, generic message covers every failure mode
+                // (not enabled, cap exceeded, rate-limited, out of stock).
+                statusEl.textContent = CFG.i18n.paymentLinkErrorLabel;
+            })
+            .catch(function () {
+                btnEl.disabled = false;
+                btnEl.textContent = originalLabel;
+                statusEl.hidden = false;
+                statusEl.className = 'hm-payment-status hm-payment-error';
+                statusEl.textContent = CFG.i18n.paymentLinkErrorLabel;
+            });
     }
 
     function renderProductCards(products) {

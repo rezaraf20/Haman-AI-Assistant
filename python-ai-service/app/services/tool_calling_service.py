@@ -59,15 +59,18 @@ TOOL_RATE_LIMIT_KEY_PREFIX = "hamman:tool_rate_limit:"
 # exactly what actually ended up in the rendered block, never merely
 # fetched/considered.
 #
-# add_to_cart is the one exception: it logs NOTHING here. Its result is
-# pure intent (see product_tools.add_to_cart's docstring) — nothing has
-# actually happened yet, since the real Store API call only fires in the
-# customer's own browser after they click the rendered button. The
-# matching cart_add_succeeded event is logged separately, from a real
-# confirmed browser-side success reported back via a dedicated Laravel
-# endpoint (ChatController::cartEvent()) — never from this tool call
-# itself, which would overcount offers the customer never actually acted on.
-_RENDERABLE_TOOLS = {"recommend_products", "compare_products", "build_cart_url", "add_to_cart"}
+# add_to_cart and create_payment_link are the exceptions: they log
+# NOTHING here. Both results are pure intent/preview (see their own
+# docstrings in product_tools.py) — nothing has actually happened yet.
+# add_to_cart's real Store API call only fires in the customer's own
+# browser after a click; create_payment_link's real order is only ever
+# created after a click on the widget's "Confirm & Pay" button, via
+# ChatController::createPaymentLink() — a completely separate code path
+# from this tool call, with its own from-scratch security checks. The
+# matching cart_add_succeeded/payment_link_created events are logged
+# separately, only once each real outcome is confirmed — never from
+# these tool calls, which would overcount offers never acted on.
+_RENDERABLE_TOOLS = {"recommend_products", "compare_products", "build_cart_url", "add_to_cart", "create_payment_link"}
 
 
 def _build_widget_block(fn_name: str, result: dict) -> Optional[dict]:
@@ -81,6 +84,17 @@ def _build_widget_block(fn_name: str, result: dict) -> Optional[dict]:
             return None
         block_type = "cart_links" if fn_name == "build_cart_url" else "add_to_cart"
         return {"type": block_type, "items": items}
+    if fn_name == "create_payment_link":
+        if "error" in result:
+            return None
+        items = result.get("items") or []
+        if not items or result.get("total") is None:
+            return None
+        return {
+            "type": "payment_link_preview", "items": items,
+            "total": result["total"], "currency": result.get("currency", "IRT"),
+            "customer": result.get("customer"),
+        }
     if not result.get("live"):
         return None
     products = result.get("products") or []
@@ -321,6 +335,8 @@ def run_tool_calling_pipeline(
                     _log_cart_links(db, conversation_id, chatbot_id, block["items"])
                 elif block["type"] == "add_to_cart":
                     pass  # intent only — see cartEvent()/cart_add_succeeded for the real outcome
+                elif block["type"] == "payment_link_preview":
+                    pass  # preview only — see createPaymentLink()/payment_link_created for the real outcome
                 else:
                     _log_product_mentions(db, conversation_id, chatbot_id, fn_name, block["products"])
             messages.append({

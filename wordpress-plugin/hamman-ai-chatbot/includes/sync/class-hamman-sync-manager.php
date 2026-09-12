@@ -127,4 +127,82 @@ class Hamman_Sync_Manager {
             $order->save();
         }
     }
+
+    /**
+     * create_payment_link (doc-04) — keeps the customer portal's "Orders
+     * created from chat" view showing a real, live payment status: fires
+     * on EVERY status change (paid, cancelled by the auto-cancel cron
+     * below, cancelled manually by the merchant, etc.), but ONLY for
+     * orders THIS integration created — never for a merchant's own
+     * regular checkout orders, which on_order_placed() above already
+     * reports once, at thank-you time. Reuses the exact same 'order.placed'
+     * event/handler (SyncService::recordOrder() upserts by
+     * (chatbot_id, woo_order_id)), so this is really an update to the row
+     * that already exists, not a new order being invented.
+     */
+    public function on_order_status_changed( int $order_id, string $from, string $to ): void {
+        if ( ! $order_id || ! $this->isReady() ) return;
+        if ( ! function_exists( 'wc_get_order' ) ) return;
+        $order = wc_get_order( $order_id );
+        if ( ! $order || ! $order->get_meta( '_hamman_created' ) ) return;
+
+        $line_items = [];
+        foreach ( $order->get_items() as $item ) {
+            $product = $item->get_product();
+            $line_items[] = [
+                'product_id' => $product ? $product->get_id() : (int) $item->get_product_id(),
+                'quantity'   => (int) $item->get_quantity(),
+                'total'      => (float) $item->get_total(),
+            ];
+        }
+
+        // Deliberately no conversation_id here — Laravel already recorded
+        // it directly when it created this order (see ChatController::
+        // createPaymentLink()), and SyncService::recordOrder()'s update
+        // path never touches a conversation_id it wasn't itself given, so
+        // a bare status update can never accidentally erase it.
+        $this->api()->send_webhook( [
+            'event'      => 'order.placed',
+            'chatbot_id' => $this->chatbotId(),
+            'data'       => [
+                'order_id'   => $order_id,
+                'total'      => (float) $order->get_total(),
+                'currency'   => $order->get_currency(),
+                'status'     => $to,
+                'line_items' => $line_items,
+            ],
+        ] );
+    }
+
+    /**
+     * create_payment_link's auto-cancel rule: an unpaid draft order this
+     * integration created must not hold real stock hostage forever. Scans
+     * for 'pending' orders flagged _hamman_created older than the
+     * configured hold period (Advanced tab, default 24h) and cancels
+     * them — update_status() itself fires woocommerce_order_status_changed,
+     * so on_order_status_changed() above reports the cancellation back
+     * automatically, no separate webhook call needed here.
+     */
+    public function cancel_stale_draft_orders(): void {
+        if ( ! $this->isReady() || ! class_exists( 'WooCommerce' ) ) return;
+
+        $hold_hours = max( 1, (int) get_option( 'hamman_payment_link_hold_hours', 24 ) );
+        $cutoff     = time() - ( $hold_hours * HOUR_IN_SECONDS );
+
+        $orders = wc_get_orders( [
+            'status'       => 'pending',
+            'date_created' => '<' . $cutoff,
+            'meta_key'     => '_hamman_created',
+            'meta_value'   => 1,
+            'limit'        => 50,
+            'return'       => 'objects',
+        ] );
+
+        foreach ( $orders as $order ) {
+            $order->update_status(
+                'cancelled',
+                __( 'Auto-cancelled by Hamman AI: unpaid draft order created from chat exceeded the hold period.', 'hamman-ai-chatbot' )
+            );
+        }
+    }
 }

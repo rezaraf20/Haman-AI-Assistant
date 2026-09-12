@@ -29,6 +29,10 @@ class Hamman_Loader {
         $this->add_action( 'wp_ajax_hamman_check_version',             $admin, 'ajax_check_version' );
         $this->add_action( 'wp_enqueue_scripts',   $public, 'enqueue_assets' );
         $this->add_action( 'hamman_hourly_sync',   $sync,   'run_incremental_sync' );
+        // create_payment_link (doc-04) — auto-cancel rule for unpaid draft
+        // orders this integration created; scheduled hourly at activation
+        // (see class-hamman-activator.php).
+        $this->add_action( 'hamman_cancel_stale_orders', $sync, 'cancel_stale_draft_orders' );
         $this->add_action( 'rest_api_init',        new Hamman_Webhook_Handler(), 'register_routes' );
         $this->add_action( 'rest_api_init',        new Hamman_Live_Query_Handler(), 'register_routes' );
 
@@ -39,6 +43,10 @@ class Hamman_Loader {
             // exists and the customer is on the thank-you page, the
             // standard WooCommerce hook for "a real order was just placed".
             $this->add_action( 'woocommerce_thankyou', $sync, 'on_order_placed' );
+            // create_payment_link (doc-04) — keeps a bot-created order's
+            // payment status live in the customer portal (paid, cancelled
+            // by the auto-cancel cron, or cancelled manually).
+            $this->add_action( 'woocommerce_order_status_changed', $sync, 'on_order_status_changed', 10, 3 );
         }
         $this->add_action( 'save_post',    $sync, 'on_post_saved',   10, 3 );
         $this->add_action( 'delete_post',  $sync, 'on_post_removed' );

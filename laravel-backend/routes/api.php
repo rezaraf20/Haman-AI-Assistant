@@ -37,6 +37,14 @@ Route::prefix('v1')->group(function () {
             ->middleware('throttle:chat-message');
         Route::post('cart-event', [ChatController::class, 'cartEvent'])
             ->middleware('throttle:chat-message');
+        // create_payment_link (doc-04) — the one endpoint in this group
+        // that creates real money-adjacent state, so it gets the same
+        // origin check as session/message rather than cart-event/feedback's
+        // lighter posture; its own internal security checks (enabled,
+        // amount cap, per-conversation/per-IP-per-day limits) are on top
+        // of this, not instead of it.
+        Route::post('payment-link', [ChatController::class, 'createPaymentLink'])
+            ->middleware(['chatbot.domain', 'throttle:chat-message']);
     });
 
     // ── Plugin API (API Key) ───────────────────────────

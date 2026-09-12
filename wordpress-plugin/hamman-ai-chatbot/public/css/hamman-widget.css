@@ -414,6 +414,78 @@
     color: #991B1B;
 }
 
+/* ── Payment link preview (create_payment_link) ─────────────────────── */
+/* The real WooCommerce order is only ever created from .hm-payment-
+ * confirm-btn's own click handler (handleConfirmPaymentClick() in
+ * hamman-widget.js) — never automatically when this card renders. */
+.hm-payment-preview {
+    align-self: stretch;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.hm-payment-items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.hm-payment-items li {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 12.5px;
+    color: #0F172A;
+}
+
+.hm-payment-total {
+    font-size: 13px;
+    color: #0F172A;
+    border-top: 1px dashed #E2E8F0;
+    padding-top: 6px;
+}
+
+.hm-payment-confirm-btn {
+    align-self: flex-start;
+    background: var(--hm-primary);
+    color: var(--hm-primary-contrast);
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    min-height: 36px;
+}
+
+.hm-payment-confirm-btn:disabled {
+    opacity: .6;
+    cursor: default;
+}
+
+.hm-payment-status {
+    font-size: 12px;
+    color: #166534;
+}
+
+.hm-payment-status a {
+    color: var(--hm-primary);
+    font-weight: 600;
+    text-decoration: underline;
+}
+
+.hm-payment-status.hm-payment-error {
+    color: #991B1B;
+}
+
 /* Typing indicator: three animated dots shown while waiting for a response. */
 .hm-typing {
     align-self: flex-start;

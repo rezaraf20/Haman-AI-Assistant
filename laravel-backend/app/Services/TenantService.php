@@ -268,6 +268,13 @@ class TenantService
         try {
             DB::statement("ALTER TABLE {$schemaName}.chatbots ADD COLUMN IF NOT EXISTS authenticity_unknown_message TEXT");
         } catch (\Throwable $e) {}
+        // create_payment_link (doc-04) — NULL means the feature can't
+        // actually create anything even if the tool is in enabled_tools;
+        // see ChatController::createPaymentLink()'s own security checks.
+        // A merchant must consciously set a real cap before this ever runs.
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.chatbots ADD COLUMN IF NOT EXISTS max_payment_link_amount DECIMAL(14,4)");
+        } catch (\Throwable $e) {}
         // Backfill: the ADD COLUMN above leaves every pre-existing chunk row
         // at content_tsv=NULL (never matches any full-text query), so hybrid
         // search would silently degrade to vector-only for already-embedded
@@ -404,6 +411,14 @@ class TenantService
             DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_orders_conv ON {$schemaName}.orders(conversation_id)");
             DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_orders_lookup ON {$schemaName}.orders(chatbot_id, created_at)");
         } catch (\Throwable $e) {}
+        // create_payment_link (doc-04) — true only for an order Laravel
+        // itself created via ChatController::createPaymentLink(); an order
+        // that merely got cookie-attributed after a normal checkout (the
+        // order.placed/on_order_placed() flow) stays false. This is what
+        // the customer portal's "Chat orders" page filters on.
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.orders ADD COLUMN IF NOT EXISTS created_by_bot BOOLEAN NOT NULL DEFAULT false");
+        } catch (\Throwable $e) {}
     }
 
     private function createTenantTables(string $s): void
@@ -461,6 +476,10 @@ class TenantService
                 -- Nullable -- when unset, rag_service._authenticity_rule()
                 -- uses its own hardcoded bilingual default instead.
                 authenticity_unknown_message TEXT,
+                -- create_payment_link (doc-04) -- NULL means the feature
+                -- can't actually create anything even if the tool is in
+                -- enabled_tools; see ChatController::createPaymentLink().
+                max_payment_link_amount DECIMAL(14,4),
                 language VARCHAR(10) NOT NULL DEFAULT 'en',
                 response_language VARCHAR(10) NOT NULL DEFAULT 'auto',
                 is_active BOOLEAN NOT NULL DEFAULT true,
@@ -779,6 +798,11 @@ class TenantService
                 currency VARCHAR(10) NOT NULL DEFAULT 'IRT',
                 status VARCHAR(30) NOT NULL DEFAULT 'pending',
                 line_items JSONB NOT NULL DEFAULT '[]',
+                -- create_payment_link (doc-04) -- true only for an order
+                -- Laravel itself created via ChatController::
+                -- createPaymentLink(); an order merely cookie-attributed
+                -- after a normal checkout stays false.
+                created_by_bot BOOLEAN NOT NULL DEFAULT false,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 UNIQUE(chatbot_id, woo_order_id)
             )

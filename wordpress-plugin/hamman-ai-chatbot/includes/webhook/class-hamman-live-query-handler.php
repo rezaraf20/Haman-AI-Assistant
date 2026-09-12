@@ -23,6 +23,8 @@ class Hamman_Live_Query_Handler {
     const MAX_VARIANTS_RETURNED     = 50;
     const MAX_RECOMMEND_RESULTS     = 3;
     const MAX_COMPARE_PRODUCTS      = 5;
+    const MAX_ORDER_ITEMS           = 10;
+    const MAX_ITEM_QUANTITY         = 20;
 
     public function register_routes(): void {
         register_rest_route( 'hamman/v1', '/live-query', [
@@ -59,6 +61,10 @@ class Hamman_Live_Query_Handler {
                 return $this->recommend_products( $body );
             case 'compare_products':
                 return $this->compare_products( $body );
+            case 'preview_order':
+                return $this->preview_order( $body );
+            case 'create_draft_order':
+                return $this->create_draft_order( $body );
             default:
                 return new WP_REST_Response( [ 'error' => 'Unknown action' ], 400 );
         }
@@ -405,5 +411,161 @@ class Hamman_Live_Query_Handler {
         $text = wp_strip_all_tags( (string) $text );
         $text = trim( preg_replace( '/\s+/', ' ', $text ) );
         return mb_substr( $text, 0, 220 );
+    }
+
+    /**
+     * create_payment_link (doc-04) — shared item resolution/pricing for
+     * BOTH preview_order (read-only) and create_draft_order (the one
+     * write action in this whole handler), so a preview can never promise
+     * something the confirm step doesn't actually deliver: the exact same
+     * stock/purchasability/price checks run again, fresh, at order-
+     * creation time — nothing computed by the preview call is ever
+     * trusted or reused. Returns WP_Error on the FIRST invalid item
+     * (never partially prices/creates an order for a mix of valid and
+     * invalid items) or an array of resolved rows.
+     *
+     * @return array|WP_Error
+     */
+    private function resolve_order_items( array $raw_items ) {
+        if ( empty( $raw_items ) || ! is_array( $raw_items ) ) {
+            return new WP_Error( 'no_items', 'No items given' );
+        }
+        if ( count( $raw_items ) > self::MAX_ORDER_ITEMS ) {
+            return new WP_Error( 'too_many_items', 'Too many items' );
+        }
+
+        $resolved = [];
+        foreach ( $raw_items as $raw ) {
+            if ( ! is_array( $raw ) ) return new WP_Error( 'invalid_item', 'Invalid item' );
+            $product_id = absint( $raw['product_id'] ?? 0 );
+            if ( ! $product_id ) return new WP_Error( 'invalid_item', 'Invalid product_id' );
+            $variation_id = ! empty( $raw['variation_id'] ) ? absint( $raw['variation_id'] ) : 0;
+            $quantity = max( 1, min( self::MAX_ITEM_QUANTITY, absint( $raw['quantity'] ?? 1 ) ) );
+
+            $target = $variation_id ?: $product_id;
+            $product = wc_get_product( $target );
+            if ( ! $product ) return new WP_Error( 'product_not_found', "Product {$target} not found" );
+            if ( $variation_id && (int) $product->get_parent_id() !== $product_id ) {
+                return new WP_Error( 'variation_mismatch', 'variation_id does not belong to the given product_id' );
+            }
+            if ( ! $product->is_purchasable() ) {
+                return new WP_Error( 'not_purchasable', "{$product->get_name()} is not purchasable" );
+            }
+            if ( ! $product->is_in_stock() ) {
+                return new WP_Error( 'out_of_stock', "{$product->get_name()} is out of stock" );
+            }
+            if ( $product->managing_stock() && $product->get_stock_quantity() !== null && $product->get_stock_quantity() < $quantity ) {
+                return new WP_Error( 'insufficient_stock', "Not enough stock for {$product->get_name()}" );
+            }
+
+            $price = (float) $product->get_price();
+            $resolved[] = [
+                'product_id'   => $product_id,
+                'variation_id' => $variation_id ?: null,
+                'quantity'     => $quantity,
+                'name'         => $product->get_name(),
+                'price'        => $price,
+                'line_total'   => $price * $quantity,
+                'wc_product'   => $product,
+            ];
+        }
+        return $resolved;
+    }
+
+    /** Read-only preview — computes live price/name/total for a proposed
+     * order WITHOUT creating anything. This is what create_payment_link
+     * (the model-callable tool) actually calls; the widget renders this
+     * as the order summary + total the customer must see and explicitly
+     * confirm before anything real is created (see rag_service's
+     * _payment_link_rule() and hamman-widget.js's
+     * renderPaymentLinkPreview()). */
+    private function preview_order( array $body ): WP_REST_Response {
+        $resolved = $this->resolve_order_items( $body['items'] ?? [] );
+        if ( is_wp_error( $resolved ) ) {
+            return new WP_REST_Response( [ 'error' => $resolved->get_error_message() ], 400 );
+        }
+
+        $items_out = array_map( function ( $r ) {
+            return [
+                'product_id'   => $r['product_id'],
+                'variation_id' => $r['variation_id'],
+                'quantity'     => $r['quantity'],
+                'name'         => $r['name'],
+                'price'        => $r['price'],
+                'line_total'   => $r['line_total'],
+            ];
+        }, $resolved );
+
+        return new WP_REST_Response( [
+            'items'    => $items_out,
+            'total'    => array_sum( array_column( $resolved, 'line_total' ) ),
+            'currency' => get_woocommerce_currency(),
+        ], 200 );
+    }
+
+    /**
+     * create_draft_order — the ONE write action in this entire handler.
+     * Only ever reached via Laravel's ChatController::createPaymentLink(),
+     * itself only ever reached after a real customer click on a rendered
+     * "Confirm & Pay" button (see the task's own security rules) AND after
+     * Laravel's own per-conversation/per-IP/per-day and per-chatbot max-
+     * amount checks already passed — this endpoint re-validates
+     * stock/price itself regardless, never trusting that anything checked
+     * upstream still holds true.
+     *
+     * Creates a real WooCommerce order in 'pending' status (WooCommerce's
+     * own native "awaiting payment" status — nothing custom invented
+     * here) and returns order_key/order_pay_url exactly once, in this one
+     * response. This plugin never logs either value (see verify_signature()
+     * et al. — nothing here writes $body or this response to any log) and
+     * never persists them itself; Laravel is told explicitly to store only
+     * the numeric order_id, never the key or the URL.
+     */
+    private function create_draft_order( array $body ): WP_REST_Response {
+        $resolved = $this->resolve_order_items( $body['items'] ?? [] );
+        if ( is_wp_error( $resolved ) ) {
+            return new WP_REST_Response( [ 'error' => $resolved->get_error_message() ], 400 );
+        }
+
+        $order = wc_create_order();
+        if ( is_wp_error( $order ) ) {
+            return new WP_REST_Response( [ 'error' => 'Could not create order' ], 500 );
+        }
+
+        foreach ( $resolved as $r ) {
+            $order->add_product( $r['wc_product'], $r['quantity'] );
+        }
+
+        $customer = is_array( $body['customer'] ?? null ) ? $body['customer'] : [];
+        if ( ! empty( $customer['name'] ) ) {
+            $parts = preg_split( '/\s+/', trim( sanitize_text_field( (string) $customer['name'] ) ), 2 );
+            $order->set_billing_first_name( $parts[0] ?? '' );
+            $order->set_billing_last_name( $parts[1] ?? '' );
+        }
+        if ( ! empty( $customer['phone'] ) ) {
+            $order->set_billing_phone( sanitize_text_field( (string) $customer['phone'] ) );
+        }
+        if ( ! empty( $customer['email'] ) && is_email( (string) $customer['email'] ) ) {
+            $order->set_billing_email( sanitize_email( (string) $customer['email'] ) );
+        }
+
+        // Flags this order as ours — the auto-cancel cron
+        // (cancel_stale_draft_orders(), Hamman_Sync_Manager) and the
+        // order-status-changed webhook both key off this meta, never off
+        // guessing from order content, so a merchant's own manually-
+        // created pending orders are never touched by either.
+        $order->update_meta_data( '_hamman_created', 1 );
+        $order->update_meta_data( '_hamman_chatbot_id', sanitize_text_field( (string) get_option( 'hamman_chatbot_id', '' ) ) );
+        $order->set_status( 'pending' );
+        $order->calculate_totals();
+        $order->save();
+
+        return new WP_REST_Response( [
+            'order_id'      => $order->get_id(),
+            'key'           => $order->get_order_key(),
+            'order_pay_url' => $order->get_checkout_payment_url(),
+            'total'         => (float) $order->get_total(),
+            'currency'      => $order->get_currency(),
+        ], 200 );
     }
 }

@@ -162,6 +162,36 @@ class RevenueAttributionTest extends TestCase
         $this->assertEquals('completed', $rows[0]->status);
     }
 
+    public function test_a_bare_status_update_never_nulls_out_an_existing_conversation_id(): void
+    {
+        // Reflects create_payment_link's real flow (doc-04):
+        // Hamman_Sync_Manager::on_order_status_changed() deliberately sends
+        // NO conversation_id at all on a status-only update, since Laravel
+        // already recorded the real one directly when it first created the
+        // order. That must never erase what's already on the row.
+        ['chatbotId' => $chatbotId, 'conversationId' => $conversationId, 'schema' => $schema] = $this->makeChatbotWithConversation();
+        $svc = app(SyncService::class);
+
+        DB::statement("SET search_path TO {$schema}, public");
+        $svc->processWebhook([
+            'event' => 'order.placed', 'chatbot_id' => $chatbotId,
+            'data' => ['order_id' => 5005, 'conversation_id' => $conversationId, 'total' => 120000, 'currency' => 'IRT', 'status' => 'pending', 'line_items' => []],
+        ], $schema);
+
+        // A pure status-update payload, exactly like
+        // on_order_status_changed() sends — no conversation_id key at all.
+        $svc->processWebhook([
+            'event' => 'order.placed', 'chatbot_id' => $chatbotId,
+            'data' => ['order_id' => 5005, 'total' => 120000, 'currency' => 'IRT', 'status' => 'cancelled', 'line_items' => []],
+        ], $schema);
+
+        $order = DB::table('orders')->where('chatbot_id', $chatbotId)->where('woo_order_id', 5005)->first();
+        DB::statement('SET search_path TO public');
+
+        $this->assertEquals('cancelled', $order->status, 'The status update itself must still apply.');
+        $this->assertEquals($conversationId, $order->conversation_id, 'A status-only update must never null out an existing conversation_id.');
+    }
+
     public function test_missing_order_id_is_ignored_without_crashing(): void
     {
         ['chatbotId' => $chatbotId, 'schema' => $schema] = $this->makeChatbotWithConversation();

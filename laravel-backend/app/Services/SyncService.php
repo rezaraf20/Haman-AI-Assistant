@@ -203,6 +203,18 @@ class SyncService {
      * thank-you page refresh) — the id column is only ever set on the
      * initial insert, never touched again, so a repeat call can't silently
      * swap the primary key underneath an existing row.
+     *
+     * Also reached from Hamman_Sync_Manager::on_order_status_changed() (a
+     * bot-created order's payment status changing — see
+     * create_payment_link, doc-04) — that payload deliberately carries no
+     * conversation_id at all, since Laravel's own ChatController::
+     * createPaymentLink() already recorded the real one directly when it
+     * first created the order. A bare status-update call must never null
+     * that out on an existing row just because this particular payload
+     * didn't repeat it — conversation_id is therefore only ever WRITTEN
+     * on a genuinely new row, or when this call actually supplied a
+     * validated one; an existing row's conversation_id is left untouched
+     * otherwise.
      */
     private function recordOrder(string $chatbotId, array $data): void {
         $wooOrderId = (int) ($data['order_id'] ?? 0);
@@ -226,23 +238,26 @@ class SyncService {
         }
 
         $fields = [
-            'conversation_id' => $conversationId,
-            'total'           => (float) ($data['total'] ?? 0),
-            'currency'        => $data['currency'] ?? 'IRT',
-            'status'          => $data['status'] ?? 'pending',
-            'line_items'      => json_encode($lineItems),
+            'total'      => (float) ($data['total'] ?? 0),
+            'currency'   => $data['currency'] ?? 'IRT',
+            'status'     => $data['status'] ?? 'pending',
+            'line_items' => json_encode($lineItems),
         ];
 
         $existing = DB::table('orders')->where('chatbot_id', $chatbotId)->where('woo_order_id', $wooOrderId)->first();
         if ($existing) {
+            // Only overwrite a real, freshly-validated conversation_id —
+            // never null out one already on the row from an earlier call.
+            if ($conversationId !== null) $fields['conversation_id'] = $conversationId;
             DB::table('orders')->where('id', $existing->id)->update($fields);
             return;
         }
         DB::table('orders')->insert(array_merge($fields, [
-            'id'           => (string) Str::uuid(),
-            'chatbot_id'   => $chatbotId,
-            'woo_order_id' => $wooOrderId,
-            'created_at'   => now(),
+            'id'              => (string) Str::uuid(),
+            'chatbot_id'      => $chatbotId,
+            'woo_order_id'    => $wooOrderId,
+            'conversation_id' => $conversationId,
+            'created_at'      => now(),
         ]));
     }
 

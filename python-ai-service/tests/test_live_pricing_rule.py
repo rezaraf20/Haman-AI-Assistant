@@ -12,7 +12,7 @@ test_grounding_no_fabricated_claims.py.
 """
 import unittest
 
-from app.services.rag_service import _live_pricing_rule, _product_display_rule, _cart_link_rule
+from app.services.rag_service import _live_pricing_rule, _product_display_rule, _cart_link_rule, _payment_link_rule
 
 
 class LivePricingRuleTest(unittest.TestCase):
@@ -148,6 +148,54 @@ class CartLinkRuleTest(unittest.TestCase):
         rule = _cart_link_rule(["build_cart_url", "add_to_cart"], is_fa=False)
         self.assertIn("never say you've already added it", rule)
         self.assertIn("never guess a variation_id", rule)
+
+
+class PaymentLinkRuleTest(unittest.TestCase):
+    """create_payment_link creates real money-adjacent state, so this rule
+    guards against two false claims specifically, both worse than a wrong
+    price: claiming an order was CREATED before the customer clicked
+    Confirm, and claiming it was PAID before they ever reached the
+    gateway. See product_tools.create_payment_link / ChatController::
+    createPaymentLink()."""
+
+    def test_absent_when_no_tools_enabled(self):
+        self.assertEqual(_payment_link_rule(None, is_fa=False), "")
+        self.assertEqual(_payment_link_rule([], is_fa=False), "")
+
+    def test_absent_when_payment_link_tool_not_enabled(self):
+        self.assertEqual(_payment_link_rule(["get_product_availability", "add_to_cart"], is_fa=False), "")
+
+    def test_present_when_create_payment_link_enabled(self):
+        rule = _payment_link_rule(["create_payment_link"], is_fa=False)
+        self.assertNotEqual(rule, "")
+
+    def test_english_rule_forbids_claiming_order_already_created(self):
+        rule = _payment_link_rule(["create_payment_link"], is_fa=False)
+        self.assertIn("no order exists until the customer clicks", rule)
+        self.assertIn("never say 'I've placed your order'", rule)
+
+    def test_english_rule_forbids_claiming_payment_already_done(self):
+        rule = _payment_link_rule(["create_payment_link"], is_fa=False)
+        self.assertIn("never say 'your payment went through'", rule)
+        self.assertIn("still has to actually complete payment", rule)
+
+    def test_english_rule_forbids_restating_items_or_total(self):
+        rule = _payment_link_rule(["create_payment_link"], is_fa=False)
+        self.assertIn("do not", rule)
+        self.assertIn("never state any total other than the exact one the tool returned", rule)
+
+    def test_persian_rule_forbids_claiming_order_already_created(self):
+        rule = _payment_link_rule(["create_payment_link"], is_fa=True)
+        self.assertIn("هیچ سفارشی ساخته نشده", rule)
+
+    def test_persian_rule_forbids_claiming_payment_already_done(self):
+        rule = _payment_link_rule(["create_payment_link"], is_fa=True)
+        self.assertIn("پرداخت انجام شد", rule)
+
+    def test_language_selection_follows_is_fa_flag(self):
+        en_rule = _payment_link_rule(["create_payment_link"], is_fa=False)
+        fa_rule = _payment_link_rule(["create_payment_link"], is_fa=True)
+        self.assertNotEqual(en_rule, fa_rule)
 
 
 if __name__ == "__main__":

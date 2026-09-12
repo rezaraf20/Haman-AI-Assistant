@@ -208,7 +208,7 @@ def _authenticity_rule(authenticity_unknown_message: Optional[str], is_fa: bool)
 # CONTEXT above and to use the tool instead. Checked by name rather than
 # just "enabled_tools is non-empty" so a future non-pricing tool doesn't
 # silently pull in a rule that doesn't apply to it.
-_PRICING_TOOL_NAMES = {"get_product_availability", "get_product_variants", "search_products", "recommend_products", "compare_products"}
+_PRICING_TOOL_NAMES = {"get_product_availability", "get_product_variants", "search_products", "recommend_products", "compare_products", "create_payment_link"}
 
 # recommend_products / compare_products (doc-04's "Product compare", Very
 # high) results render as actual widget UI — product cards or a comparison
@@ -298,6 +298,42 @@ def _cart_link_rule(enabled_tools: Optional[List[str]], is_fa: bool) -> str:
             "add_to_cart."
         )
     return rule
+
+
+_PAYMENT_LINK_TOOL_NAMES = {"create_payment_link"}
+
+
+def _payment_link_rule(enabled_tools: Optional[List[str]], is_fa: bool) -> str:
+    """create_payment_link's tool call only ever returns a PREVIEW (see
+    product_tools.create_payment_link's own docstring) — the widget
+    renders that preview as the real order summary + total + a "Confirm &
+    Pay" button, and a real WooCommerce order is only ever created after
+    the customer clicks it (ChatController::createPaymentLink()). Two
+    failure modes matter here, both worse than a wrong price: claiming an
+    order was CREATED before it was, and claiming it was PAID before the
+    customer ever reached the payment gateway."""
+    if not enabled_tools or not (_PAYMENT_LINK_TOOL_NAMES & set(enabled_tools)):
+        return ""
+    if is_fa:
+        return (
+            "\n\nوقتی از ابزار create_payment_link استفاده می‌کنی، خلاصه‌ی سفارش (اقلام و مبلغ کل واقعی) "
+            "به‌طور مستقیم در ویجت نمایش داده می‌شود، همراه با یک دکمه‌ی واقعی «تأیید و پرداخت» — دوباره "
+            "اقلام یا مبلغ را در متن خودت فهرست نکن و هرگز مبلغی غیر از همان مبلغ واقعی که ابزار برگردانده "
+            "نگو. مهم‌تر از آن: تا وقتی کاربر خودش روی آن دکمه کلیک نکند، هیچ سفارشی ساخته نشده — هرگز نگو "
+            "«سفارشتان را ثبت کردم» یا «لینک پرداخت ساختم». و حتی بعد از کلیک کاربر روی دکمه، تا وقتی خودِ "
+            "کاربر واقعاً در صفحه‌ی درگاه پرداخت را کامل نکرده، هرگز نگو «پرداخت انجام شد» یا «سفارش شما "
+            "پرداخت شد» — فقط بگو لینک پرداخت آماده است."
+        )
+    return (
+        "\n\nWhen you use create_payment_link, the order summary (items and the real total) is "
+        "rendered directly in the chat widget, along with a real 'Confirm & Pay' button — do not "
+        "list the items or total again in your own text, and never state any total other than the "
+        "exact one the tool returned. More importantly: no order exists until the customer clicks "
+        "that button themselves — never say 'I've placed your order' or 'I've created a payment "
+        "link' as if it's already done. And even after they click it, never say 'your payment went "
+        "through' or 'your order is paid' — only that a real payment link is ready; the customer "
+        "still has to actually complete payment on the gateway page themselves."
+    )
 
 
 def _live_pricing_rule(enabled_tools: Optional[List[str]], is_fa: bool) -> str:
@@ -1144,6 +1180,7 @@ async def run_rag_pipeline_stream(
     sys_p += _live_pricing_rule(enabled_tools, is_fa_question)
     sys_p += _product_display_rule(enabled_tools, is_fa_question)
     sys_p += _cart_link_rule(enabled_tools, is_fa_question)
+    sys_p += _payment_link_rule(enabled_tools, is_fa_question)
     sys_p += _authenticity_rule(authenticity_unknown_message, is_fa_question)
     if system_prompt:
         sys_p += f"\n\n{system_prompt}"
@@ -1336,6 +1373,7 @@ async def run_rag_pipeline(
     sys_p += _live_pricing_rule(enabled_tools, is_fa_question)
     sys_p += _product_display_rule(enabled_tools, is_fa_question)
     sys_p += _cart_link_rule(enabled_tools, is_fa_question)
+    sys_p += _payment_link_rule(enabled_tools, is_fa_question)
     sys_p += _authenticity_rule(authenticity_unknown_message, is_fa_question)
     if system_prompt:
         sys_p += f"\n\n{system_prompt}"

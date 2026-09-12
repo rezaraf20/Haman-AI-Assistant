@@ -19,17 +19,29 @@ from the last sync, not live).
                              was one of a cosmetics shop's three most
                              common questions).
   compare_products            a feature-by-feature table for 2-5 products.
-  build_cart_url              one-click WooCommerce "add to cart" links,
-                             the deliberately SAFE half of doc-04's "Add
-                             to cart + cart URL" item — see its own
-                             docstring for why real cart mutation and
-                             order-status lookup are both out of scope
-                             for now.
+  build_cart_url              one-click WooCommerce "add to cart" links —
+                             a plain nonce-free URL, no live call at all.
+  add_to_cart                 the richer sibling of build_cart_url: real
+                             intent for the widget to add to the cart via
+                             WooCommerce's own Store API, same-origin,
+                             also zero server-side HTTP calls (see its own
+                             docstring).
+  create_payment_link         preview-only order summary + live total for
+                             a customer who wants to pay directly — the
+                             actual order/payment link is only ever
+                             created after an explicit widget-rendered
+                             confirmation click, never by this tool call
+                             (see ChatController::createPaymentLink()'s
+                             own from-scratch security checks).
 
-The first five call the WordPress plugin's own live-query REST endpoint (more
-control than WooCommerce's own REST API, no extra customer-supplied
-consumer key, reuses the webhook_secret trust relationship that already
-exists for outbound sync webhooks) with a short timeout.
+get_product_availability/get_product_variants/search_products/
+recommend_products/compare_products/create_payment_link call the
+WordPress plugin's own live-query REST endpoint (more control than
+WooCommerce's own REST API, no extra customer-supplied consumer key,
+reuses the webhook_secret trust relationship that already exists for
+outbound sync webhooks) with a short timeout. build_cart_url and
+add_to_cart make NO server-side HTTP calls at all — see their own
+docstrings for why.
 
 PRICING RULE — deliberately stricter than an ordinary "best effort" tool:
 a wrong price is the worst possible mistake for a shop, worse than no
@@ -702,5 +714,134 @@ register(Tool(
         "additionalProperties": False,
     },
     handler=add_to_cart,
+    access_level="read",
+))
+
+
+MAX_PAYMENT_LINK_ITEMS = 10  # matches Hamman_Live_Query_Handler::MAX_ORDER_ITEMS on the plugin side
+
+
+def _validate_customer(customer) -> Optional[dict]:
+    if not isinstance(customer, dict):
+        return None
+    out = {}
+    for key, max_len in (("name", 255), ("phone", 50), ("email", 255)):
+        val = customer.get(key)
+        if isinstance(val, str) and val.strip():
+            out[key] = val.strip()[:max_len]
+    return out or None
+
+
+def create_payment_link(db: Session, chatbot_id: str, items: List[dict], customer: Optional[dict] = None) -> dict:
+    """create_payment_link (doc-04) — the model-callable half of this
+    feature is entirely READ-ONLY: it only ever previews a proposed order
+    (live price/name/stock per item, via the SAME preview_order action
+    Laravel re-checks fresh at confirm time) — it never creates an order
+    or a payment link itself. The real order is only ever created after a
+    real customer click on the widget's rendered "Confirm & Pay" button,
+    which goes through ChatController::createPaymentLink() — a completely
+    separate code path with its own from-scratch security checks
+    (enabled, per-chatbot amount cap, per-conversation/per-IP-per-day
+    limits) that this tool call never touches and cannot bypass.
+
+    customer is passed straight through unused by this function — it only
+    exists so the widget's eventual Confirm click can forward it to
+    Laravel, which is the first place it's ever actually used (to fill in
+    billing details on the real order, if the customer volunteered any).
+    """
+    if not isinstance(items, list) or not items:
+        return {"error": "items must be a non-empty list."}
+    if len(items) > MAX_PAYMENT_LINK_ITEMS:
+        return {"error": f"At most {MAX_PAYMENT_LINK_ITEMS} items are supported."}
+
+    clean_items = []
+    for raw in items:
+        if not isinstance(raw, dict):
+            return {"error": "Each item must be an object with a product_id."}
+        pid = _validate_product_id(raw.get("product_id"))
+        if pid is None:
+            return {"error": "Invalid product_id in items."}
+        item = {"product_id": pid}
+        if raw.get("variation_id") is not None:
+            vid = _validate_product_id(raw.get("variation_id"))
+            if vid is None:
+                return {"error": "Invalid variation_id in items."}
+            item["variation_id"] = vid
+        qty = raw.get("quantity", 1)
+        try:
+            qty = int(qty)
+        except (TypeError, ValueError):
+            return {"error": "Invalid quantity in items."}
+        item["quantity"] = max(1, min(qty, MAX_CART_QUANTITY))
+        clean_items.append(item)
+
+    clean_customer = _validate_customer(customer)
+
+    site = _resolve_site(db, chatbot_id)
+    if not site:
+        return {"error": "live_check_unavailable",
+                "note": "Live order preview is unavailable right now. Do not offer a payment link.", "items": []}
+
+    preview = _query_live(site["domain"], site["secret"], "preview_order", {"items": clean_items})
+    if preview is None:
+        return {"error": "live_check_unavailable",
+                "note": "Live order preview is unavailable right now. Do not offer a payment link.", "items": []}
+    if "error" in preview:
+        return {"error": preview["error"]}
+
+    return {
+        "items": preview.get("items", []),
+        "total": preview.get("total"),
+        "currency": preview.get("currency", "IRT"),
+        "customer": clean_customer,
+    }
+
+
+register(Tool(
+    name="create_payment_link",
+    description=(
+        "Preview a proposed order — live price, name, and stock for each item, plus the real "
+        "total — for a customer who wants to pay directly. Use this when a customer has said "
+        "what they want to buy and is ready to pay now. This ONLY shows a preview; it never "
+        "creates an order or a payment link itself. The customer must see the order summary and "
+        "total (rendered by the widget, not your own text) and explicitly click a real 'Confirm "
+        "& Pay' button before anything is actually created. Include any name/phone/email the "
+        "customer has already volunteered as 'customer', but never ask for it just to use this "
+        "tool — it's entirely optional. Never call this for a product you haven't confirmed is in "
+        "stock, and never state a total yourself — only this tool's own live total is ever correct."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "product_id": {"type": "integer", "description": "The numeric WooCommerce product ID."},
+                        "variation_id": {"type": "integer", "description": "The specific variation ID, for a variable product — never guessed."},
+                        "quantity": {"type": "integer", "description": "How many of this product (default 1)."},
+                    },
+                    "required": ["product_id"],
+                    "additionalProperties": False,
+                },
+                "minItems": 1, "maxItems": 10,
+                "description": "The products (and optional quantities/variations) the customer wants to buy.",
+            },
+            "customer": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "maxLength": 255},
+                    "phone": {"type": "string", "maxLength": 50},
+                    "email": {"type": "string", "maxLength": 255},
+                },
+                "additionalProperties": False,
+                "description": "Any name/phone/email the customer has already volunteered in this conversation, if any.",
+            },
+        },
+        "required": ["items"],
+        "additionalProperties": False,
+    },
+    handler=create_payment_link,
     access_level="read",
 ))
