@@ -1,0 +1,53 @@
+<?php
+return [
+    'nav' => 'Suggestions',
+    'subtitle' => 'Built from real conversations by explicit rules — no AI, no cost. Every number links to the conversations behind it.',
+
+    'empty_title' => 'Nothing to act on yet',
+    'empty_body' => "Suggestions appear once a pattern repeats enough to matter — several people asking the same question, or asking for something you don't stock. This is rechecked every night.",
+
+    'sources_label' => 'Source conversations:',
+    'conversation_n' => 'Conversation :n',
+    'and_more' => 'and :n more',
+    'examples_label' => 'Examples:',
+    'dismiss' => 'Dismiss',
+    'dismiss_confirm' => 'Stop showing this suggestion?',
+    'dismissed' => 'Dismissed — this suggestion will not come back',
+    'max_note' => 'At most :max suggestions are shown at once, ordered by count.',
+
+    'conversation_nav' => 'Conversation',
+    'conversation_not_found' => 'That conversation could not be found.',
+    'role_user' => 'Customer',
+    'role_bot' => 'Chatbot',
+    'flagged_unanswered' => 'unanswered',
+
+    // Each line is one rule firing on a real count — not generated text.
+    'text_topic_shipping' => ':count people asked about shipping and what it costs',
+    'text_topic_price' => ':count people asked about pricing',
+    'text_topic_contact' => ':count people were looking for a way to contact you',
+    'text_topic_warranty' => ':count people asked about warranty or returns',
+    'text_topic_payment' => ':count people asked how they can pay',
+    'text_topic_services' => ':count people asked what exactly you offer',
+    'text_topic_identity' => ':count people asked about the company itself (name, owner, location)',
+    'text_topic_hours' => ':count people asked about your opening hours',
+    'text_topic_other' => ':count people repeated a similar question',
+    'text_repeated_question' => ':count people asked: ":question"',
+    'text_unanswered' => ':count people asked ":question" and the bot had no answer',
+    'text_missing' => ':count people asked for ":request", which is not in your catalog',
+    'text_compared' => 'These products were compared against each other :count times: :products',
+    'text_generic' => 'A repeating pattern was seen :count times',
+
+    'action_topic_shipping' => "Publish shipping costs and delivery times on their own page and sync it to the chatbot — right now it can't be found on the site.",
+    'action_topic_price' => 'Put prices, or at least a price range, on the site. Customers ask this before buying, not after.',
+    'action_topic_contact' => 'Put a phone number and contact route somewhere obvious on the site and in the chatbot welcome message.',
+    'action_topic_warranty' => 'Write up your warranty and returns terms and add them to the chatbot content.',
+    'action_topic_payment' => 'Spell out the payment methods you accept (and instalments, if you offer them).',
+    'action_topic_services' => 'Build a services page with a clear list, then sync it.',
+    'action_topic_identity' => "Complete your About page, and set the correct company name in Widget Settings so the bot stops getting it wrong.",
+    'action_topic_hours' => 'Put your opening hours on the site and in the chatbot content.',
+    'action_topic_other' => 'Add this question to your quick questions or chatbot content.',
+    'action_repeated_question' => "Add the answer to your site content or the chatbot's quick questions.",
+    'action_unanswered' => 'Add content that answers this to the site, then re-sync.',
+    'action_missing' => "Stock it if the demand is real; if not, point customers at a specific alternative.",
+    'action_compared' => 'Publish a ready-made comparison page so customers can decide for themselves.',
+];

@@ -61,6 +61,10 @@ class Settings extends Page implements HasForms {
                         ->numeric()
                         ->visible(fn ($get) => $get('melipayamak_use_pattern'))
                         ->helperText(__('panel.pattern_id_help')),
+                    TextInput::make('sms_cost_toman')
+                        ->label(__('panel.sms_cost_toman'))
+                        ->helperText(__('panel.sms_cost_toman_help'))
+                        ->numeric()->minValue(0)->default(0),
                 ]),
         ])->statePath('data');
     }

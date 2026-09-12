@@ -299,6 +299,9 @@
             if (block.type === 'product_cards') renderProductCards(block.products);
             else if (block.type === 'product_compare') renderCompareTable(block.products, block.attribute_rows);
             else if (block.type === 'cart_links') renderCartLinks(block.items);
+            else if (block.type === 'add_to_cart') renderAddToCartIntent(block.items);
+            else if (block.type === 'payment_link_preview') renderPaymentLinkPreview(block);
+            else if (block.type === 'order_status_otp') renderOrderStatusOtp(block);
         });
         if (wasNearBottom) scrollToBottom(false);
     }
@@ -321,6 +324,497 @@
             wrap.appendChild(btn);
         });
         msgs.appendChild(wrap);
+    }
+
+    // ── add_to_cart (Store API, same-origin) ───────────────────────────
+    // Unlike renderCartLinks() above, this button never navigates anywhere
+    // — clicking it calls WooCommerce's own Store API directly, same-origin,
+    // with the browser's own cookies + a nonce the plugin already embedded
+    // in CFG at page-render time (see class-hamman-public.php). Nothing is
+    // added to the cart until this exact click handler runs; the tool
+    // result rendered here is pure intent (see product_tools.add_to_cart).
+    function storeApiAvailable() {
+        return !!(CFG.storeApiUrl && CFG.storeApiNonce);
+    }
+
+    function classicCartUrl(productId, quantity) {
+        return window.location.origin + '/?add-to-cart=' + encodeURIComponent(productId) +
+            '&quantity=' + encodeURIComponent(quantity || 1);
+    }
+
+    function renderAddToCartIntent(items) {
+        if (!items || !items.length) return;
+        var wrap = document.createElement('div');
+        wrap.className = 'hm-atc-items';
+        items.forEach(function (it) {
+            var row = document.createElement('div');
+            row.className = 'hm-atc-item';
+
+            var nameEl = document.createElement('span');
+            nameEl.className = 'hm-atc-name';
+            var qtyText = (it.quantity && it.quantity > 1) ? ' × ' + it.quantity : '';
+            nameEl.textContent = (it.name || '') + qtyText;
+            row.appendChild(nameEl);
+
+            if (!storeApiAvailable()) {
+                // Store API not available at all (old WooCommerce / Store
+                // API disabled) — degrade straight to the classic link,
+                // the exact same fallback build_cart_url already uses,
+                // built client-side since the widget already knows its own
+                // origin (no server round trip needed for this).
+                var link = document.createElement('a');
+                link.className = 'hm-cart-link-btn';
+                link.href = classicCartUrl(it.product_id, it.quantity);
+                link.target = '_blank';
+                link.rel = 'noopener';
+                link.textContent = CFG.i18n.addToCartLabel;
+                row.appendChild(link);
+            } else {
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'hm-atc-btn';
+                btn.textContent = CFG.i18n.addToCartLabel;
+                var statusEl = document.createElement('span');
+                statusEl.className = 'hm-atc-status';
+                statusEl.hidden = true;
+                btn.addEventListener('click', function () {
+                    handleAddToCartClick(it, btn, statusEl);
+                });
+                row.appendChild(btn);
+                row.appendChild(statusEl);
+            }
+            wrap.appendChild(row);
+        });
+        msgs.appendChild(wrap);
+    }
+
+    // The one function in this whole file that actually mutates the
+    // customer's real cart — and it only ever runs from inside a real
+    // 'click' event listener (see renderAddToCartIntent() above), never
+    // automatically when a tool result arrives. isRetry guards the one
+    // nonce-refresh-and-retry (see handleAddToCartClick()) from looping.
+    function addToCartViaStoreApi(item, isRetry) {
+        var targetId = item.variation_id || item.product_id;
+        return fetch(CFG.storeApiUrl + 'cart/add-item', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Nonce': CFG.storeApiNonce },
+            body: JSON.stringify({ id: targetId, quantity: item.quantity || 1 }),
+        }).then(function (r) {
+            return r.json().catch(function () { return {}; }).then(function (data) {
+                return { ok: r.ok, status: r.status, data: data, headers: r.headers };
+            });
+        });
+    }
+
+    function refreshStoreApiNonce() {
+        return fetch(CFG.storeApiUrl + 'cart', { method: 'GET' })
+            .then(function (r) {
+                // Store API convention: a fresh nonce comes back on every
+                // response as a header — checked under both names actually
+                // seen in the wild, since this isn't pinned to one exact
+                // WooCommerce version.
+                var fresh = r.headers.get('Nonce') || r.headers.get('X-WC-Store-API-Nonce');
+                if (fresh) CFG.storeApiNonce = fresh;
+                return !!fresh;
+            })
+            .catch(function () { return false; });
+    }
+
+    function handleAddToCartClick(item, btnEl, statusEl) {
+        btnEl.disabled = true;
+        var originalLabel = btnEl.textContent;
+        btnEl.textContent = CFG.i18n.addingToCartLabel;
+
+        function attempt(isRetry) {
+            addToCartViaStoreApi(item, isRetry).then(function (res) {
+                if (res.ok) {
+                    onAddToCartSuccess(item, btnEl, statusEl, res.data);
+                    return;
+                }
+                var code = String((res.data && (res.data.code || res.data.message)) || '').toLowerCase();
+                var isNonceIssue = (res.status === 401 || res.status === 403) && !isRetry;
+                if (isNonceIssue) {
+                    refreshStoreApiNonce().then(function (refreshed) {
+                        if (refreshed) { attempt(true); return; }
+                        onAddToCartFailure(item, btnEl, statusEl, originalLabel, code);
+                    });
+                    return;
+                }
+                onAddToCartFailure(item, btnEl, statusEl, originalLabel, code);
+            }).catch(function () {
+                // Network-level failure (Store API route missing entirely —
+                // old WooCommerce or the API disabled — or genuinely
+                // offline): fall back to the classic link rather than
+                // just showing an error, same posture as build_cart_url's
+                // "zero risk" fallback the task deliberately kept around
+                // for exactly this case.
+                replaceWithClassicLink(item, btnEl);
+            });
+        }
+        attempt(false);
+    }
+
+    function onAddToCartSuccess(item, btnEl, statusEl, cartData) {
+        var count = (cartData && typeof cartData.items_count === 'number') ? cartData.items_count : null;
+        btnEl.hidden = true;
+        statusEl.hidden = false;
+        var countText = count !== null ? CFG.i18n.itemsInCartLabel.replace(':count', count) : '';
+        var viewCartHtml = CFG.cartUrl ? ' <a href="' + esc(CFG.cartUrl) + '" target="_blank" rel="noopener">' + esc(CFG.i18n.viewCartLabel) + '</a>' : '';
+        var checkoutHtml = CFG.checkoutUrl ? ' <a href="' + esc(CFG.checkoutUrl) + '" target="_blank" rel="noopener">' + esc(CFG.i18n.checkoutLabel) + '</a>' : '';
+        statusEl.innerHTML = '✓ ' + esc(countText) + viewCartHtml + checkoutHtml;
+
+        // Real, confirmed outcome — see ChatController::cartEvent() and
+        // tool_calling_service.py's docstring on why this is logged HERE,
+        // never at tool-call time. Fire-and-forget: this must never block
+        // or fail the UI the customer already sees succeed.
+        fetch(H.apiUrl + '/chat/cart-event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chatbot_id: H.chatbotId, conversation_id: convId,
+                product_id: item.product_id, variation_id: item.variation_id || null,
+            }),
+        }).catch(function () { /* best-effort — the real cart add already succeeded regardless */ });
+    }
+
+    function onAddToCartFailure(item, btnEl, statusEl, originalLabel, code) {
+        btnEl.disabled = false;
+        btnEl.textContent = originalLabel;
+        statusEl.hidden = false;
+        var msg;
+        if (code.indexOf('stock') !== -1) {
+            msg = CFG.i18n.outOfStockAddErrorLabel;
+        } else if (code.indexOf('variation') !== -1 || code.indexOf('attribute') !== -1) {
+            msg = CFG.i18n.chooseVariantLabel;
+        } else {
+            msg = CFG.i18n.genericAddErrorLabel;
+        }
+        statusEl.textContent = msg;
+        statusEl.className = 'hm-atc-status hm-atc-error';
+    }
+
+    function replaceWithClassicLink(item, btnEl) {
+        var link = document.createElement('a');
+        link.className = 'hm-cart-link-btn';
+        link.href = classicCartUrl(item.product_id, item.quantity);
+        link.target = '_blank';
+        link.rel = 'noopener';
+        link.textContent = CFG.i18n.addToCartLabel;
+        btnEl.replaceWith(link);
+    }
+
+    // ── create_payment_link (doc-04) ───────────────────────────────────
+    // The tool result is a PREVIEW only — real items/total, but no order
+    // exists yet. This renders that preview plus a real "Confirm & Pay"
+    // button; the actual order (and the real, one-time-use payment URL)
+    // is only ever created inside this button's own click handler, never
+    // automatically. The order_pay_url below is used only to set an
+    // <a href> and is never logged, stored, or referenced again after
+    // that — matching the task's own "never persist the key/URL" rule on
+    // this side of the wire too.
+    function renderPaymentLinkPreview(block) {
+        if (!block.items || !block.items.length || block.total == null) return;
+        var wrap = document.createElement('div');
+        wrap.className = 'hm-payment-preview';
+
+        var itemsHtml = '<ul class="hm-payment-items">' + block.items.map(function (it) {
+            var qtyText = (it.quantity && it.quantity > 1) ? ' × ' + it.quantity : '';
+            return '<li><span>' + esc(it.name || '') + qtyText + '</span><span>' + esc(formatPrice(it.line_total, block.currency)) + '</span></li>';
+        }).join('') + '</ul>';
+        var totalHtml = '<div class="hm-payment-total">' + esc(CFG.i18n.orderTotalLabel) + ': <strong>' + esc(formatPrice(block.total, block.currency)) + '</strong></div>';
+        wrap.innerHTML = itemsHtml + totalHtml;
+
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'hm-payment-confirm-btn';
+        btn.textContent = CFG.i18n.confirmAndPayLabel;
+        var statusEl = document.createElement('div');
+        statusEl.className = 'hm-payment-status';
+        statusEl.hidden = true;
+        btn.addEventListener('click', function () {
+            handleConfirmPaymentClick(block, btn, statusEl);
+        });
+        wrap.appendChild(btn);
+        wrap.appendChild(statusEl);
+
+        msgs.appendChild(wrap);
+    }
+
+    // get_order_status, phase 1. Nothing has been sent or looked up when
+    // this renders — the tool returns intent only. Sending an SMS costs
+    // the merchant money, so it takes a real click, exactly like the
+    // payment-link button below.
+    function renderOrderStatusOtp(block) {
+        if (!block.contact) return;
+        var wrap = document.createElement('div');
+        wrap.className = 'hm-order-status';
+
+        var prompt = document.createElement('div');
+        prompt.className = 'hm-order-status-prompt';
+        prompt.textContent = CFG.i18n.sendCodeToLabel + ' ' + block.contact;
+        wrap.appendChild(prompt);
+
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'hm-order-status-btn';
+        btn.textContent = CFG.i18n.sendCodeLabel;
+        var statusEl = document.createElement('div');
+        statusEl.className = 'hm-order-status-msg';
+        statusEl.hidden = true;
+        btn.addEventListener('click', function () {
+            handleSendOrderStatusCode(block, btn, statusEl, wrap);
+        });
+        wrap.appendChild(btn);
+        wrap.appendChild(statusEl);
+
+        msgs.appendChild(wrap);
+    }
+
+    function setOrderStatusError(statusEl, text) {
+        statusEl.hidden = false;
+        statusEl.className = 'hm-order-status-msg hm-order-status-error';
+        statusEl.textContent = text;
+    }
+
+    // Asks the server to send a code. The server refuses — without
+    // sending anything — unless this number actually appears on an order
+    // at this store, which is the whole reason this cannot be abused as a
+    // free SMS sender. This call carries no trust of its own.
+    function handleSendOrderStatusCode(block, btnEl, statusEl, wrap) {
+        btnEl.disabled = true;
+        btnEl.textContent = CFG.i18n.sendingCodeLabel;
+
+        fetch(H.apiUrl + '/chat/order-status/request-code', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chatbot_id: H.chatbotId,
+                conversation_id: convId,
+                contact: block.contact,
+            }),
+        })
+            .then(function (r) {
+                return r.json().catch(function () { return {}; }).then(function (data) {
+                    return { ok: r.ok, data: data };
+                });
+            })
+            .then(function (res) {
+                var payload = res.ok && res.data && res.data.data;
+                if (payload && payload.sent) {
+                    btnEl.hidden = true;
+                    statusEl.hidden = true;
+                    renderOrderStatusCodeInput(block, wrap);
+                    return;
+                }
+                btnEl.disabled = false;
+                btnEl.textContent = CFG.i18n.sendCodeLabel;
+                // "No orders for that number" is a normal, expected answer,
+                // not a failure — and importantly it means nothing was sent.
+                if (payload && payload.sent === false) {
+                    setOrderStatusError(statusEl, CFG.i18n.noOrdersFoundLabel);
+                } else {
+                    setOrderStatusError(statusEl, CFG.i18n.orderStatusErrorLabel);
+                }
+            })
+            .catch(function () {
+                btnEl.disabled = false;
+                btnEl.textContent = CFG.i18n.sendCodeLabel;
+                setOrderStatusError(statusEl, CFG.i18n.orderStatusErrorLabel);
+            });
+    }
+
+    // The code gets its own field here, deliberately: a code typed into
+    // the chat itself would be sent to the model and stored in message
+    // history. It never leaves this form.
+    function renderOrderStatusCodeInput(block, wrap) {
+        var form = document.createElement('div');
+        form.className = 'hm-order-status-verify';
+
+        var label = document.createElement('div');
+        label.className = 'hm-order-status-prompt';
+        label.textContent = CFG.i18n.enterCodeLabel;
+        form.appendChild(label);
+
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.inputMode = 'numeric';
+        input.autocomplete = 'one-time-code';
+        input.maxLength = 10;
+        input.className = 'hm-order-status-input';
+        form.appendChild(input);
+
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'hm-order-status-btn';
+        btn.textContent = CFG.i18n.verifyCodeLabel;
+        form.appendChild(btn);
+
+        var msg = document.createElement('div');
+        msg.className = 'hm-order-status-msg';
+        msg.hidden = true;
+        form.appendChild(msg);
+
+        btn.addEventListener('click', function () {
+            handleVerifyOrderStatusCode(block, input, btn, msg, form);
+        });
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') btn.click();
+        });
+
+        wrap.appendChild(form);
+        input.focus();
+    }
+
+    function handleVerifyOrderStatusCode(block, inputEl, btnEl, msgEl, form) {
+        var code = (inputEl.value || '').trim();
+        if (!code) return;
+        btnEl.disabled = true;
+        inputEl.disabled = true;
+        btnEl.textContent = CFG.i18n.verifyingCodeLabel;
+
+        fetch(H.apiUrl + '/chat/order-status/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chatbot_id: H.chatbotId,
+                conversation_id: convId,
+                contact: block.contact,
+                code: code,
+            }),
+        })
+            .then(function (r) {
+                return r.json().catch(function () { return {}; }).then(function (data) {
+                    return { ok: r.ok, data: data };
+                });
+            })
+            .then(function (res) {
+                var orders = res.ok && res.data && res.data.data && res.data.data.orders;
+                if (orders) {
+                    form.hidden = true;
+                    renderOrderList(orders, form.parentNode);
+                    return;
+                }
+                btnEl.disabled = false;
+                inputEl.disabled = false;
+                inputEl.value = '';
+                btnEl.textContent = CFG.i18n.verifyCodeLabel;
+                setOrderStatusError(msgEl, CFG.i18n.codeIncorrectLabel);
+            })
+            .catch(function () {
+                btnEl.disabled = false;
+                inputEl.disabled = false;
+                btnEl.textContent = CFG.i18n.verifyCodeLabel;
+                setOrderStatusError(msgEl, CFG.i18n.orderStatusErrorLabel);
+            });
+    }
+
+    // Status, tracking code and item names only — that is everything the
+    // server is willing to send, and the plugin never puts an address or
+    // payment reference on the wire in the first place.
+    function renderOrderList(orders, wrap) {
+        var list = document.createElement('div');
+        list.className = 'hm-order-list';
+        if (!orders.length) {
+            list.textContent = CFG.i18n.noOrdersFoundLabel;
+            wrap.appendChild(list);
+            return;
+        }
+        orders.forEach(function (o) {
+            var card = document.createElement('div');
+            card.className = 'hm-order-card';
+            var head = '<div class="hm-order-head"><span dir="ltr">#' + esc(o.number || '') + '</span>'
+                + '<span class="hm-order-state">' + esc(orderStatusLabel(o.status)) + '</span></div>';
+            var meta = '';
+            if (o.date_created) {
+                meta += '<div class="hm-order-meta"><span dir="ltr">' + esc(o.date_created) + '</span></div>';
+            }
+            if (o.tracking) {
+                meta += '<div class="hm-order-meta">' + esc(CFG.i18n.trackingLabel) + ': <span dir="ltr">' + esc(o.tracking) + '</span></div>';
+            }
+            var items = (o.items && o.items.length)
+                ? '<ul class="hm-order-items">' + o.items.map(function (it) {
+                    var qty = (it.quantity && it.quantity > 1) ? ' × ' + it.quantity : '';
+                    return '<li>' + esc(it.name || '') + qty + '</li>';
+                }).join('') + '</ul>'
+                : '';
+            card.innerHTML = head + meta + items;
+            list.appendChild(card);
+        });
+        wrap.appendChild(list);
+    }
+
+    function orderStatusLabel(status) {
+        var map = CFG.i18n.orderStatuses || {};
+        return map[status] || status || '';
+    }
+
+    // The one function in this file that creates a real WooCommerce
+    // order — reached only from a real 'click' on the button
+    // renderPaymentLinkPreview() built above, never automatically.
+    // ChatController::createPaymentLink() re-checks everything (enabled,
+    // amount cap, per-conversation/per-IP-per-day limits, a fresh live
+    // total) server-side before creating anything; this call carries no
+    // trust of its own beyond "the customer clicked confirm".
+    function handleConfirmPaymentClick(block, btnEl, statusEl) {
+        btnEl.disabled = true;
+        var originalLabel = btnEl.textContent;
+        btnEl.textContent = CFG.i18n.creatingOrderLabel;
+
+        var items = block.items.map(function (it) {
+            var out = { product_id: it.product_id, quantity: it.quantity || 1 };
+            if (it.variation_id) out.variation_id = it.variation_id;
+            return out;
+        });
+        var payload = { chatbot_id: H.chatbotId, conversation_id: convId, items: items };
+        if (block.customer) payload.customer = block.customer;
+
+        fetch(H.apiUrl + '/chat/payment-link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        })
+            .then(function (r) {
+                return r.json().catch(function () { return {}; }).then(function (data) {
+                    return { ok: r.ok, data: data };
+                });
+            })
+            .then(function (res) {
+                var orderPayUrl = res.ok && res.data && res.data.data && res.data.data.order_pay_url;
+                if (orderPayUrl) {
+                    btnEl.hidden = true;
+                    statusEl.hidden = false;
+                    statusEl.className = 'hm-payment-status';
+                    // orderPayUrl lives only in this local variable and this
+                    // one href attribute — never assigned anywhere else,
+                    // never sent to console/localStorage/another request.
+                    statusEl.innerHTML = '';
+                    var payLink = document.createElement('a');
+                    payLink.href = orderPayUrl;
+                    payLink.target = '_blank';
+                    payLink.rel = 'noopener';
+                    payLink.textContent = CFG.i18n.payNowLabel;
+                    statusEl.appendChild(document.createTextNode('✓ '));
+                    statusEl.appendChild(payLink);
+                    return;
+                }
+                btnEl.disabled = false;
+                btnEl.textContent = originalLabel;
+                statusEl.hidden = false;
+                statusEl.className = 'hm-payment-status hm-payment-error';
+                // Never the raw server error string here — this widget
+                // never lets raw (always-English) backend error text reach
+                // a customer mid-conversation in another language; one
+                // translated, generic message covers every failure mode
+                // (not enabled, cap exceeded, rate-limited, out of stock).
+                statusEl.textContent = CFG.i18n.paymentLinkErrorLabel;
+            })
+            .catch(function () {
+                btnEl.disabled = false;
+                btnEl.textContent = originalLabel;
+                statusEl.hidden = false;
+                statusEl.className = 'hm-payment-status hm-payment-error';
+                statusEl.textContent = CFG.i18n.paymentLinkErrorLabel;
+            });
     }
 
     function renderProductCards(products) {

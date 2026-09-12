@@ -29,5 +29,7 @@ return [
     'type_admin_adjustment' => 'Manual Adjustment',
     'type_plan_charge' => 'Purchase Charge',
     'type_refund' => 'Refund',
+    'type_sms_otp' => 'Verification SMS',
+    'sms_otp_description' => 'Order-status verification code for :phone',
     'type_topup' => 'Top-up',
 ];

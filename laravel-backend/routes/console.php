@@ -23,3 +23,10 @@ Schedule::command('hamman:prune-event-payloads')->dailyAt('03:00');
 // instead of an alert per lead/unanswered occurrence — reads the last 24h
 // of conversation_events directly, no separate queue table.
 Schedule::command('hamman:send-notification-digests')->dailyAt('08:00');
+// doc-07's actionable suggestions. Rule-based and free to compute, but it
+// scans a 90-day window of messages/events per chatbot — fine once a
+// night, wrong on every portal page load, so the page reads only the
+// suggestions table this writes. After aggregate-analytics so a merchant
+// opening the portal in the morning sees suggestions consistent with the
+// numbers on the Trends page.
+Schedule::command('hamman:generate-suggestions')->dailyAt('04:00');

@@ -12,7 +12,10 @@ test_grounding_no_fabricated_claims.py.
 """
 import unittest
 
-from app.services.rag_service import _live_pricing_rule, _product_display_rule, _cart_link_rule
+from app.services.rag_service import (
+    _live_pricing_rule, _product_display_rule, _cart_link_rule, _payment_link_rule,
+    _order_status_rule,
+)
 
 
 class LivePricingRuleTest(unittest.TestCase):
@@ -124,6 +127,118 @@ class CartLinkRuleTest(unittest.TestCase):
     def test_language_selection_follows_is_fa_flag(self):
         en_rule = _cart_link_rule(["build_cart_url"], is_fa=False)
         fa_rule = _cart_link_rule(["build_cart_url"], is_fa=True)
+        self.assertNotEqual(en_rule, fa_rule)
+
+    def test_present_when_add_to_cart_enabled(self):
+        rule = _cart_link_rule(["add_to_cart"], is_fa=False)
+        self.assertNotEqual(rule, "")
+
+    def test_add_to_cart_adds_the_variant_selection_clause_english(self):
+        rule = _cart_link_rule(["add_to_cart"], is_fa=False)
+        self.assertIn("never guess a variation_id", rule)
+
+    def test_add_to_cart_adds_the_variant_selection_clause_persian(self):
+        rule = _cart_link_rule(["add_to_cart"], is_fa=True)
+        self.assertIn("variation_id را حدس نزن", rule)
+
+    def test_build_cart_url_alone_has_no_variant_selection_clause(self):
+        # build_cart_url has no variation_id concept at all — the extra
+        # clause is specific to add_to_cart and must not leak in otherwise.
+        rule = _cart_link_rule(["build_cart_url"], is_fa=False)
+        self.assertNotIn("variation_id", rule)
+
+    def test_both_tools_enabled_still_produces_one_combined_rule(self):
+        rule = _cart_link_rule(["build_cart_url", "add_to_cart"], is_fa=False)
+        self.assertIn("never say you've already added it", rule)
+        self.assertIn("never guess a variation_id", rule)
+
+
+class PaymentLinkRuleTest(unittest.TestCase):
+    """create_payment_link creates real money-adjacent state, so this rule
+    guards against two false claims specifically, both worse than a wrong
+    price: claiming an order was CREATED before the customer clicked
+    Confirm, and claiming it was PAID before they ever reached the
+    gateway. See product_tools.create_payment_link / ChatController::
+    createPaymentLink()."""
+
+    def test_absent_when_no_tools_enabled(self):
+        self.assertEqual(_payment_link_rule(None, is_fa=False), "")
+        self.assertEqual(_payment_link_rule([], is_fa=False), "")
+
+    def test_absent_when_payment_link_tool_not_enabled(self):
+        self.assertEqual(_payment_link_rule(["get_product_availability", "add_to_cart"], is_fa=False), "")
+
+    def test_present_when_create_payment_link_enabled(self):
+        rule = _payment_link_rule(["create_payment_link"], is_fa=False)
+        self.assertNotEqual(rule, "")
+
+    def test_english_rule_forbids_claiming_order_already_created(self):
+        rule = _payment_link_rule(["create_payment_link"], is_fa=False)
+        self.assertIn("no order exists until the customer clicks", rule)
+        self.assertIn("never say 'I've placed your order'", rule)
+
+    def test_english_rule_forbids_claiming_payment_already_done(self):
+        rule = _payment_link_rule(["create_payment_link"], is_fa=False)
+        self.assertIn("never say 'your payment went through'", rule)
+        self.assertIn("still has to actually complete payment", rule)
+
+    def test_english_rule_forbids_restating_items_or_total(self):
+        rule = _payment_link_rule(["create_payment_link"], is_fa=False)
+        self.assertIn("do not", rule)
+        self.assertIn("never state any total other than the exact one the tool returned", rule)
+
+    def test_persian_rule_forbids_claiming_order_already_created(self):
+        rule = _payment_link_rule(["create_payment_link"], is_fa=True)
+        self.assertIn("هیچ سفارشی ساخته نشده", rule)
+
+    def test_persian_rule_forbids_claiming_payment_already_done(self):
+        rule = _payment_link_rule(["create_payment_link"], is_fa=True)
+        self.assertIn("پرداخت انجام شد", rule)
+
+    def test_language_selection_follows_is_fa_flag(self):
+        en_rule = _payment_link_rule(["create_payment_link"], is_fa=False)
+        fa_rule = _payment_link_rule(["create_payment_link"], is_fa=True)
+        self.assertNotEqual(en_rule, fa_rule)
+
+
+class OrderStatusRuleTest(unittest.TestCase):
+    """get_order_status returns intent only — no code sent, no order
+    found. The two ways this goes wrong in practice are the model claiming
+    it already did something, and the model asking for the code in chat
+    (which would put a live credential into stored message history)."""
+
+    def test_absent_when_the_tool_is_not_enabled(self):
+        self.assertEqual(_order_status_rule(None, is_fa=False), "")
+        self.assertEqual(_order_status_rule(["create_payment_link"], is_fa=False), "")
+
+    def test_present_when_enabled(self):
+        self.assertNotEqual(_order_status_rule(["get_order_status"], is_fa=False), "")
+
+    def test_english_rule_forbids_claiming_the_code_was_sent(self):
+        rule = _order_status_rule(["get_order_status"], is_fa=False)
+        self.assertIn("sends nothing and finds nothing", rule)
+        self.assertIn("I've sent the code", rule)
+
+    def test_english_rule_forbids_asking_for_the_code_in_chat(self):
+        rule = _order_status_rule(["get_order_status"], is_fa=False)
+        self.assertIn("never ask the customer to type it", rule)
+        self.assertIn("never repeat a code back", rule)
+
+    def test_english_rule_forbids_guessing_a_status(self):
+        rule = _order_status_rule(["get_order_status"], is_fa=False)
+        self.assertIn("never guess a status", rule)
+
+    def test_persian_rule_forbids_claiming_the_code_was_sent(self):
+        rule = _order_status_rule(["get_order_status"], is_fa=True)
+        self.assertIn("کد را فرستادم", rule)
+
+    def test_persian_rule_forbids_asking_for_the_code_in_chat(self):
+        rule = _order_status_rule(["get_order_status"], is_fa=True)
+        self.assertIn("کد را در چت بنویسد", rule)
+
+    def test_language_selection_follows_is_fa_flag(self):
+        en_rule = _order_status_rule(["get_order_status"], is_fa=False)
+        fa_rule = _order_status_rule(["get_order_status"], is_fa=True)
         self.assertNotEqual(en_rule, fa_rule)
 
 

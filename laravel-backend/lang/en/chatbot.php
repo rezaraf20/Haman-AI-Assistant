@@ -6,6 +6,8 @@ return [
     'appearance_saved' => 'Widget appearance saved',
     'authenticity_unknown_message_help' => "Shown when a customer asks whether a product is genuine (or about its brand, official distributor, or warranty) and none of that has been synced for it. Leave empty to use the default. The bot only ever repeats what was actually recorded for a product — it never guesses.",
     'authenticity_unknown_message_label' => 'Authenticity — Not Recorded Message',
+    'max_payment_link_amount_help' => "The create_payment_link tool won't create anything for this chatbot until you set a real amount here — leave it blank to keep payment links off, even if the tool is otherwise enabled. Orders above this total are refused.",
+    'max_payment_link_amount_label' => 'Payment Link — Maximum Order Amount',
     'avatar_url_label' => 'Avatar Image URL',
     'bonus_tokens_desc' => "These are used only after your plan's monthly quota runs out, and never expire.",
     'bonus_tokens_heading' => 'Purchased Bonus Tokens',

@@ -35,6 +35,25 @@ Route::prefix('v1')->group(function () {
             ->middleware(['chatbot.domain', 'throttle:chat-message']);
         Route::post('feedback', [ChatController::class, 'submitFeedback'])
             ->middleware('throttle:chat-message');
+        Route::post('cart-event', [ChatController::class, 'cartEvent'])
+            ->middleware('throttle:chat-message');
+        // create_payment_link (doc-04) — the one endpoint in this group
+        // that creates real money-adjacent state, so it gets the same
+        // origin check as session/message rather than cart-event/feedback's
+        // lighter posture; its own internal security checks (enabled,
+        // amount cap, per-conversation/per-IP-per-day limits) are on top
+        // of this, not instead of it.
+        Route::post('payment-link', [ChatController::class, 'createPaymentLink'])
+            ->middleware(['chatbot.domain', 'throttle:chat-message']);
+        // get_order_status (doc-04) — request-code spends the merchant's
+        // money and verify exposes a customer's orders, so both get the
+        // same origin check as session/message. Their own caps (per
+        // contact/hour, per chatbot/day, per IP/day, 5-minute code, 3
+        // attempts) are on top of this, not instead of it.
+        Route::post('order-status/request-code', [ChatController::class, 'requestOrderStatusCode'])
+            ->middleware(['chatbot.domain', 'throttle:chat-message']);
+        Route::post('order-status/verify', [ChatController::class, 'verifyOrderStatusCode'])
+            ->middleware(['chatbot.domain', 'throttle:chat-message']);
     });
 
     // ── Plugin API (API Key) ───────────────────────────

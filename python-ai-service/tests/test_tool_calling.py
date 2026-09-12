@@ -488,6 +488,60 @@ class WidgetBlockTest(unittest.TestCase):
     def test_build_widget_block_ignores_empty_cart_items(self):
         self.assertIsNone(tool_calling_service._build_widget_block("build_cart_url", {"items": []}))
 
+    def test_build_widget_block_add_to_cart_shape(self):
+        items = [{"product_id": 12, "variation_id": None, "quantity": 1, "name": "Widget"}]
+        block = tool_calling_service._build_widget_block("add_to_cart", {"items": items})
+        self.assertEqual(block, {"type": "add_to_cart", "items": items})
+
+    def test_build_widget_block_ignores_add_to_cart_error_result(self):
+        self.assertIsNone(tool_calling_service._build_widget_block("add_to_cart", {"error": "items must be a non-empty list."}))
+
+    def test_build_widget_block_ignores_empty_add_to_cart_items(self):
+        self.assertIsNone(tool_calling_service._build_widget_block("add_to_cart", {"items": []}))
+
+    def test_build_widget_block_payment_link_preview_shape(self):
+        items = [{"product_id": 12, "name": "Widget", "quantity": 1, "line_total": 90000}]
+        block = tool_calling_service._build_widget_block(
+            "create_payment_link", {"items": items, "total": 90000, "currency": "IRT", "customer": {"name": "Ali"}},
+        )
+        self.assertEqual(block, {
+            "type": "payment_link_preview", "items": items,
+            "total": 90000, "currency": "IRT", "customer": {"name": "Ali"},
+        })
+
+    def test_build_widget_block_payment_link_preview_defaults_currency_and_customer(self):
+        items = [{"product_id": 12, "name": "Widget", "quantity": 1, "line_total": 90000}]
+        block = tool_calling_service._build_widget_block("create_payment_link", {"items": items, "total": 90000})
+        self.assertEqual(block["currency"], "IRT")
+        self.assertIsNone(block["customer"])
+
+    def test_build_widget_block_ignores_payment_link_error_result(self):
+        self.assertIsNone(tool_calling_service._build_widget_block(
+            "create_payment_link", {"error": "live_check_unavailable", "items": []},
+        ))
+
+    def test_build_widget_block_ignores_empty_payment_link_items(self):
+        self.assertIsNone(tool_calling_service._build_widget_block(
+            "create_payment_link", {"items": [], "total": 90000},
+        ))
+
+    def test_build_widget_block_ignores_payment_link_missing_total(self):
+        self.assertIsNone(tool_calling_service._build_widget_block(
+            "create_payment_link", {"items": [{"product_id": 12}], "total": None},
+        ))
+
+    def test_build_widget_block_order_status_shape(self):
+        block = tool_calling_service._build_widget_block("get_order_status", {"contact": "09121234567"})
+        self.assertEqual(block, {"type": "order_status_otp", "contact": "09121234567"})
+
+    def test_build_widget_block_ignores_order_status_error_result(self):
+        self.assertIsNone(tool_calling_service._build_widget_block(
+            "get_order_status", {"error": "That does not look like a valid Iranian mobile number."},
+        ))
+
+    def test_build_widget_block_ignores_order_status_without_a_contact(self):
+        self.assertIsNone(tool_calling_service._build_widget_block("get_order_status", {}))
+
     def test_log_cart_links_logs_one_event_per_item(self):
         with patch("app.services.rag_service._log_event") as mock_log:
             tool_calling_service._log_cart_links(
@@ -606,6 +660,145 @@ class WidgetBlockTest(unittest.TestCase):
         event_types = [c[0][3] for c in mock_log.call_args_list]
         self.assertIn("tool_called", event_types)
         self.assertIn("cart_link_generated", event_types)
+
+    def test_run_tool_calling_pipeline_returns_add_to_cart_intent_and_logs_nothing_but_tool_called(self):
+        """The critical architectural guarantee behind add_to_cart: the
+        tool call itself must NEVER log a cart_add_succeeded (or any other
+        "it happened" event) — nothing has actually happened yet. Only
+        tool_called (which just records the call was made, same as any
+        other tool) is expected here; the real cart_add_succeeded only
+        ever comes from ChatController::cartEvent(), after a genuine
+        browser-side Store API success."""
+        atc_tool = Tool(
+            name="add_to_cart", description="test", access_level="read",
+            parameters={"type": "object", "properties": {"items": {"type": "array"}}, "required": ["items"]},
+            handler=lambda db, chatbot_id, **kw: {
+                "items": [{"product_id": 12, "variation_id": None, "quantity": 1, "name": "Widget"}],
+            },
+        )
+
+        tool_call_message = {
+            "content": None,
+            "tool_calls": [{"id": "call_1", "function": {"name": "add_to_cart", "arguments": '{"items": [{"product_id": 12, "name": "Widget"}]}'}}],
+        }
+        final_message = {"content": "Click below to add it to your cart.", "tool_calls": None}
+        call_sequence = [
+            (tool_call_message, {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}),
+            (final_message, {"prompt_tokens": 20, "completion_tokens": 8, "total_tokens": 28}),
+        ]
+
+        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature):
+            message, usage = call_sequence.pop(0)
+            return message, "groq/test-tool-model", usage, 0.0
+
+        with patch.object(tool_calling_service, "get_enabled_tools", return_value=[atc_tool]), \
+             patch.object(tool_calling_service, "to_openai_schema", return_value=[{"type": "function", "function": {"name": "add_to_cart"}}]), \
+             patch.object(tool_calling_service, "_tool_calling_chat", side_effect=fake_tool_calling_chat), \
+             patch("app.services.rag_service._log_event") as mock_log:
+            result = tool_calling_service.run_tool_calling_pipeline(
+                db=MagicMock(), chatbot_id="chatbot-1", conversation_id="conv-1",
+                query="add that to my cart", history=[], system_prompt_text="system prompt",
+                max_tokens=800, temperature=0.3, enabled_tool_names=["add_to_cart"],
+            )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["widget_blocks"], [{
+            "type": "add_to_cart",
+            "items": [{"product_id": 12, "variation_id": None, "quantity": 1, "name": "Widget"}],
+        }])
+        event_types = [c[0][3] for c in mock_log.call_args_list]
+        self.assertEqual(event_types, ["tool_called"], "add_to_cart must log nothing beyond tool_called — no cart_add_succeeded until a real browser click confirms it.")
+
+    def test_run_tool_calling_pipeline_returns_payment_link_preview_and_logs_nothing_but_tool_called(self):
+        """Same architectural guarantee as add_to_cart, for the actual-money
+        case: the tool call itself is a preview only — no order exists yet,
+        so no payment_link_created (or any other "it happened") event may
+        be logged here. The real event only ever comes from
+        ChatController::createPaymentLink(), after a genuine confirmed
+        click creates a real WooCommerce draft order."""
+        payment_tool = Tool(
+            name="create_payment_link", description="test", access_level="read",
+            parameters={"type": "object", "properties": {"items": {"type": "array"}}, "required": ["items"]},
+            handler=lambda db, chatbot_id, **kw: {
+                "items": [{"product_id": 12, "name": "Widget", "quantity": 1, "line_total": 90000}],
+                "total": 90000, "currency": "IRT", "customer": None,
+            },
+        )
+
+        tool_call_message = {
+            "content": None,
+            "tool_calls": [{"id": "call_1", "function": {"name": "create_payment_link", "arguments": '{"items": [{"product_id": 12}]}'}}],
+        }
+        final_message = {"content": "Here's your order summary — confirm to get a payment link.", "tool_calls": None}
+        call_sequence = [
+            (tool_call_message, {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}),
+            (final_message, {"prompt_tokens": 20, "completion_tokens": 8, "total_tokens": 28}),
+        ]
+
+        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature):
+            message, usage = call_sequence.pop(0)
+            return message, "groq/test-tool-model", usage, 0.0
+
+        with patch.object(tool_calling_service, "get_enabled_tools", return_value=[payment_tool]), \
+             patch.object(tool_calling_service, "to_openai_schema", return_value=[{"type": "function", "function": {"name": "create_payment_link"}}]), \
+             patch.object(tool_calling_service, "_tool_calling_chat", side_effect=fake_tool_calling_chat), \
+             patch("app.services.rag_service._log_event") as mock_log:
+            result = tool_calling_service.run_tool_calling_pipeline(
+                db=MagicMock(), chatbot_id="chatbot-1", conversation_id="conv-1",
+                query="I want to pay for this now", history=[], system_prompt_text="system prompt",
+                max_tokens=800, temperature=0.3, enabled_tool_names=["create_payment_link"],
+            )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["widget_blocks"], [{
+            "type": "payment_link_preview",
+            "items": [{"product_id": 12, "name": "Widget", "quantity": 1, "line_total": 90000}],
+            "total": 90000, "currency": "IRT", "customer": None,
+        }])
+        event_types = [c[0][3] for c in mock_log.call_args_list]
+        self.assertEqual(event_types, ["tool_called"], "create_payment_link must log nothing beyond tool_called — no payment_link_created until a real confirmed click creates the order.")
+
+    def test_run_tool_calling_pipeline_returns_order_status_intent_and_sends_nothing(self):
+        """get_order_status is the case where "intent only" protects the
+        merchant's wallet rather than their stock or their orders: a model
+        that could send an SMS by itself would be a free harassment tool
+        billed to the shop. So the pipeline may produce a button and
+        nothing else — no SMS, no lookup, and no order_status_viewed
+        event, which only ever comes from a verified code."""
+        order_tool = Tool(
+            name="get_order_status", description="test", access_level="read",
+            parameters={"type": "object", "properties": {"contact": {"type": "string"}}, "required": ["contact"]},
+            handler=lambda db, chatbot_id, **kw: {"contact": "09121234567"},
+        )
+
+        tool_call_message = {
+            "content": None,
+            "tool_calls": [{"id": "call_1", "function": {"name": "get_order_status", "arguments": '{"contact": "09121234567"}'}}],
+        }
+        final_message = {"content": "Tap the button and I'll text you a code.", "tool_calls": None}
+        call_sequence = [
+            (tool_call_message, {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}),
+            (final_message, {"prompt_tokens": 20, "completion_tokens": 8, "total_tokens": 28}),
+        ]
+
+        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature):
+            message, usage = call_sequence.pop(0)
+            return message, "groq/test-tool-model", usage, 0.0
+
+        with patch.object(tool_calling_service, "get_enabled_tools", return_value=[order_tool]), \
+             patch.object(tool_calling_service, "to_openai_schema", return_value=[{"type": "function", "function": {"name": "get_order_status"}}]), \
+             patch.object(tool_calling_service, "_tool_calling_chat", side_effect=fake_tool_calling_chat), \
+             patch("app.services.rag_service._log_event") as mock_log:
+            result = tool_calling_service.run_tool_calling_pipeline(
+                db=MagicMock(), chatbot_id="chatbot-1", conversation_id="conv-1",
+                query="where is my order?", history=[], system_prompt_text="system prompt",
+                max_tokens=800, temperature=0.3, enabled_tool_names=["get_order_status"],
+            )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["widget_blocks"], [{"type": "order_status_otp", "contact": "09121234567"}])
+        event_types = [c[0][3] for c in mock_log.call_args_list]
+        self.assertEqual(event_types, ["tool_called"], "get_order_status must log nothing beyond tool_called — order_status_viewed only follows a verified code.")
 
 
 if __name__ == "__main__":

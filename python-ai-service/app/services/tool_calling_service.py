@@ -50,24 +50,56 @@ TOOL_RATE_LIMIT_MAX_PER_MINUTE = 10
 TOOL_RATE_LIMIT_KEY_PREFIX = "hamman:tool_rate_limit:"
 
 # Tools whose successful result must render as an actual widget UI element
-# (product cards / a comparison table / one-click "add to cart" buttons)
+# (product cards / a comparison table / one-click "add to cart" controls)
 # rather than as text the model paraphrases — see hamman-widget.js's
-# renderProductCards()/renderCompareTable()/renderCartLinks(). Every
-# product shown this way also gets a conversation_event (product_mentioned
-# or cart_link_generated — revenue-attribution input, doc-04's acceptance
-# criterion), logged for exactly what actually ended up in the rendered
-# block, never merely fetched/considered.
-_RENDERABLE_TOOLS = {"recommend_products", "compare_products", "build_cart_url"}
+# renderProductCards()/renderCompareTable()/renderCartLinks()/
+# renderAddToCartIntent(). Every product shown this way also gets a
+# conversation_event (product_mentioned or cart_link_generated —
+# revenue-attribution input, doc-04's acceptance criterion), logged for
+# exactly what actually ended up in the rendered block, never merely
+# fetched/considered.
+#
+# add_to_cart and create_payment_link are the exceptions: they log
+# NOTHING here. Both results are pure intent/preview (see their own
+# docstrings in product_tools.py) — nothing has actually happened yet.
+# add_to_cart's real Store API call only fires in the customer's own
+# browser after a click; create_payment_link's real order is only ever
+# created after a click on the widget's "Confirm & Pay" button, via
+# ChatController::createPaymentLink() — a completely separate code path
+# from this tool call, with its own from-scratch security checks. The
+# matching cart_add_succeeded/payment_link_created events are logged
+# separately, only once each real outcome is confirmed — never from
+# these tool calls, which would overcount offers never acted on.
+_RENDERABLE_TOOLS = {"recommend_products", "compare_products", "build_cart_url", "add_to_cart",
+                     "create_payment_link", "get_order_status"}
 
 
 def _build_widget_block(fn_name: str, result: dict) -> Optional[dict]:
     if fn_name not in _RENDERABLE_TOOLS or not isinstance(result, dict):
         return None
-    if fn_name == "build_cart_url":
+    if fn_name in ("build_cart_url", "add_to_cart"):
         if "error" in result:
             return None
         items = result.get("items") or []
-        return {"type": "cart_links", "items": items} if items else None
+        if not items:
+            return None
+        block_type = "cart_links" if fn_name == "build_cart_url" else "add_to_cart"
+        return {"type": block_type, "items": items}
+    if fn_name == "create_payment_link":
+        if "error" in result:
+            return None
+        items = result.get("items") or []
+        if not items or result.get("total") is None:
+            return None
+        return {
+            "type": "payment_link_preview", "items": items,
+            "total": result["total"], "currency": result.get("currency", "IRT"),
+            "customer": result.get("customer"),
+        }
+    if fn_name == "get_order_status":
+        if "error" in result or not result.get("contact"):
+            return None
+        return {"type": "order_status_otp", "contact": result["contact"]}
     if not result.get("live"):
         return None
     products = result.get("products") or []
@@ -306,6 +338,12 @@ def run_tool_calling_pipeline(
                 widget_blocks.append(block)
                 if block["type"] == "cart_links":
                     _log_cart_links(db, conversation_id, chatbot_id, block["items"])
+                elif block["type"] == "add_to_cart":
+                    pass  # intent only — see cartEvent()/cart_add_succeeded for the real outcome
+                elif block["type"] == "payment_link_preview":
+                    pass  # preview only — see createPaymentLink()/payment_link_created for the real outcome
+                elif block["type"] == "order_status_otp":
+                    pass  # intent only — no SMS and no lookup happened yet; see order_status_viewed
                 else:
                     _log_product_mentions(db, conversation_id, chatbot_id, fn_name, block["products"])
             messages.append({

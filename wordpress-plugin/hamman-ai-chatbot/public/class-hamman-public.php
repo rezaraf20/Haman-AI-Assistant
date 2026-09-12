@@ -32,6 +32,37 @@ class Hamman_Public {
     private function build_config(string $chatbot_id): array {
         $api_url = rtrim(get_option('hamman_api_url', HAMMAN_API_BASE), '/');
 
+        // add_to_cart tool (doc-04 "Add to cart") — the widget runs on this
+        // same domain as the shop, so it can call WooCommerce's own Store
+        // API directly with the browser's own cookies, no cart token or
+        // buyer-identity problem at all. The nonce is generated here, at
+        // page-render time, and handed to the widget in this same config —
+        // NonceUtils::create_nonce() is the Store API's own documented way
+        // to do this for a server-rendered page, specifically so a script
+        // like this one never needs an extra round trip just to get one.
+        // Nonces are tied to the current session and expire (hamman-
+        // widget.js refreshes and retries once if this one has gone stale
+        // by the time the customer actually clicks "add to cart").
+        $store_api_nonce = '';
+        $cart_url = '';
+        $checkout_url = '';
+        $store_api_url = '';
+        if ( class_exists( 'WooCommerce' ) ) {
+            if ( class_exists( '\Automattic\WooCommerce\StoreApi\Utilities\NonceUtils' ) ) {
+                $store_api_nonce = \Automattic\WooCommerce\StoreApi\Utilities\NonceUtils::create_nonce();
+            } else {
+                // Older WooCommerce without Blocks/Store API installed —
+                // this nonce action name is what the Store API itself
+                // verifies against, but if the API endpoints below 404
+                // (Store API not registered at all), hamman-widget.js falls
+                // back to the classic ?add-to-cart= link either way.
+                $store_api_nonce = wp_create_nonce( 'wc_store_api' );
+            }
+            $cart_url     = wc_get_cart_url();
+            $checkout_url = wc_get_checkout_url();
+            $store_api_url = rest_url( 'wc/store/v1/' );
+        }
+
         // Content/appearance settings (welcome message, chat title, AI
         // name, quick questions, avatar, color, position) are no longer
         // editable locally at all — the customer portal (WidgetSettings
@@ -73,6 +104,42 @@ class Hamman_Public {
             'viewProductLabel'     => 'مشاهده محصول',
             // build_cart_url tool — see renderCartLinks() in hamman-widget.js.
             'addToCartLabel'       => 'افزودن به سبد خرید',
+            // add_to_cart tool (Store API, same-origin) — see
+            // renderAddToCartIntent()/handleAddToCartClick() in
+            // hamman-widget.js.
+            'addingToCartLabel'    => 'در حال افزودن...',
+            'itemsInCartLabel'     => ':count کالا در سبد شما',
+            'viewCartLabel'        => 'مشاهده سبد خرید',
+            'checkoutLabel'        => 'تسویه‌حساب',
+            'chooseVariantLabel'   => 'لطفاً ابتدا سایز/رنگ مورد نظر را مشخص کنید.',
+            'outOfStockAddErrorLabel' => 'متأسفانه این کالا دیگر موجود نیست.',
+            'genericAddErrorLabel' => 'افزودن به سبد خرید ممکن نشد. لطفاً دوباره تلاش کنید.',
+            // create_payment_link tool — see renderPaymentLinkPreview()/
+            // handleConfirmPaymentClick() in hamman-widget.js.
+            'orderTotalLabel'       => 'مبلغ کل',
+            'confirmAndPayLabel'    => 'تأیید و پرداخت',
+            'creatingOrderLabel'    => 'در حال ساخت سفارش...',
+            'payNowLabel'           => 'پرداخت',
+            'paymentLinkErrorLabel' => 'ساخت لینک پرداخت ممکن نشد. لطفاً دوباره تلاش کنید یا با پشتیبانی تماس بگیرید.',
+            'sendCodeToLabel'       => 'ارسال کد تأیید به',
+            'sendCodeLabel'         => 'ارسال کد',
+            'sendingCodeLabel'      => 'در حال ارسال...',
+            'enterCodeLabel'        => 'کد پیامک‌شده را وارد کنید:',
+            'verifyCodeLabel'       => 'تأیید',
+            'verifyingCodeLabel'    => 'در حال بررسی...',
+            'codeIncorrectLabel'    => 'کد واردشده درست نیست یا منقضی شده. دوباره تلاش کنید.',
+            'noOrdersFoundLabel'    => 'با این شماره سفارشی در این فروشگاه پیدا نشد.',
+            'orderStatusErrorLabel' => 'الان امکان پیگیری سفارش نیست. لطفاً بعداً دوباره تلاش کنید.',
+            'trackingLabel'         => 'کد رهگیری',
+            'orderStatuses'         => [
+                'pending'    => 'در انتظار پرداخت',
+                'processing' => 'در حال پردازش',
+                'on-hold'    => 'در انتظار',
+                'completed'  => 'تحویل‌شده',
+                'cancelled'  => 'لغوشده',
+                'refunded'   => 'بازگشت‌وجه',
+                'failed'     => 'ناموفق',
+            ],
         ] : [
             'dialogLabel'          => 'Chat with AI assistant',
             'closeLabel'           => 'Close chat',
@@ -84,6 +151,37 @@ class Hamman_Public {
             'outOfStockLabel'      => 'Out of stock',
             'viewProductLabel'     => 'View product',
             'addToCartLabel'       => 'Add to cart',
+            'addingToCartLabel'    => 'Adding...',
+            'itemsInCartLabel'     => ':count item(s) in your cart',
+            'viewCartLabel'        => 'View cart',
+            'checkoutLabel'        => 'Checkout',
+            'chooseVariantLabel'   => 'Please choose a size/color first.',
+            'outOfStockAddErrorLabel' => 'Sorry, this item is no longer in stock.',
+            'genericAddErrorLabel' => "Couldn't add this to your cart. Please try again.",
+            'orderTotalLabel'       => 'Total',
+            'confirmAndPayLabel'    => 'Confirm & Pay',
+            'creatingOrderLabel'    => 'Creating order...',
+            'payNowLabel'           => 'Pay now',
+            'paymentLinkErrorLabel' => "Couldn't create a payment link. Please try again or contact support.",
+            'sendCodeToLabel'       => 'Send a verification code to',
+            'sendCodeLabel'         => 'Send code',
+            'sendingCodeLabel'      => 'Sending...',
+            'enterCodeLabel'        => 'Enter the code we texted you:',
+            'verifyCodeLabel'       => 'Verify',
+            'verifyingCodeLabel'    => 'Checking...',
+            'codeIncorrectLabel'    => 'That code is incorrect or has expired. Please try again.',
+            'noOrdersFoundLabel'    => 'No orders were found for that number at this store.',
+            'orderStatusErrorLabel' => "Order tracking isn't available right now. Please try again later.",
+            'trackingLabel'         => 'Tracking code',
+            'orderStatuses'         => [
+                'pending'    => 'Awaiting payment',
+                'processing' => 'Processing',
+                'on-hold'    => 'On hold',
+                'completed'  => 'Completed',
+                'cancelled'  => 'Cancelled',
+                'refunded'   => 'Refunded',
+                'failed'     => 'Failed',
+            ],
         ];
 
         return [
@@ -111,6 +209,10 @@ class Hamman_Public {
             'poweredByName'    => 'HamanTech',
             'poweredByUrl'     => 'https://hamantech.ir',
             'i18n' => $i18n,
+            'storeApiNonce' => $store_api_nonce,
+            'storeApiUrl'   => $store_api_url,
+            'cartUrl'       => $cart_url,
+            'checkoutUrl'   => $checkout_url,
         ];
     }
 }

@@ -87,12 +87,13 @@ class Wallet extends Page implements HasForms, HasTable {
                 TextColumn::make('created_at')->label(__('wallet.date'))->formatStateUsing(fn ($state) => Jalali::dateTime($state)),
                 BadgeColumn::make('type')->label(__('wallet.type'))->colors([
                     'success' => 'topup',
-                    'danger'  => 'plan_charge',
+                    'danger'  => ['plan_charge', 'sms_otp'],
                     'warning' => 'admin_adjustment',
                     'gray'    => 'refund',
                 ])->formatStateUsing(fn (string $state) => match ($state) {
                     'topup' => __('wallet.type_topup'), 'plan_charge' => __('wallet.type_plan_charge'),
                     'admin_adjustment' => __('wallet.type_admin_adjustment'), 'refund' => __('wallet.type_refund'),
+                    'sms_otp' => __('wallet.type_sms_otp'),
                     default => $state,
                 }),
                 TextColumn::make('amount_toman')->label(__('wallet.amount_toman_col'))

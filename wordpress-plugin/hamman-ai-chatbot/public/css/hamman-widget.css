@@ -350,6 +350,246 @@
     opacity: .9;
 }
 
+/* ── Inline add-to-cart (add_to_cart, Store API) ────────────────────── */
+/* Same-origin Store API calls happen only from inside .hm-atc-btn's own
+ * click handler (see handleAddToCartClick() in hamman-widget.js) — never
+ * automatically. .hm-atc-status starts hidden and is only ever revealed
+ * after a real response (success or error) to that click. */
+.hm-atc-items {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-self: stretch;
+}
+
+.hm-atc-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 10px;
+    padding: 8px 10px;
+}
+
+.hm-atc-name {
+    font-size: 13px;
+    color: #0F172A;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.hm-atc-btn {
+    background: var(--hm-primary);
+    color: var(--hm-primary-contrast);
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    min-height: 36px;
+    flex-shrink: 0;
+}
+
+.hm-atc-btn:disabled {
+    opacity: .6;
+    cursor: default;
+}
+
+.hm-atc-status {
+    font-size: 12px;
+    color: #166534;
+}
+
+.hm-atc-status a {
+    color: var(--hm-primary);
+    text-decoration: underline;
+    margin-inline-start: 6px;
+}
+
+.hm-atc-status.hm-atc-error {
+    color: #991B1B;
+}
+
+/* ── Payment link preview (create_payment_link) ─────────────────────── */
+/* The real WooCommerce order is only ever created from .hm-payment-
+ * confirm-btn's own click handler (handleConfirmPaymentClick() in
+ * hamman-widget.js) — never automatically when this card renders. */
+.hm-payment-preview {
+    align-self: stretch;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.hm-payment-items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.hm-payment-items li {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 12.5px;
+    color: #0F172A;
+}
+
+.hm-payment-total {
+    font-size: 13px;
+    color: #0F172A;
+    border-top: 1px dashed #E2E8F0;
+    padding-top: 6px;
+}
+
+.hm-payment-confirm-btn {
+    align-self: flex-start;
+    background: var(--hm-primary);
+    color: var(--hm-primary-contrast);
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    min-height: 36px;
+}
+
+.hm-payment-confirm-btn:disabled {
+    opacity: .6;
+    cursor: default;
+}
+
+.hm-payment-status {
+    font-size: 12px;
+    color: #166534;
+}
+
+.hm-payment-status a {
+    color: var(--hm-primary);
+    font-weight: 600;
+    text-decoration: underline;
+}
+
+.hm-payment-status.hm-payment-error {
+    color: #991B1B;
+}
+
+/* get_order_status: the send-code confirm, the code field, and the
+   status/tracking/items list shown once the code is verified. */
+.hm-order-status,
+.hm-order-list {
+    align-self: stretch;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.hm-order-status-prompt {
+    font-size: 13px;
+    color: #334155;
+}
+
+.hm-order-status-btn {
+    align-self: flex-start;
+    background: var(--hm-primary);
+    color: var(--hm-primary-contrast);
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    min-height: 36px;
+}
+
+.hm-order-status-btn:disabled {
+    opacity: .6;
+    cursor: default;
+}
+
+.hm-order-status-verify {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.hm-order-status-input {
+    align-self: flex-start;
+    width: 140px;
+    padding: 8px 10px;
+    font-size: 15px;
+    letter-spacing: 2px;
+    text-align: center;
+    border: 1px solid #CBD5E1;
+    border-radius: 8px;
+    direction: ltr;
+}
+
+.hm-order-status-msg {
+    font-size: 12px;
+    color: #166534;
+}
+
+.hm-order-status-msg.hm-order-status-error {
+    color: #991B1B;
+}
+
+.hm-order-card {
+    border-bottom: 1px dashed #E2E8F0;
+    padding-bottom: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.hm-order-card:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.hm-order-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #0F172A;
+}
+
+.hm-order-state {
+    font-weight: 500;
+    color: var(--hm-primary);
+}
+
+.hm-order-meta {
+    font-size: 12px;
+    color: #64748B;
+}
+
+.hm-order-items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: 12px;
+    color: #334155;
+}
+
 /* Typing indicator: three animated dots shown while waiting for a response. */
 .hm-typing {
     align-self: flex-start;

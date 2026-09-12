@@ -62,6 +62,7 @@ class WidgetSettings extends Page implements HasForms {
             'system_instruction' => $config['system_instruction'],
             'quick_questions'    => $config['quick_questions'],
             'authenticity_unknown_message' => $bot?->authenticity_unknown_message ?? '',
+            'max_payment_link_amount' => $bot?->max_payment_link_amount,
         ]);
     }
 
@@ -103,6 +104,11 @@ class WidgetSettings extends Page implements HasForms {
                 ->label(__('chatbot.authenticity_unknown_message_label'))
                 ->helperText(__('chatbot.authenticity_unknown_message_help'))
                 ->rows(3)->maxLength(2000),
+            TextInput::make('max_payment_link_amount')
+                ->label(__('chatbot.max_payment_link_amount_label'))
+                ->helperText(__('chatbot.max_payment_link_amount_help'))
+                ->numeric()->minValue(0)->maxValue(999999999999)
+                ->nullable(),
             Repeater::make('quick_questions')
                 ->label(__('chatbot.quick_questions_label'))
                 ->schema([
@@ -126,6 +132,11 @@ class WidgetSettings extends Page implements HasForms {
                 'welcome_message' => $data['welcome_message'] ?: null,
                 'system_prompt'   => $data['system_instruction'] ?: null,
                 'authenticity_unknown_message' => $data['authenticity_unknown_message'] ?: null,
+                // create_payment_link (doc-04) — NULL (left blank) means
+                // the feature stays inert even if the tool is otherwise
+                // enabled; see ChatController::createPaymentLink().
+                'max_payment_link_amount' => $data['max_payment_link_amount'] !== '' && $data['max_payment_link_amount'] !== null
+                    ? (float) $data['max_payment_link_amount'] : null,
                 'widget_config'   => array_merge($bot->widget_config ?? [], [
                     'chat_title'         => $data['chat_title'],
                     'ai_name'            => $data['ai_name'],
