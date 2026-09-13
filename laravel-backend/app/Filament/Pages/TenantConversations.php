@@ -3,7 +3,7 @@ namespace App\Filament\Pages;
 
 use App\Models\Tenant;
 use App\Support\PlatformAccess;
-use App\Support\PlatformAudit;
+use App\Support\PlatformActivity;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\DB;
 
@@ -58,10 +58,10 @@ class TenantConversations extends Page
     /** Nothing is read until a reason has been given. */
     public function setReason(string $reason): void
     {
-        if (!in_array($reason, PlatformAudit::REASONS, true)) return;
+        if (!in_array($reason, PlatformActivity::REASONS, true)) return;
         $this->reason = $reason;
 
-        PlatformAudit::record(
+        PlatformActivity::record(
             'conversation_list_opened',
             tenantId: $this->tenantId,
             subjectType: 'tenant',
@@ -75,7 +75,7 @@ class TenantConversations extends Page
         if (!$this->reason) return;
         $this->conversationId = $conversationId;
 
-        PlatformAudit::record(
+        PlatformActivity::record(
             'conversation_viewed',
             tenantId: $this->tenantId,
             subjectType: 'conversation',
@@ -92,7 +92,7 @@ class TenantConversations extends Page
             $this->revealed[] = $conversationId;
         }
 
-        PlatformAudit::record(
+        PlatformActivity::record(
             'contact_revealed',
             tenantId: $this->tenantId,
             subjectType: 'conversation',
@@ -179,7 +179,7 @@ class TenantConversations extends Page
         // be partly eaten by the phone pattern.
         $text = preg_replace_callback(
             '/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/',
-            fn ($m) => PlatformAudit::mask($m[0]),
+            fn ($m) => PlatformActivity::mask($m[0]),
             $text
         ) ?? $text;
 
@@ -187,7 +187,7 @@ class TenantConversations extends Page
         // plus loose international.
         $text = preg_replace_callback(
             '/(?:\+98|0098|0)?9\d{9}|\+[1-9]\d{7,14}/',
-            fn ($m) => PlatformAudit::mask($m[0]),
+            fn ($m) => PlatformActivity::mask($m[0]),
             $text
         ) ?? $text;
 

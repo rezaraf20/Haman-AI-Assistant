@@ -5,7 +5,7 @@ use Tests\TestCase;
 use App\Models\{Tenant, Plan, User};
 use App\Filament\Pages\TenantConversations;
 use App\Services\TenantService;
-use App\Support\{PlatformAccess, PlatformAudit};
+use App\Support\{PlatformAccess, PlatformActivity};
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -334,7 +334,7 @@ class PlatformRoleAccessTest extends TestCase
         $page->setReason('ticket_review');
         $page->openConversation('11111111-1111-4111-8111-111111111111');
 
-        $row = DB::table('platform_audit_log')->where('action', 'conversation_viewed')->first();
+        $row = DB::table('platform_activity_log')->where('action', 'conversation_viewed')->first();
 
         $this->assertNotNull($row);
         $this->assertEquals('ticket_review', $row->reason);
@@ -354,7 +354,7 @@ class PlatformRoleAccessTest extends TestCase
 
         $this->assertSame([], $page->getConversations());
         $this->assertSame([], $page->getTranscript());
-        $this->assertEquals(0, DB::table('platform_audit_log')->count());
+        $this->assertEquals(0, DB::table('platform_activity_log')->count());
     }
 
     public function test_an_invented_reason_is_refused(): void
@@ -366,7 +366,7 @@ class PlatformRoleAccessTest extends TestCase
         $page->setReason('because_i_felt_like_it');
 
         $this->assertNull($page->reason);
-        $this->assertEquals(0, DB::table('platform_audit_log')->count());
+        $this->assertEquals(0, DB::table('platform_activity_log')->count());
     }
 
     public function test_revealing_contacts_is_recorded_as_its_own_event(): void
@@ -381,7 +381,7 @@ class PlatformRoleAccessTest extends TestCase
         $page->reveal('22222222-2222-4222-8222-222222222222');
 
         $this->assertTrue($page->isRevealed('22222222-2222-4222-8222-222222222222'));
-        $this->assertEquals(1, DB::table('platform_audit_log')->where('action', 'contact_revealed')->count());
+        $this->assertEquals(1, DB::table('platform_activity_log')->where('action', 'contact_revealed')->count());
     }
 
     // ── Settings changes are recorded with before and after ─────────────
@@ -391,29 +391,32 @@ class PlatformRoleAccessTest extends TestCase
         $support = $this->user([], 'support');
         $this->actingAs($support, 'web');
 
-        PlatformAudit::record(
-            'widget_settings_changed',
+        $diff = PlatformActivity::diff(['name' => 'Old'], ['name' => 'New']);
+        PlatformActivity::record(
+            'chatbot_settings_changed',
             subjectType: 'chatbot',
             subjectId: 'abc',
-            changes: PlatformAudit::diff(['name' => 'Old'], ['name' => 'New']),
+            before: $diff[0],
+            after: $diff[1],
         );
 
-        $row = DB::table('platform_audit_log')->where('action', 'widget_settings_changed')->first();
-        $changes = json_decode($row->changes, true);
+        $row = DB::table('platform_activity_log')->where('action', 'chatbot_settings_changed')->first();
 
-        $this->assertEquals('Old', $changes['name']['before']);
-        $this->assertEquals('New', $changes['name']['after']);
+        $this->assertEquals('Old', json_decode($row->before, true)['name']);
+        $this->assertEquals('New', json_decode($row->after, true)['name']);
         $this->assertEquals('support', $row->platform_role);
     }
 
     public function test_the_diff_only_carries_fields_that_actually_changed(): void
     {
-        $changes = PlatformAudit::diff(
+        [$before, $after] = PlatformActivity::diff(
             ['a' => 1, 'b' => 'same'],
             ['a' => 2, 'b' => 'same'],
         );
 
-        $this->assertArrayHasKey('a', $changes);
-        $this->assertArrayNotHasKey('b', $changes, 'An unchanged field would bury the one that matters.');
+        $this->assertArrayHasKey('a', $after);
+        $this->assertArrayNotHasKey('b', $after, 'An unchanged field would bury the one that matters.');
+        $this->assertEquals(1, $before['a']);
+        $this->assertEquals(2, $after['a']);
     }
 }

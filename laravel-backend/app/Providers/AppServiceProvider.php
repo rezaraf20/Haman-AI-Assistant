@@ -6,6 +6,9 @@ use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Auth\Events\{Failed, Login, Logout};
+use App\Listeners\RecordPlatformAuthActivity;
 
 class AppServiceProvider extends ServiceProvider {
     public function register(): void {}
@@ -26,5 +29,12 @@ class AppServiceProvider extends ServiceProvider {
         RateLimiter::for('chat-message', function (Request $request) {
             return Limit::perMinute(30)->by($request->ip() . ':' . ($request->input('chatbot_id') ?? 'unknown'));
         });
+
+        // Platform staff sign-ins, sign-outs and failed attempts. Bound to
+        // the guard's events rather than to a login screen, so every way
+        // into the panel is covered by one listener.
+        Event::listen(Login::class,  [RecordPlatformAuthActivity::class, 'onLogin']);
+        Event::listen(Logout::class, [RecordPlatformAuthActivity::class, 'onLogout']);
+        Event::listen(Failed::class, [RecordPlatformAuthActivity::class, 'onFailed']);
     }
 }

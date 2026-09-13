@@ -2,7 +2,7 @@
 namespace App\Filament\Resources\PlatformUserResource\Pages;
 
 use App\Filament\Resources\PlatformUserResource;
-use App\Support\PlatformAudit;
+use App\Support\PlatformActivity;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Database\Eloquent\Model;
 
@@ -40,10 +40,15 @@ class EditPlatformUser extends EditRecord {
             'platform_role'      => $record->platform_role,
             'platform_is_active' => (bool) $record->platform_is_active,
         ];
-        $changes = PlatformAudit::diff($before, $after);
-        if ($changes) {
-            PlatformAudit::record('staff_updated', subjectType: 'user',
-                subjectId: (string) $record->id, changes: $changes);
+        $diff = PlatformActivity::diff($before, $after);
+        if (!PlatformActivity::isEmptyDiff($diff)) {
+            PlatformActivity::record(
+                'staff_updated',
+                subjectType: 'user',
+                subjectId: (string) $record->id,
+                before: $diff[0],
+                after: $diff[1],
+            );
         }
 
         return $record;

@@ -41,6 +41,10 @@ class PlatformAccess
         'pricing',
         // Other platform users, and what they did.
         'platform_users',
+        // The activity log. Support must not read it: an operator who can
+        // see exactly what is and isn't recorded about them is being handed
+        // the map to the gaps, and reviewing staff is an admin's job.
+        'activity_log',
         // Destructive tenant operations: delete, change plan.
         'tenant_lifecycle',
     ];

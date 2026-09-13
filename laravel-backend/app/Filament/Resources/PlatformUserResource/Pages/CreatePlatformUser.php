@@ -3,7 +3,7 @@ namespace App\Filament\Resources\PlatformUserResource\Pages;
 
 use App\Filament\Resources\PlatformUserResource;
 use App\Models\User;
-use App\Support\PlatformAudit;
+use App\Support\PlatformActivity;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Hash;
@@ -48,8 +48,17 @@ class CreatePlatformUser extends CreateRecord {
         $user->platform_display_id = $data['platform_display_id'] ?? null;
         $user->save();
 
-        PlatformAudit::record('staff_created', subjectType: 'user', subjectId: (string) $user->id,
-            changes: ['platform_role' => ['before' => null, 'after' => $user->platform_role]]);
+        PlatformActivity::record(
+            'staff_created',
+            subjectType: 'user',
+            subjectId: (string) $user->id,
+            before: [],
+            after: [
+                'email'              => $user->email,
+                'platform_role'      => $user->platform_role,
+                'platform_is_active' => (bool) $user->platform_is_active,
+            ],
+        );
 
         return $user;
     }

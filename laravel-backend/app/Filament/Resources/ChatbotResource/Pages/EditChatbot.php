@@ -3,7 +3,7 @@ namespace App\Filament\Resources\ChatbotResource\Pages;
 
 use App\Filament\Resources\ChatbotResource;
 use App\Models\Tenant\Chatbot;
-use App\Support\PlatformAudit;
+use App\Support\PlatformActivity;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -45,14 +45,15 @@ class EditChatbot extends EditRecord {
 
         $updated = parent::handleRecordUpdate($record, $data);
 
-        $changes = PlatformAudit::diff($before, array_intersect_key($data, $before ?: $data));
-        if ($changes) {
-            PlatformAudit::record(
-                'widget_settings_changed',
+        $diff = PlatformActivity::diff($before, array_intersect_key($data, $before ?: $data));
+        if (!PlatformActivity::isEmptyDiff($diff)) {
+            PlatformActivity::record(
+                'chatbot_settings_changed',
                 tenantId: (string) $record->tenant_id,
                 subjectType: 'chatbot',
                 subjectId: (string) $record->chatbot_id,
-                changes: $changes,
+                before: $diff[0],
+                after: $diff[1],
             );
         }
 

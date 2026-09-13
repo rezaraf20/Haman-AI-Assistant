@@ -4,6 +4,7 @@ namespace App\Filament\Resources\TicketResource\Pages;
 use App\Filament\Resources\TicketResource;
 use App\Models\TicketMessage;
 use App\Support\PlatformAccess;
+use App\Support\PlatformActivity;
 use Filament\Resources\Pages\Page;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Forms\Form;
@@ -50,18 +51,44 @@ class ManageTicket extends Page implements HasForms {
     public function submitReply(): void {
         PlatformAccess::authorize('tickets');
         $state = $this->form->getState();
+        $statusBefore = $this->record->status;
+        $tenantId = $this->record->tenant_id ? (string) $this->record->tenant_id : null;
 
         if (filled($state['reply'] ?? null)) {
-            TicketMessage::create([
+            $message = TicketMessage::create([
                 'ticket_id'   => $this->record->id,
                 'sender_type' => 'admin',
                 'sender_id'   => auth()->id(),
                 'body'        => $state['reply'],
             ]);
+
+            // The reply body is not copied into the log. It is already
+            // stored on the ticket, and duplicating customer-written text
+            // into a table that outlives the ticket serves nothing. What
+            // is recorded is who replied, to which ticket, and when.
+            PlatformActivity::record(
+                'ticket_replied',
+                tenantId: $tenantId,
+                subjectType: 'ticket',
+                subjectId: (string) $this->record->id,
+                after: ['message_id' => (string) $message->id, 'length' => mb_strlen($state['reply'])],
+            );
         }
 
         $this->record->update(['status' => $state['status']]);
         $this->record->touch();
+
+        if ($statusBefore !== $state['status']) {
+            PlatformActivity::record(
+                'ticket_status_changed',
+                tenantId: $tenantId,
+                subjectType: 'ticket',
+                subjectId: (string) $this->record->id,
+                before: ['status' => $statusBefore],
+                after: ['status' => $state['status']],
+            );
+        }
+
         $this->form->fill(['status' => $state['status'], 'reply' => '']);
 
         Notification::make()->title(__('common.saved'))->success()->send();

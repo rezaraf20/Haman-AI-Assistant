@@ -4,13 +4,15 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\PlatformUserResource\Pages;
 use App\Models\User;
 use App\Support\PlatformAccess;
-use App\Support\PlatformAudit;
-use Filament\Forms\Components\{DatePicker, Section, Select, TextInput, Toggle};
+use App\Support\PlatformActivity;
+use Filament\Forms\Components\{DatePicker, Placeholder, Section, Select, TextInput, Toggle};
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use App\Support\Jalali;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Platform staff accounts — support agents and admins.
@@ -53,6 +55,33 @@ class PlatformUserResource extends Resource
         return parent::getEloquentQuery()->whereNotNull('platform_role');
     }
 
+    /** Memoised: three Placeholders on one form would otherwise ask thrice. */
+    private static array $summaryCache = [];
+
+    /**
+     * One query, three numbers. Postgres FILTER keeps it to a single scan
+     * of this operator's rows rather than three round trips.
+     */
+    public static function activitySummary(User $user): array
+    {
+        if (isset(self::$summaryCache[$user->id])) return self::$summaryCache[$user->id];
+
+        $since = now()->subDays(30);
+
+        $row = DB::table('platform_activity_log')
+            ->where('user_id', $user->id)
+            ->selectRaw("MAX(created_at) FILTER (WHERE action = 'login') AS last_login")
+            ->selectRaw("COUNT(*) FILTER (WHERE action = 'ticket_replied' AND created_at >= ?) AS tickets", [$since])
+            ->selectRaw("COUNT(*) FILTER (WHERE action = 'conversation_viewed' AND created_at >= ?) AS conversations", [$since])
+            ->first();
+
+        return self::$summaryCache[$user->id] = [
+            'last_login'    => $row->last_login ?? null,
+            'tickets'       => (int) ($row->tickets ?? 0),
+            'conversations' => (int) ($row->conversations ?? 0),
+        ];
+    }
+
     public static function form(Form $form): Form
     {
         return $form->schema([
@@ -71,6 +100,28 @@ class PlatformUserResource extends Resource
                     ->unique(ignoreRecord: true),
                 TextInput::make('phone')->label(__('panel.mobile_number'))->tel()->maxLength(30),
             ])->columns(2),
+
+            // Read from the activity log rather than kept as counters on
+            // the user row: the log is the record of what happened, and a
+            // second copy of the same fact is a second thing to get wrong.
+            Section::make(__('activity_log.summary_title'))
+                ->description(__('activity_log.summary_help'))
+                ->visibleOn('edit')
+                ->schema([
+                    Placeholder::make('summary_last_login')
+                        ->label(__('activity_log.summary_last_login'))
+                        ->content(fn (?User $record) => $record
+                            ? (static::activitySummary($record)['last_login']
+                                ? Jalali::dateTime(static::activitySummary($record)['last_login'])
+                                : __('activity_log.summary_never'))
+                            : '—'),
+                    Placeholder::make('summary_tickets')
+                        ->label(__('activity_log.summary_tickets_this_month'))
+                        ->content(fn (?User $record) => $record ? static::activitySummary($record)['tickets'] : '—'),
+                    Placeholder::make('summary_conversations')
+                        ->label(__('activity_log.summary_conversations_opened'))
+                        ->content(fn (?User $record) => $record ? static::activitySummary($record)['conversations'] : '—'),
+                ])->columns(3),
 
             Section::make(__('platform_users.section_role'))->schema([
                 Select::make('platform_role')
@@ -127,7 +178,7 @@ class PlatformUserResource extends Resource
                             $record->tokens()->delete();
                         }
 
-                        PlatformAudit::record(
+                        PlatformActivity::record(
                             $record->platform_is_active ? 'staff_activated' : 'staff_deactivated',
                             subjectType: 'user',
                             subjectId: (string) $record->id,

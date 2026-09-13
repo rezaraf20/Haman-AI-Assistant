@@ -15,7 +15,8 @@ use Filament\Tables\Columns\{TextColumn, BadgeColumn, IconColumn};
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Actions\Action;
 use Filament\Notifications\Notification;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\{DB, Cache};
+use App\Support\PlatformActivity;
 use App\Support\Jalali;
 use App\Support\Money;
 use App\Filament\Pages\TenantConversations;
@@ -167,6 +168,67 @@ class TenantResource extends Resource {
                     ->color('gray')
                     ->visible(fn () => PlatformAccess::allows('conversations'))
                     ->url(fn (Tenant $record) => TenantConversations::getUrl(['tenant' => $record->id])),
+                // Two things support is genuinely asked to do, and which
+                // need no sight of any secret value to do. Both are gated
+                // on their own capability and both write to the activity
+                // log — a rotation in particular is invisible afterwards
+                // unless it was recorded when it happened.
+                Action::make('clearCache')
+                    ->label(__('panel.clear_cache'))
+                    ->icon('heroicon-o-arrow-path')
+                    ->color('gray')
+                    ->visible(fn () => PlatformAccess::allows('sync_operate'))
+                    ->requiresConfirmation()
+                    ->modalDescription(__('panel.clear_cache_description'))
+                    ->action(function (Tenant $record) {
+                        PlatformAccess::authorize('sync_operate');
+                        $cleared = static::clearTenantCaches($record);
+
+                        PlatformActivity::record(
+                            'cache_cleared',
+                            tenantId: (string) $record->id,
+                            subjectType: 'tenant',
+                            subjectId: (string) $record->id,
+                            after: ['keys_cleared' => $cleared],
+                        );
+
+                        Notification::make()->title(__('panel.clear_cache_done'))->success()->send();
+                    }),
+
+                Action::make('rotateWebhookSecret')
+                    ->label(__('panel.rotate_webhook_secret'))
+                    ->icon('heroicon-o-key')
+                    ->color('warning')
+                    ->visible(fn () => PlatformAccess::allows('webhook_secret_rotate'))
+                    ->requiresConfirmation()
+                    ->modalDescription(__('panel.rotate_webhook_secret_description'))
+                    ->action(function (Tenant $record) {
+                        PlatformAccess::authorize('webhook_secret_rotate');
+
+                        // Neither the old nor the new value is shown to the
+                        // operator or written to the log. Only the fact that
+                        // it changed, and when, which is all a reviewer
+                        // needs and all support is entitled to.
+                        $record->update([
+                            'settings' => array_merge($record->settings ?? [], [
+                                'webhook_secret' => \Illuminate\Support\Str::random(32),
+                            ]),
+                        ]);
+
+                        PlatformActivity::record(
+                            'webhook_secret_rotated',
+                            tenantId: (string) $record->id,
+                            subjectType: 'tenant',
+                            subjectId: (string) $record->id,
+                            after: ['rotated' => true],
+                        );
+
+                        Notification::make()
+                            ->title(__('panel.rotate_webhook_secret_done'))
+                            ->body(__('panel.rotate_webhook_secret_done_body'))
+                            ->success()->send();
+                    }),
+
                 Action::make('delete')
                     ->label(__('common.delete'))
                     ->icon('heroicon-o-trash')
@@ -198,6 +260,28 @@ class TenantResource extends Resource {
                     }),
             ])
             ->defaultSort('created_at', 'desc');
+    }
+
+    /**
+     * Drops the cached report and dashboard data derived from this tenant's
+     * own rows. Deliberately narrow: it clears what a stale-numbers
+     * complaint is actually about, and touches no other tenant.
+     */
+    public static function clearTenantCaches(Tenant $tenant): int
+    {
+        $schema = $tenant->schema_name;
+        $today  = now()->toDateString();
+
+        $keys = ["customer:dashboard:{$tenant->id}", "suggestions:badge:{$tenant->id}"];
+        foreach (['30d', '3m', '6m', '1y'] as $range) {
+            $keys[] = "trends:{$schema}:{$range}:{$today}";
+        }
+
+        $cleared = 0;
+        foreach ($keys as $key) {
+            if (Cache::forget($key)) $cleared++;
+        }
+        return $cleared;
     }
 
     public static function getPages(): array {

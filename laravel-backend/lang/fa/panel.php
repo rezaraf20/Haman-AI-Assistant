@@ -114,4 +114,11 @@ return [
     'plugin_key_issued' => 'کلید افزونه',
     'plugin_last_contact' => 'آخرین ارتباط افزونه',
     'plugin_never_contacted' => 'هرگز متصل نشده',
+    'clear_cache' => 'پاک کردن کش',
+    'clear_cache_description' => 'گزارش‌ها و داشبورد این مشتری دوباره از پایگاه داده ساخته می‌شوند. روی مشتری دیگری اثر ندارد.',
+    'clear_cache_done' => 'کش پاک شد.',
+    'rotate_webhook_secret' => 'تولید مجدد secret',
+    'rotate_webhook_secret_description' => 'secret فعلی از کار می‌افتد و افزونه تا وارد کردن مقدار تازه کار نمی‌کند. مقدار قدیم و جدید به شما نمایش داده نمی‌شود.',
+    'rotate_webhook_secret_done' => 'secret تازه ساخته شد.',
+    'rotate_webhook_secret_done_body' => 'مشتری باید مقدار تازه را از پنل خودش بردارد و در افزونه بگذارد.',
 ];

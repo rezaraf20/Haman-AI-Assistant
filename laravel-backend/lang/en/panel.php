@@ -111,4 +111,11 @@ return [
     'plugin_key_issued' => 'Plugin key',
     'plugin_last_contact' => 'Plugin last contact',
     'plugin_never_contacted' => 'Never connected',
+    'clear_cache' => 'Clear cache',
+    'clear_cache_description' => "This customer's reports and dashboard will be rebuilt from the database. No other customer is affected.",
+    'clear_cache_done' => 'Cache cleared.',
+    'rotate_webhook_secret' => 'Regenerate secret',
+    'rotate_webhook_secret_description' => 'The current secret stops working and the plugin will fail until the new value is entered. Neither the old nor the new value is shown to you.',
+    'rotate_webhook_secret_done' => 'A new secret was generated.',
+    'rotate_webhook_secret_done_body' => 'The customer must copy the new value from their own panel into the plugin.',
 ];
