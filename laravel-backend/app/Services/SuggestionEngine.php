@@ -228,9 +228,16 @@ class SuggestionEngine
      */
     private function comparedPairs(string $chatbotId, $since): array
     {
+        // Reads the dedicated compared_pair event rather than digging the
+        // pair back out of tool_called's arguments: tool_called payloads
+        // are nulled out after 90 days by hamman:prune-event-payloads, so
+        // deriving from them would quietly lose the history this rule
+        // exists to accumulate. Only explicit comparisons count here —
+        // co_presented (options shown side by side) is a weaker signal and
+        // does not justify telling a merchant to build a comparison page.
         $rows = DB::table('conversation_events')
             ->where('chatbot_id', $chatbotId)
-            ->where('event_type', 'tool_called')
+            ->where('event_type', 'compared_pair')
             ->where('created_at', '>=', $since)
             ->selectRaw('payload, conversation_id')
             ->limit(5000)
@@ -239,22 +246,18 @@ class SuggestionEngine
         $pairs = [];
         foreach ($rows as $r) {
             $payload = json_decode((string) $r->payload, true) ?: [];
-            if (($payload['tool'] ?? $payload['name'] ?? '') !== 'compare_products') continue;
-
-            $args = $payload['arguments'] ?? $payload['args'] ?? [];
-            if (is_string($args)) $args = json_decode($args, true) ?: [];
-            $ids = $args['product_ids'] ?? $args['products'] ?? [];
-            if (!is_array($ids) || count($ids) < 2) continue;
+            $ids = $payload['product_ids'] ?? [];
+            if (!is_array($ids) || count($ids) !== 2) continue;
 
             // Order-independent: comparing A with B is the same finding as
-            // comparing B with A.
+            // comparing B with A. The logger already sorts, but a pair
+            // arriving from an older event must not split the group.
             $ids = array_map('strval', $ids);
             sort($ids);
-            foreach ($this->pairsOf($ids) as $pair) {
-                $key = implode('|', $pair);
-                $pairs[$key]['ids'] = $pair;
-                $pairs[$key]['conversations'][$r->conversation_id] = true;
-            }
+            $key = implode('|', $ids);
+            $pairs[$key]['ids'] = $ids;
+            $pairs[$key]['names'] = $payload['names'] ?? null;
+            $pairs[$key]['conversations'][$r->conversation_id] = true;
         }
 
         $out = [];
@@ -264,7 +267,12 @@ class SuggestionEngine
             $out[] = [
                 'type'          => 'compared_pair',
                 'fingerprint'   => 'pair:' . substr(sha1($key), 0, 24),
-                'params'        => ['product_ids' => $p['ids']],
+                // Names where the event carried them — a merchant reading
+                // "12 and 34 were compared" learns nothing.
+                'params'        => [
+                    'product_ids' => $p['ids'],
+                    'names'       => array_values(array_filter($p['names'] ?? [])) ?: null,
+                ],
                 'count'         => $people,
                 'conversations' => array_slice(array_keys($p['conversations']), 0, 10),
             ];
@@ -324,16 +332,6 @@ class SuggestionEngine
             ->limit(10)
             ->pluck('conversation_id')
             ->all();
-    }
-
-    private function pairsOf(array $ids): array
-    {
-        $out = [];
-        $n = count($ids);
-        for ($i = 0; $i < $n; $i++) {
-            for ($j = $i + 1; $j < $n; $j++) $out[] = [$ids[$i], $ids[$j]];
-        }
-        return $out;
     }
 
     /**

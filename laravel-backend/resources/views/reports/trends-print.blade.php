@@ -127,6 +127,28 @@
         </table>
     @endif
 
+    <h2>{{ __('trends.compared') }}</h2>
+    <p class="sub">{{ __('trends.compared_desc') }}</p>
+    @if (empty($data['compared_pairs']))
+        <p class="empty">{{ __('trends.empty_section') }}</p>
+    @else
+        <table>
+            <tr>
+                <th>{{ __('trends.col_pair') }}</th><th>{{ __('trends.col_times') }}</th>
+                <th>{{ __('trends.col_winner') }}</th>
+            </tr>
+            @foreach ($data['compared_pairs'] as $row)
+                <tr>
+                    <td>{{ $row['names'][0] }} {{ __('trends.versus') }} {{ $row['names'][1] }}</td>
+                    <td class="num">{{ number_format($row['count']) }}</td>
+                    <td class="{{ $row['winner'] === null || $row['winner'] === 'tie' ? 'num' : 'up' }}">
+                        {{ $row['winner'] === null ? __('trends.no_winner_yet') : ($row['winner'] === 'tie' ? __('trends.tie') : $row['names'][$row['winner']]) }}
+                    </td>
+                </tr>
+            @endforeach
+        </table>
+    @endif
+
     <h2>{{ __('trends.missing_from_catalog') }}</h2>
     <p class="sub">{{ __('trends.missing_from_catalog_desc') }}</p>
     @if (empty($data['missing_from_catalog']))

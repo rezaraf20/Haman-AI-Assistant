@@ -116,7 +116,9 @@ class Suggestions extends Page
                 'count' => $count, 'request' => $params['request'] ?? '',
             ]),
             'compared_pair' => __('suggestions.text_compared', [
-                'count' => $count, 'products' => implode(' + ', $params['product_ids'] ?? []),
+                'count' => $count,
+                // Names when the event carried them, ids only as a fallback.
+                'products' => implode(' + ', ($params['names'] ?? null) ?: ($params['product_ids'] ?? [])),
             ]),
             default => __('suggestions.text_generic', ['count' => $count]),
         };

@@ -191,6 +191,51 @@ def _log_product_mentions(db: Session, conversation_id: Optional[str], chatbot_i
         })
 
 
+def _log_compared_pairs(
+    db: Session, conversation_id: Optional[str], chatbot_id: str,
+    products: List[dict], event_type: str,
+) -> None:
+    """Records which products were put in front of a customer together.
+
+    Two event types, deliberately not merged:
+      compared_pair — the customer explicitly asked for a comparison.
+      co_presented  — the bot showed several options side by side. That is
+                      an implicit comparison and worth knowing about, but
+                      it is a weaker signal than someone actually asking
+                      "which of these two", so a merchant reading the
+                      report should be able to tell them apart.
+
+    Every pair in the set is recorded, not just the first two: with three
+    products on screen the customer is weighing three pairings, and a
+    report that only ever saw (A,B) would miss that (B,C) is the matchup
+    that actually decides things.
+
+    Ids are sorted within a pair so (A,B) and (B,A) aggregate as one
+    matchup rather than two.
+    """
+    from app.services.rag_service import _log_event
+
+    ids = []
+    for p in products:
+        if not isinstance(p, dict) or not p.get("product_id"):
+            continue
+        if p.get("found") is False:  # a requested id that does not exist
+            continue
+        ids.append((p["product_id"], p.get("name")))
+
+    if len(ids) < 2:
+        return
+
+    for i in range(len(ids)):
+        for j in range(i + 1, len(ids)):
+            a, b = ids[i], ids[j]
+            pair = sorted([a, b], key=lambda x: str(x[0]))
+            _log_event(db, conversation_id, chatbot_id, event_type, {
+                "product_ids": [pair[0][0], pair[1][0]],
+                "names": [pair[0][1], pair[1][1]],
+            })
+
+
 def _log_cart_links(db: Session, conversation_id: Optional[str], chatbot_id: str, items: List[dict]) -> None:
     from app.services.rag_service import _log_event
     for item in items:
@@ -428,6 +473,13 @@ def run_tool_calling_pipeline(
                     pass  # intent only — no SMS and no lookup happened yet; see order_status_viewed
                 else:
                     _log_product_mentions(db, conversation_id, chatbot_id, fn_name, block["products"])
+                    # An explicit comparison and a set of options shown side
+                    # by side are both matchups, but only one of them is the
+                    # customer asking — see _log_compared_pairs().
+                    _log_compared_pairs(
+                        db, conversation_id, chatbot_id, block["products"],
+                        "compared_pair" if fn_name == "compare_products" else "co_presented",
+                    )
             messages.append({
                 "role": "tool",
                 "tool_call_id": call.get("id", ""),
