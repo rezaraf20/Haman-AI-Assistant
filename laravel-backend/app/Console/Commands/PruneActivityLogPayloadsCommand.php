@@ -2,6 +2,7 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
+use App\Support\Settings;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -20,7 +21,7 @@ use Illuminate\Support\Facades\DB;
 class PruneActivityLogPayloadsCommand extends Command
 {
     protected $signature = 'hamman:prune-activity-log
-                            {--months=18 : Blank payloads older than this many months}
+                            {--months= : Blank payloads older than this many months (default: the settings page value)}
                             {--chunk=5000 : Rows per statement}
                             {--dry-run : Report what would be blanked and change nothing}';
 
@@ -28,7 +29,9 @@ class PruneActivityLogPayloadsCommand extends Command
 
     public function handle(): int
     {
-        $months = max(1, (int) $this->option('months'));
+        // The window is a setting so it can be changed without a deploy;
+        // the flag still wins when one is passed, for a one-off run.
+        $months = max(1, (int) ($this->option('months') ?: Settings::get('system.retention_activity_log_months')));
         $chunk  = max(100, (int) $this->option('chunk'));
         $cutoff = now()->subMonths($months);
         $dryRun = (bool) $this->option('dry-run');

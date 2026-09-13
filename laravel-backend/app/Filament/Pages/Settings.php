@@ -1,85 +1,479 @@
 <?php
 namespace App\Filament\Pages;
 
-use App\Support\PlatformAccess;
-
-use App\Models\PlatformSetting;
-use Filament\Pages\Page;
-use Filament\Forms\Form;
-use Filament\Forms\Contracts\HasForms;
+use App\Models\LlmProviderProfile;
+use App\Services\Payments\PaymentGatewayManager;
+use App\Support\{MailSettings, PlatformAccess, PlatformActivity, Settings as Config, SettingsRegistry};
+use Filament\Forms\Components\{Actions, Grid, Placeholder, Section, Select, Tabs, TextInput, Toggle};
+use Filament\Forms\Components\Actions\Action as FormAction;
 use Filament\Forms\Concerns\InteractsWithForms;
-use Filament\Forms\Components\{TextInput, Toggle, Section};
+use Filament\Forms\Contracts\HasForms;
+use Filament\Forms\Form;
 use Filament\Notifications\Notification;
+use Filament\Pages\Page;
+use Illuminate\Support\Facades\DB;
 
-// Platform-wide config Reza needs to be able to change himself — Zarinpal
-// credentials today, a natural place for anything similar later — without
-// asking for a code change + image rebuild every time. Backed by the single-
-// row platform_settings table (see PlatformSetting::current()), not .env.
-class Settings extends Page implements HasForms {
+/**
+ * Everything the platform owner can change without a deploy.
+ *
+ * Built from SettingsRegistry rather than a hand-written form, so a new
+ * setting is one entry in one file and appears here with its default, its
+ * reset button and its type already correct.
+ *
+ * Two rules the form has to honour:
+ *
+ *  - No secret is ever rendered. A secret field starts empty and shows a
+ *    "configured" badge instead; submitting it empty leaves the stored value
+ *    alone, so saving the page does not wipe every key on it.
+ *  - Saving writes through Settings::set(), which stores only what differs
+ *    from the declared default. That is what makes the reset button a delete
+ *    rather than a second copy of the number.
+ */
+class Settings extends Page implements HasForms
+{
     use InteractsWithForms;
-    // LLM credentials, payment gateway, SMS config — admin only.
-    // canAccess() is what Filament checks on the direct route, so this is
-    // real authorisation and not merely a hidden menu item.
-    public static function canAccess(): bool { return PlatformAccess::allows('platform_settings'); }
-    public static function shouldRegisterNavigation(): bool { return PlatformAccess::allows('platform_settings'); }
-
 
     protected static string $view = 'filament.pages.settings';
     protected static ?string $navigationIcon = 'heroicon-o-cog-6-tooth';
-    protected static ?int $navigationSort = 9;
+    protected static ?int $navigationSort = 10;
+
+    public static function canAccess(): bool { return PlatformAccess::allows('platform_settings'); }
+    public static function shouldRegisterNavigation(): bool { return PlatformAccess::allows('platform_settings'); }
 
     public static function getNavigationLabel(): string { return __('panel.settings_nav'); }
     public static function getNavigationGroup(): ?string { return __('panel.nav_group_infrastructure'); }
     public function getTitle(): string { return __('panel.settings_title'); }
 
     public ?array $data = [];
+    public ?string $testEmailTo = null;
 
-    public function mount(): void {
-        $this->form->fill(PlatformSetting::current()->toArray());
+    public function mount(): void
+    {
+        abort_unless(static::canAccess(), 403);
+        $this->form->fill($this->currentValues());
+        $this->testEmailTo = auth()->user()?->email;
     }
 
-    public function form(Form $form): Form {
+    /** Secrets come back as null — the form never receives a stored secret. */
+    private function currentValues(): array
+    {
+        $values = [];
+        foreach (array_keys(SettingsRegistry::all()) as $key) {
+            $values[$this->fieldName($key)] = Config::redactedFor($key);
+        }
+        return $values;
+    }
+
+    /** Dots are Filament's nesting separator, so they cannot survive here. */
+    private function fieldName(string $key): string
+    {
+        return str_replace('.', '__', $key);
+    }
+
+    public function form(Form $form): Form
+    {
         return $form->schema([
-            Section::make(__('panel.zarinpal_section'))
-                ->description(__('panel.zarinpal_section_desc'))
-                ->schema([
-                    TextInput::make('zarinpal_merchant_id')
-                        ->label(__('panel.merchant_id'))
-                        ->maxLength(255),
-                    Toggle::make('zarinpal_sandbox')
-                        ->label(__('panel.sandbox_mode'))
-                        ->helperText(__('panel.sandbox_mode_help')),
-                ]),
-            Section::make(__('panel.melipayamak_section'))
-                ->description(__('panel.melipayamak_section_desc'))
-                ->schema([
-                    TextInput::make('melipayamak_username')
-                        ->label(__('common.username')),
-                    TextInput::make('melipayamak_password')
-                        ->label(__('common.password'))
-                        ->password()->revealable(),
-                    TextInput::make('melipayamak_sender')
-                        ->label(__('panel.sender_number')),
-                    Toggle::make('melipayamak_use_pattern')
-                        ->label(__('panel.send_otp_pattern'))
-                        ->live()
-                        ->helperText(__('panel.send_otp_pattern_help')),
-                    TextInput::make('melipayamak_pattern_id')
-                        ->label(__('panel.pattern_id'))
-                        ->numeric()
-                        ->visible(fn ($get) => $get('melipayamak_use_pattern'))
-                        ->helperText(__('panel.pattern_id_help')),
-                    TextInput::make('sms_cost_toman')
-                        ->label(__('panel.sms_cost_toman'))
-                        ->helperText(__('panel.sms_cost_toman_help'))
-                        ->numeric()->minValue(0)->default(0),
-                ]),
+            Tabs::make('settings')->tabs([
+                Tabs\Tab::make(__('settings.tab_payments'))->icon('heroicon-o-credit-card')->schema($this->paymentsTab()),
+                Tabs\Tab::make(__('settings.tab_email'))->icon('heroicon-o-envelope')->schema($this->emailTab()),
+                Tabs\Tab::make(__('settings.tab_sms'))->icon('heroicon-o-device-phone-mobile')->schema($this->smsTab()),
+                Tabs\Tab::make(__('settings.tab_pricing'))->icon('heroicon-o-banknotes')->schema($this->pricingTab()),
+                Tabs\Tab::make(__('settings.tab_limits'))->icon('heroicon-o-adjustments-horizontal')->schema($this->limitsTab()),
+                Tabs\Tab::make(__('settings.tab_system'))->icon('heroicon-o-server-stack')->schema($this->systemTab()),
+            ])->persistTabInQueryString(),
         ])->statePath('data');
     }
 
-    public function save(): void {
+    // ── Tab bodies ──────────────────────────────────────────────────────
+
+    private function paymentsTab(): array
+    {
+        return [
+            $this->group('zarinpal', __('settings.zarinpal'), __('settings.zarinpal_desc'), [
+                $this->field('payments.zarinpal.merchant_id'),
+                $this->field('payments.zarinpal.sandbox'),
+            ]),
+            $this->group('stripe', __('settings.stripe'), __('settings.stripe_desc'), [
+                $this->field('payments.stripe.publishable_key'),
+                $this->field('payments.stripe.secret_key'),
+                $this->field('payments.stripe.webhook_secret'),
+            ]),
+            $this->group('paddle', __('settings.paddle'), __('settings.paddle_desc'), [
+                $this->field('payments.paddle.vendor_id'),
+                $this->field('payments.paddle.api_key'),
+                $this->field('payments.paddle.webhook_secret'),
+                $this->field('payments.paddle.sandbox'),
+            ]),
+            Section::make(__('settings.routing'))
+                ->description(__('settings.routing_desc'))
+                ->schema([
+                    Grid::make(3)->schema([
+                        $this->field('payments.gateway.IRT'),
+                        $this->field('payments.gateway.USD'),
+                        $this->field('payments.gateway.EUR'),
+                    ]),
+                ]),
+            Section::make(__('settings.fx'))
+                ->description(__('settings.fx_desc'))
+                ->schema([
+                    $this->field('payments.fx.mode'),
+                    $this->field('payments.fx.usd_to_toman'),
+                    $this->field('payments.fx.eur_to_toman'),
+                    $this->field('payments.fx.source_url'),
+                ])->columns(2),
+        ];
+    }
+
+    private function emailTab(): array
+    {
+        return [
+            $this->group('email', __('settings.smtp'), __('settings.smtp_desc'), [
+                $this->field('mail.host'),
+                $this->field('mail.port'),
+                $this->field('mail.encryption'),
+                $this->field('mail.username'),
+                $this->field('mail.password'),
+                $this->field('mail.from_address'),
+                $this->field('mail.from_name'),
+            ]),
+            Section::make(__('settings.test_email'))
+                ->description(__('settings.test_email_desc'))
+                ->schema([
+                    TextInput::make('testEmailTo')
+                        ->label(__('settings.test_email_to'))
+                        ->email()
+                        ->helperText(__('settings.test_email_help')),
+                    Actions::make([
+                        FormAction::make('sendTestEmail')
+                            ->label(__('settings.send_test_email'))
+                            ->icon('heroicon-o-paper-airplane')
+                            ->disabled(fn () => !MailSettings::isUsable())
+                            ->action('sendTestEmail'),
+                    ]),
+                    Placeholder::make('email_disabled_note')
+                        ->label('')
+                        ->visible(fn () => !MailSettings::isUsable())
+                        ->content(__('settings.email_disabled_note')),
+                ]),
+        ];
+    }
+
+    private function smsTab(): array
+    {
+        return [
+            Section::make(__('settings.sms_provider'))
+                ->description(__('settings.sms_provider_desc'))
+                ->schema([$this->field('sms.provider')]),
+            $this->group('melipayamak', __('settings.melipayamak'), __('settings.melipayamak_desc'), [
+                $this->field('sms.melipayamak.username'),
+                $this->field('sms.melipayamak.password'),
+                $this->field('sms.melipayamak.sender'),
+                $this->field('sms.melipayamak.use_pattern'),
+                $this->field('sms.melipayamak.pattern_id'),
+            ]),
+            Section::make(__('settings.sms_cost_and_caps'))
+                ->description(__('settings.sms_caps_desc'))
+                ->schema([
+                    $this->field('sms.cost_toman'),
+                    $this->field('sms.daily_cap_per_tenant'),
+                    $this->field('sms.daily_cap_platform'),
+                ])->columns(3),
+        ];
+    }
+
+    private function pricingTab(): array
+    {
+        return [
+            Section::make(__('settings.pricing_defaults'))
+                ->schema([
+                    $this->field('pricing.default_currency'),
+                    $this->field('pricing.default_margin_multiplier'),
+                    $this->field('pricing.embedding_cost_per_1m_toman'),
+                ])->columns(3),
+
+            // Token prices live on each LLM profile and are edited there.
+            // Shown here read-only because "what does a million tokens cost"
+            // is a pricing question, and sending someone to another screen to
+            // answer it is how a number gets changed in one place only.
+            Section::make(__('settings.model_token_prices'))
+                ->description(__('settings.model_token_prices_desc'))
+                ->schema([
+                    Placeholder::make('token_prices')
+                        ->label('')
+                        ->content(fn () => view('filament.pages.partials.token-prices', [
+                            'profiles' => LlmProviderProfile::orderBy('name')->get(),
+                        ])),
+                ]),
+        ];
+    }
+
+    private function limitsTab(): array
+    {
+        $groups = [
+            'chat'      => __('settings.limits_chat'),
+            'tools'     => __('settings.limits_tools'),
+            'otp'       => __('settings.limits_otp'),
+            'documents' => __('settings.limits_documents'),
+            'retrieval' => __('settings.limits_retrieval'),
+        ];
+
+        $sections = [];
+        foreach ($groups as $group => $label) {
+            $keys = array_filter(
+                SettingsRegistry::keysForTab('limits'),
+                fn ($key) => SettingsRegistry::definition($key)['group'] === $group,
+            );
+
+            $sections[] = Section::make($label)
+                ->description(__('settings.limits_group_desc'))
+                ->schema(array_map(fn ($key) => $this->field($key), array_values($keys)))
+                ->columns(2);
+        }
+
+        return $sections;
+    }
+
+    private function systemTab(): array
+    {
+        return [
+            Section::make(__('settings.system_status'))
+                ->description(__('settings.system_status_desc'))
+                ->schema([
+                    Placeholder::make('health')
+                        ->label('')
+                        ->content(fn () => view('filament.pages.partials.system-health', [
+                            'checks' => $this->healthChecks(),
+                        ])),
+                ]),
+            Section::make(__('settings.retention'))
+                ->description(__('settings.retention_desc'))
+                ->schema([
+                    $this->field('system.retention_event_payload_days'),
+                    $this->field('system.retention_activity_log_months'),
+                ])->columns(2),
+            Section::make(__('settings.maintenance'))
+                ->description(__('settings.maintenance_desc'))
+                ->schema([
+                    $this->field('system.maintenance_mode'),
+                    $this->field('system.maintenance_message'),
+                ]),
+        ];
+    }
+
+    // ── Field construction ──────────────────────────────────────────────
+
+    /** A section with a configured/not-configured badge in its heading. */
+    private function group(string $group, string $label, string $description, array $fields): Section
+    {
+        $configured = Config::isConfigured($group);
+
+        return Section::make($label)
+            ->description($description)
+            ->icon($configured ? 'heroicon-o-check-circle' : 'heroicon-o-exclamation-triangle')
+            ->iconColor($configured ? 'success' : 'warning')
+            ->headerActions([
+                FormAction::make('status_' . $group)
+                    ->label($configured ? __('settings.configured') : __('settings.not_configured'))
+                    ->color($configured ? 'success' : 'warning')
+                    ->disabled()
+                    ->badge(),
+            ])
+            ->schema($fields)
+            ->columns(2);
+    }
+
+    private function field(string $key)
+    {
+        $definition = SettingsRegistry::definition($key);
+        $name = $this->fieldName($key);
+        $label = __('settings.field_' . str_replace('.', '_', $key));
+
+        $component = match ($definition['type']) {
+            'bool' => Toggle::make($name)->label($label),
+
+            'select' => Select::make($name)
+                ->label($label)
+                ->options(collect($definition['options'])
+                    ->mapWithKeys(fn ($option) => [$option => __('settings.option_' . $option)])
+                    ->all())
+                ->selectablePlaceholder(false),
+
+            'secret' => TextInput::make($name)
+                ->label($label)
+                ->password()
+                ->autocomplete('new-password')
+                // The stored value is never sent to the browser. Leaving this
+                // blank keeps whatever is already saved; typing replaces it.
+                ->placeholder(Config::isSet($key)
+                    ? __('settings.secret_set_placeholder')
+                    : __('settings.secret_unset_placeholder'))
+                ->helperText(Config::isSet($key)
+                    ? __('settings.secret_set_help')
+                    : __('settings.secret_unset_help')),
+
+            'int' => TextInput::make($name)->label($label)->numeric()->minValue(0),
+
+            'float' => TextInput::make($name)->label($label)->numeric()->minValue(0)->step(0.01),
+
+            default => TextInput::make($name)->label($label)->maxLength(500),
+        };
+
+        // Anything with a meaningful default gets a reset button that puts
+        // exactly that number back.
+        if ($definition['default'] !== null && $definition['type'] !== 'secret') {
+            $component = $component->hintAction(
+                FormAction::make('reset_' . $name)
+                    ->label(__('settings.reset_to_default', ['value' => $this->displayDefault($definition)]))
+                    ->icon('heroicon-o-arrow-uturn-left')
+                    ->visible(fn () => Config::isOverridden($key))
+                    ->action(function () use ($key, $name) {
+                        Config::reset($key);
+                        $this->data[$name] = Config::redactedFor($key);
+                        Notification::make()->title(__('settings.reset_done'))->success()->send();
+                    }),
+            );
+        }
+
+        return $component;
+    }
+
+    private function displayDefault(array $definition): string
+    {
+        return match ($definition['type']) {
+            'bool'  => $definition['default'] ? __('common.yes') : __('common.no'),
+            default => (string) $definition['default'],
+        };
+    }
+
+    // ── Actions ─────────────────────────────────────────────────────────
+
+    public function save(): void
+    {
+        abort_unless(static::canAccess(), 403);
+
         $state = $this->form->getState();
-        PlatformSetting::current()->update($state);
+        $before = [];
+        $after = [];
+
+        foreach (array_keys(SettingsRegistry::all()) as $key) {
+            $name = $this->fieldName($key);
+            if (!array_key_exists($name, $state)) continue;
+
+            $value = $state[$name];
+
+            // An empty secret field means "leave it as it is", not "clear
+            // it" — otherwise every save would wipe every key on the page.
+            if (SettingsRegistry::isSecret($key) && ($value === null || $value === '')) {
+                continue;
+            }
+
+            // A secret reads back as null either way, so "did it change"
+            // cannot be answered by comparing values. Anything that reaches
+            // here with a non-empty secret IS a deliberate change, because
+            // the empty case was skipped above.
+            if (SettingsRegistry::isSecret($key)) {
+                $wasSet = Config::isSet($key);
+                Config::set($key, $value);
+
+                $before[$key] = $wasSet ? '***' : null;
+                $after[$key]  = '***';
+                continue;
+            }
+
+            $old = Config::redactedFor($key);
+            Config::set($key, $value);
+            $new = Config::redactedFor($key);
+
+            if ($old !== $new) {
+                $before[$key] = $old;
+                $after[$key]  = $new;
+            }
+        }
+
+        if ($after) {
+            PlatformActivity::record(
+                'platform_settings_changed',
+                subjectType: 'platform',
+                subjectId: 'settings',
+                before: $before,
+                after: $after,
+            );
+        }
+
+        // A changed SMTP host has to reach the mailer without a restart.
+        MailSettings::apply();
+
+        $this->form->fill($this->currentValues());
+
         Notification::make()->title(__('common.settings_saved'))->success()->send();
+    }
+
+    public function sendTestEmail(): void
+    {
+        abort_unless(static::canAccess(), 403);
+
+        $result = MailSettings::sendTest($this->testEmailTo ?: (string) auth()->user()?->email);
+
+        Notification::make()
+            ->title($result['ok'] ? __('settings.test_email_ok') : __('settings.test_email_failed'))
+            ->body($result['message'])
+            ->status($result['ok'] ? 'success' : 'danger')
+            ->persistent()
+            ->send();
+    }
+
+    /**
+     * Live status for the system tab. Each check is wrapped on its own so
+     * one dead dependency reports as dead instead of blanking the page.
+     */
+    public function healthChecks(): array
+    {
+        $checks = [];
+
+        $checks['database'] = $this->check(function () {
+            DB::select('SELECT 1');
+            return __('settings.health_connected');
+        });
+
+        $checks['redis'] = $this->check(function () {
+            \Illuminate\Support\Facades\Redis::ping();
+            return __('settings.health_connected');
+        });
+
+        $checks['queue'] = $this->check(function () {
+            $pending = DB::table('jobs')->count();
+            return __('settings.health_jobs_pending', ['count' => $pending]);
+        });
+
+        $checks['python'] = $this->check(function () {
+            $base = rtrim((string) config('hamman.ai_service_url'), '/');
+            if ($base === '') return throw new \RuntimeException(__('settings.health_no_url'));
+
+            $response = \Illuminate\Support\Facades\Http::timeout(5)->get($base . '/health');
+            if (!$response->successful()) {
+                throw new \RuntimeException('HTTP ' . $response->status());
+            }
+            return __('settings.health_ok');
+        });
+
+        return $checks;
+    }
+
+    private function check(callable $probe): array
+    {
+        try {
+            return ['ok' => true, 'message' => $probe()];
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    public function gatewayStatus(): array
+    {
+        $status = [];
+        foreach (app(PaymentGatewayManager::class)->all() as $key => $gateway) {
+            $status[$key] = $gateway->isConfigured();
+        }
+        return $status;
     }
 }

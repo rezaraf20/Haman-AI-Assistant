@@ -48,4 +48,8 @@ return [
     'unlimited' => 'Unlimited',
     'username' => 'Username',
     'wallet' => 'Wallet',
+    'yes' => 'Yes',
+    'no' => 'No',
+    'inactive' => 'Inactive',
+    'maintenance_default_message' => 'The service is temporarily unavailable. Please try again shortly.',
 ];

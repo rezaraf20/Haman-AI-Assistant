@@ -3,6 +3,7 @@ namespace App\Services;
 
 use App\Models\Tenant\Chatbot;
 use Illuminate\Support\Facades\{Http, Log, Mail};
+use App\Support\MailSettings;
 
 /**
  * Dispatches a merchant-facing alert (lead_captured / unanswered) through
@@ -60,7 +61,22 @@ class NotificationService {
         $this->dispatch($channel, $config, $chatbot, $subject, $text, $event, ['count' => $count]);
     }
 
+    /**
+     * Whether a channel can run at all right now. Email needs platform-wide
+     * SMTP credentials that no chatbot owner can supply; without them the
+     * channel is dropped here rather than throwing inside sendEmail() where
+     * the failure would only ever reach a log line.
+     */
+    public static function channelAvailable(string $channel): bool {
+        return $channel === 'email' ? MailSettings::isUsable() : true;
+    }
+
     private function dispatch(string $channel, array $config, Chatbot $chatbot, string $subject, string $text, string $event, array $data): void {
+        if (!self::channelAvailable($channel)) {
+            Log::info("NotificationService: {$channel} skipped for chatbot {$chatbot->id} ({$event}) — not configured platform-wide.");
+            return;
+        }
+
         try {
             match ($channel) {
                 'email'    => $this->sendEmail($config, $subject, $text),

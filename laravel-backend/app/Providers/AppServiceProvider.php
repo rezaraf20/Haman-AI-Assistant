@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Auth\Events\{Failed, Login, Logout};
 use App\Listeners\RecordPlatformAuthActivity;
+use App\Support\{MailSettings, Settings};
 
 class AppServiceProvider extends ServiceProvider {
     public function register(): void {}
@@ -23,12 +24,19 @@ class AppServiceProvider extends ServiceProvider {
         // regardless, so a chatbot with no configured limit still can't be
         // hammered for free. Per-chatbot config can only make it stricter, by
         // adding its own RateLimiter::hit() check on top of this.
+        // Read per request rather than captured once at boot, so changing
+        // the number in the settings page takes effect without a restart.
         RateLimiter::for('chat-session', function (Request $request) {
-            return Limit::perMinute(20)->by($request->ip());
+            return Limit::perMinute((int) Settings::get('limits.chat_session_per_minute'))->by($request->ip());
         });
         RateLimiter::for('chat-message', function (Request $request) {
-            return Limit::perMinute(30)->by($request->ip() . ':' . ($request->input('chatbot_id') ?? 'unknown'));
+            return Limit::perMinute((int) Settings::get('limits.chat_message_per_minute'))
+                ->by($request->ip() . ':' . ($request->input('chatbot_id') ?? 'unknown'));
         });
+
+        // SMTP credentials live in the settings table, not env — see
+        // config/mail.php for why this has to happen at boot instead.
+        MailSettings::apply();
 
         // Platform staff sign-ins, sign-outs and failed attempts. Bound to
         // the guard's events rather than to a login screen, so every way

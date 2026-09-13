@@ -4,11 +4,14 @@ namespace App\Services;
 use App\Models\PlatformSetting;
 use App\Models\OtpVerification;
 use Illuminate\Support\Facades\Http;
+use App\Support\Settings;
+use Illuminate\Support\Facades\{Cache, Log};
 
 class SmsService {
-    // How long an OTP stays valid, and the minimum gap between two OTP
-    // requests for the same phone — both are anti-abuse basics, not just UX.
-    const CODE_TTL_MINUTES = 5;
+    // How long an OTP stays valid now comes from the settings page
+    // (limits.otp_ttl_minutes). The cooldown and the verify-attempt ceiling
+    // stay constants deliberately: both are anti-abuse floors rather than
+    // tuning knobs, and neither was in the list of numbers to surface.
     const RESEND_COOLDOWN_SECONDS = 60;
     const MAX_VERIFY_ATTEMPTS = 5;
 
@@ -34,7 +37,7 @@ class SmsService {
         OtpVerification::create([
             'phone'      => $phone,
             'code'       => $code,
-            'expires_at' => now()->addMinutes(self::CODE_TTL_MINUTES),
+            'expires_at' => now()->addMinutes(Settings::get('limits.otp_ttl_minutes')),
         ]);
 
         $sent = $this->send($phone, $code);
@@ -97,9 +100,64 @@ class SmsService {
      *
      * @return array{ok:bool}
      */
+    /**
+     * Platform-wide and per-tenant daily ceilings.
+     *
+     * Every send spends the merchant's money, and the per-contact and
+     * per-IP limits in ChatController bound one abuser's reach — they do
+     * not bound the total. These do: a bug or a distributed abuser cannot
+     * run up an unbounded bill in a day.
+     *
+     * A cap of 0 means no ceiling, which is the only way to express "off"
+     * for a limit whose natural value is a positive number.
+     */
+    private function withinDailyCaps(): bool {
+        $today = now()->toDateString();
+
+        $platformCap = (int) Settings::get('sms.daily_cap_platform');
+        if ($platformCap > 0) {
+            $sent = (int) Cache::get("sms:sent:platform:{$today}", 0);
+            if ($sent >= $platformCap) {
+                Log::warning("SmsService: platform daily SMS cap ({$platformCap}) reached; send refused.");
+                return false;
+            }
+        }
+
+        $tenantId = auth()->user()?->tenant_id ?? request()->attributes->get('tenant_id');
+        $tenantCap = (int) Settings::get('sms.daily_cap_per_tenant');
+        if ($tenantId && $tenantCap > 0) {
+            $sent = (int) Cache::get("sms:sent:tenant:{$tenantId}:{$today}", 0);
+            if ($sent >= $tenantCap) {
+                Log::warning("SmsService: tenant {$tenantId} daily SMS cap ({$tenantCap}) reached; send refused.");
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** Counters expire on their own; nothing needs to reset them at midnight. */
+    private function countSend(): void {
+        $today = now()->toDateString();
+        $untilMidnight = max(60, now()->endOfDay()->diffInSeconds(now()));
+
+        Cache::put("sms:sent:platform:{$today}",
+            (int) Cache::get("sms:sent:platform:{$today}", 0) + 1, $untilMidnight);
+
+        $tenantId = auth()->user()?->tenant_id ?? request()->attributes->get('tenant_id');
+        if ($tenantId) {
+            Cache::put("sms:sent:tenant:{$tenantId}:{$today}",
+                (int) Cache::get("sms:sent:tenant:{$tenantId}:{$today}", 0) + 1, $untilMidnight);
+        }
+    }
+
     private function send(string $phone, string $code): array {
         $settings = PlatformSetting::current();
         if (!$settings->melipayamak_username || !$settings->melipayamak_password) {
+            return ['ok' => false];
+        }
+
+        if (!$this->withinDailyCaps()) {
             return ['ok' => false];
         }
 
@@ -126,12 +184,17 @@ class SmsService {
                     // Actual SMS body text, out of the panel's fa/en system:
                     // phone numbers matching Iran's 09XXXXXXXXX format are
                     // the only ones this OTP flow ever sends to.
-                    'text'     => "کد تایید هامان AI: {$code}\nاین کد تا " . self::CODE_TTL_MINUTES . " دقیقه معتبر است.", // i18n:widget
+                    'text'     => "کد تایید هامان AI: {$code}\nاین کد تا " . Settings::get('limits.otp_ttl_minutes') . " دقیقه معتبر است.", // i18n:widget
                     'isflash'  => false,
                 ]);
             }
             $body = $resp->json();
-            return ['ok' => $resp->successful() && (int) ($body['RetStatus'] ?? 0) === 1];
+            $ok = $resp->successful() && (int) ($body['RetStatus'] ?? 0) === 1;
+
+            // Only a send that actually happened counts against the cap.
+            if ($ok) $this->countSend();
+
+            return ['ok' => $ok];
         } catch (\Throwable $e) {
             report($e);
             return ['ok' => false];

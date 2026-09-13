@@ -27,7 +27,7 @@ from typing import List, Optional
 import requests as _requests
 from sqlalchemy.orm import Session
 
-from app.services import llm_provider_service
+from app.services import llm_provider_service, platform_settings_service
 from app.services.llm_provider_service import _redis
 from app.services.tools.registry import get_enabled_tools, to_openai_schema, Tool
 
@@ -36,6 +36,9 @@ logger = logging.getLogger(__name__)
 # Real tool executions, not LLM calls — the loop always allows exactly one
 # more LLM call after the budget is hit (with tools disabled) so the model
 # still produces a real text answer instead of the turn just dying.
+# Admin-configurable (settings page, "limits" tab); this is the fallback and
+# the registry's declared default. Read once per turn rather than per
+# iteration so the budget cannot shift underneath a loop already running.
 MAX_TOOL_CALLS_PER_MESSAGE = 3
 MAX_TOTAL_SECONDS = 12.0
 
@@ -403,14 +406,16 @@ def run_tool_calling_pipeline(
     # budget is spent, so the turn always ends in a real text answer
     # rather than silently falling through to None on the very call that
     # would have produced one.
-    for _ in range(MAX_TOOL_CALLS_PER_MESSAGE + 1):
+    max_tool_calls = platform_settings_service.get_int(db, "limits.max_tool_calls_per_message")
+
+    for _ in range(max_tool_calls + 1):
         if time.time() - start > MAX_TOTAL_SECONDS:
             logger.warning(f"Tool-calling time budget exceeded for chatbot {chatbot_id}")
             from app.services.rag_service import _log_event
             _log_event(db, conversation_id, chatbot_id, "tool_budget_exceeded", {"reason": "time"})
             return None
 
-        offer_tools = executed < MAX_TOOL_CALLS_PER_MESSAGE
+        offer_tools = executed < max_tool_calls
         try:
             message, model_used, usage, cost = _tool_calling_chat(
                 db, messages, tools_schema if offer_tools else None, max_tokens, temperature
@@ -442,7 +447,7 @@ def run_tool_calling_pipeline(
 
         messages.append({"role": "assistant", "content": message.get("content"), "tool_calls": tool_calls})
         for call in tool_calls:
-            if executed >= MAX_TOOL_CALLS_PER_MESSAGE:
+            if executed >= max_tool_calls:
                 messages.append({
                     "role": "tool", "tool_call_id": call.get("id", ""),
                     "content": json.dumps({"error": "Tool call limit reached for this message."}),
@@ -486,5 +491,5 @@ def run_tool_calling_pipeline(
                 "content": json.dumps(result, ensure_ascii=False),
             })
 
-    logger.warning(f"Tool-calling loop exhausted {MAX_TOOL_CALLS_PER_MESSAGE + 1} iterations without a final answer for chatbot {chatbot_id}")
+    logger.warning(f"Tool-calling loop exhausted {max_tool_calls + 1} iterations without a final answer for chatbot {chatbot_id}")
     return None

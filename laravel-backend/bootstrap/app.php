@@ -29,6 +29,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'tenant.quota'   => \App\Http\Middleware\CheckTenantQuota::class,
             'webhook.verify' => \App\Http\Middleware\VerifyWebhookSignature::class,
             'chatbot.domain' => \App\Http\Middleware\ValidateChatbotDomain::class,
+            // Takes the public chat endpoints out of service without
+            // locking the owner out of the panel they need to fix things.
+            'maintenance'    => \App\Http\Middleware\MaintenanceMode::class,
         ]);
         // The Filament admin panel (routes under /admin) needs guests redirected to its own
         // login page; the customer portal (/portal) redirects to the phone+OTP login flow

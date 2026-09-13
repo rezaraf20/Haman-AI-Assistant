@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 use App\Models\Tenant;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\{DB, Log};
+use App\Support\Settings;
 
 // conversation_events rows themselves are kept forever (AggregateAnalyticsJob
 // and the eval-set builder both need the event_type/timestamps/latency_ms
@@ -11,11 +12,13 @@ use Illuminate\Support\Facades\{DB, Log};
 // citations, etc.) ages out after the retention window, since that's the
 // part carrying anything resembling real user content.
 class PruneConversationEventPayloadsCommand extends Command {
-    protected $signature   = 'hamman:prune-event-payloads {--days=90 : Payloads older than this many days get nulled out}';
+    protected $signature   = 'hamman:prune-event-payloads {--days= : Payloads older than this many days get nulled out (default: the settings page value)}';
     protected $description = 'Null out conversation_events.payload past the retention window, keeping the event row itself';
 
     public function handle(): void {
-        $days = (int) $this->option('days');
+        // Configurable from the settings page; the flag still wins for a
+        // one-off run.
+        $days = (int) ($this->option('days') ?: Settings::get('system.retention_event_payload_days'));
         $cutoff = now()->subDays($days);
         $totalPruned = 0;
         $tenantsChecked = 0;
