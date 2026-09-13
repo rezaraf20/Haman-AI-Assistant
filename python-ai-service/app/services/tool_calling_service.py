@@ -143,7 +143,15 @@ def _detect_lead_signal(fn_name: str, args: dict, result: dict) -> Optional[dict
             status = str(result.get("stock_status") or "").strip().lower()
             if status and status not in _IN_STOCK_STATUSES:
                 name = result.get("name") or args.get("sku")
-                return {"mode": "out_of_stock", "item": str(name)} if name else None
+                if not name:
+                    return None
+                # The numeric id travels with the signal so a restock can
+                # later be matched exactly, rather than by comparing a
+                # product name the customer never typed.
+                signal = {"mode": "out_of_stock", "item": str(name)}
+                if result.get("product_id"):
+                    signal["product_id"] = result["product_id"]
+                return signal
 
     if fn_name == "search_products":
         if not result.get("live"):
@@ -157,9 +165,16 @@ def _detect_lead_signal(fn_name: str, args: dict, result: dict) -> Optional[dict
         # the shop simply cannot fulfil it today.
         statuses = [str(r.get("stock_status") or "").strip().lower() for r in results if isinstance(r, dict)]
         if statuses and all(s and s not in _IN_STOCK_STATUSES for s in statuses):
-            first = next((r.get("name") for r in results if isinstance(r, dict) and r.get("name")), None)
-            item = first or asked
-            return {"mode": "out_of_stock", "item": str(item)} if item else None
+            first = next((r for r in results if isinstance(r, dict) and r.get("name")), None)
+            item = (first or {}).get("name") or asked
+            if not item:
+                return None
+            signal = {"mode": "out_of_stock", "item": str(item)}
+            # Only when exactly one product matched is the id unambiguous —
+            # with several, "the one they meant" is a guess.
+            if len(results) == 1 and first and first.get("product_id"):
+                signal["product_id"] = first["product_id"]
+            return signal
 
     return None
 

@@ -43,6 +43,10 @@ class SuggestionEngine
         'authenticity_doubt'    => 3,
         'compared_pair'         => 3,
         'asked_not_sold'        => 5,
+        // Lower than the others on purpose: leaving a phone number is a far
+        // stronger signal than asking a question, so two people is already
+        // worth a merchant's attention.
+        'restock_requested'     => 2,
     ];
 
     /**
@@ -76,6 +80,7 @@ class SuggestionEngine
             $this->unansweredTopics($chatbotId, $since),
             $this->missingFromCatalog($chatbotId, $since),
             $this->comparedPairs($chatbotId, $since),
+            $this->openRequests($chatbotId, $since),
         );
 
         usort($found, fn ($a, $b) => $b['count'] <=> $a['count']);
@@ -265,6 +270,60 @@ class SuggestionEngine
             ];
         }
         return $out;
+    }
+
+    /**
+     * The waitlist, as a suggestion. This is the strongest demand signal
+     * the system has: a customer did not merely type a name that matched
+     * nothing, they left a phone number and asked to be told. "19 people
+     * asked for Medicube, which you don't carry" comes from here.
+     *
+     * Restock requests are included too, since a product sitting out of
+     * stock with people queued on it is a reorder decision, not just a
+     * missing-catalog one.
+     */
+    private function openRequests(string $chatbotId, $since): array
+    {
+        $rows = DB::table('leads')
+            ->selectRaw('type, requested_item, requested_product_id, COUNT(*) AS cnt')
+            ->where('chatbot_id', $chatbotId)
+            ->whereIn('type', ['out_of_stock', 'not_in_catalog'])
+            ->where('request_status', 'open')
+            ->whereNotNull('requested_item')
+            ->where('created_at', '>=', $since)
+            ->groupBy('type', 'requested_item', 'requested_product_id')
+            ->get();
+
+        $out = [];
+        foreach ($rows as $r) {
+            $people = (int) $r->cnt;
+            $key = $r->type === 'out_of_stock' ? 'restock_requested' : 'missing_from_catalog';
+            if ($people < self::THRESHOLDS[$key === 'restock_requested' ? 'restock_requested' : 'missing_from_catalog']) continue;
+
+            $out[] = [
+                'type'        => $key,
+                'fingerprint' => $key . ':' . ($r->requested_product_id
+                    ? 'pid' . $r->requested_product_id
+                    : substr(sha1(TextSimilarity::normalize($r->requested_item)), 0, 24)),
+                'params'      => ['request' => $r->requested_item, 'product_id' => $r->requested_product_id],
+                'count'       => $people,
+                // The conversations are reachable from the Requests page,
+                // which is where a merchant acts on these; the suggestion
+                // links there rather than duplicating the contact list.
+                'conversations' => $this->conversationsForRequest($chatbotId, $r->requested_item),
+            ];
+        }
+        return $out;
+    }
+
+    private function conversationsForRequest(string $chatbotId, string $item): array
+    {
+        return DB::table('leads')
+            ->where('chatbot_id', $chatbotId)
+            ->where('requested_item', $item)
+            ->limit(10)
+            ->pluck('conversation_id')
+            ->all();
     }
 
     private function pairsOf(array $ids): array

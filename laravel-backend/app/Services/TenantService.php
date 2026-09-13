@@ -393,6 +393,14 @@ class TenantService
             DB::statement("ALTER TABLE {$schemaName}.leads ADD COLUMN IF NOT EXISTS type VARCHAR(30) NOT NULL DEFAULT 'unanswered'");
             DB::statement("ALTER TABLE {$schemaName}.conversations ADD COLUMN IF NOT EXISTS pending_lead_type VARCHAR(30)");
             DB::statement("ALTER TABLE {$schemaName}.conversations ADD COLUMN IF NOT EXISTS pending_lead_item VARCHAR(255)");
+            // The waitlist: an exact product id makes a restock match exact
+            // instead of a name comparison, and request_status is the
+            // merchant's own open/fulfilled/rejected axis, separate from
+            // the lead's sales status.
+            DB::statement("ALTER TABLE {$schemaName}.leads ADD COLUMN IF NOT EXISTS requested_product_id BIGINT");
+            DB::statement("ALTER TABLE {$schemaName}.leads ADD COLUMN IF NOT EXISTS request_status VARCHAR(20) NOT NULL DEFAULT 'open'");
+            DB::statement("ALTER TABLE {$schemaName}.conversations ADD COLUMN IF NOT EXISTS pending_lead_product_id BIGINT");
+            DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_leads_waitlist ON {$schemaName}.leads(chatbot_id, type, request_status)");
         } catch (\Throwable $e) {}
         // Revenue attribution (doc-04, prerequisite for Intent analytics) —
         // see createTenantTables()'s matching block and SyncService::
@@ -686,6 +694,7 @@ class TenantService
                 -- turn, since that is when the lead row is written.
                 pending_lead_type VARCHAR(30),
                 pending_lead_item VARCHAR(255),
+                pending_lead_product_id BIGINT,
                 ended_at TIMESTAMPTZ,
                 started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -820,13 +829,21 @@ class TenantService
                 -- the merchant knows someone wants a callback but not
                 -- what about.
                 requested_item VARCHAR(255),
+                -- Known only for an out-of-stock request: lets a restock be
+                -- matched exactly rather than by comparing product names.
+                requested_product_id BIGINT,
                 -- unanswered | volunteered | out_of_stock | not_in_catalog
                 type VARCHAR(30) NOT NULL DEFAULT 'unanswered',
+                -- The merchant's own handling of the request (open |
+                -- fulfilled | rejected), deliberately separate from the
+                -- lead's sales status.
+                request_status VARCHAR(20) NOT NULL DEFAULT 'open',
                 status VARCHAR(20) NOT NULL DEFAULT 'new',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             )
         ");
         DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_leads_lookup ON {$s}.leads(chatbot_id, status, created_at)");
+        DB::statement("CREATE INDEX IF NOT EXISTS idx_{$s}_leads_waitlist ON {$s}.leads(chatbot_id, type, request_status)");
 
         // Revenue attribution (doc-04, prerequisite for Intent analytics) —
         // see fixSchema()'s matching block for the full rationale on

@@ -35,6 +35,8 @@ return [
     'text_unanswered' => ':count people asked ":question" and the bot had no answer',
     'text_missing' => ':count people asked for ":request", which is not in your catalog',
     'text_compared' => 'These products were compared against each other :count times: :products',
+    'text_restock_requested' => ':count people are waiting for ":request" to come back in stock',
+    'action_restock_requested' => 'Reorder this — these people left their number and are waiting. Contact them from the Product Requests page.',
     'text_generic' => 'A repeating pattern was seen :count times',
 
     'action_topic_shipping' => "Publish shipping costs and delivery times on their own page and sync it to the chatbot — right now it can't be found on the site.",

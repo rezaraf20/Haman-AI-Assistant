@@ -70,6 +70,7 @@ class TrendsService
             $catalog = $this->catalogIndex();                            // 4
             $history = $this->historySpan();                             // 5
             $seasonal = $this->seasonal($history);                       // 6 (or 0)
+            $requested = $this->requestedItems($start, $end);            // 7
         } finally {
             DB::statement('SET search_path TO public');
         }
@@ -97,7 +98,7 @@ class TrendsService
             'asked_products'   => $askedProducts,
             'best_sellers'     => $bestSellers,
             'demand_gap'       => $this->demandGap($askedProducts, $bestSellers),
-            'missing_from_catalog' => $this->missingFromCatalog($curEvents),
+            'missing_from_catalog' => $this->missingFromCatalog($curEvents, $requested),
             'emerging_topics'  => $this->emergingTopics($curEvents, $prevEvents),
             'declining_topics' => $this->decliningTopics($curEvents, $prevEvents),
             'unanswered_groups' => $this->unansweredGroups($curEvents),
@@ -398,7 +399,7 @@ class TrendsService
      * nothing, which is the one signal in this system that names a
      * specific product the shop does not carry.
      */
-    private function missingFromCatalog(array $events): array
+    private function missingFromCatalog(array $events, array $requestedItems = []): array
     {
         $counts = [];
         foreach ($events as $row) {
@@ -410,9 +411,29 @@ class TrendsService
             $counts[$query] = ($counts[$query] ?? 0) + (int) $row['cnt'];
         }
 
+        // The waitlist is the stronger signal of the two: someone cared
+        // enough to leave a phone number, not merely typed a name that
+        // matched nothing. Both feed the same list.
+        foreach ($requestedItems as $item => $count) {
+            $counts[$item] = ($counts[$item] ?? 0) + (int) $count;
+        }
+
         $items = [];
         foreach ($counts as $text => $count) $items[] = ['text' => $text, 'count' => $count];
         return TextSimilarity::group($items, 15);
+    }
+
+    /** requested_item => people, for not-in-catalog requests in the window. */
+    private function requestedItems(Carbon $from, Carbon $to): array
+    {
+        return DB::table('leads')
+            ->selectRaw('requested_item, COUNT(*) AS cnt')
+            ->where('type', 'not_in_catalog')
+            ->whereNotNull('requested_item')
+            ->whereBetween('created_at', [$from, $to])
+            ->groupBy('requested_item')
+            ->pluck('cnt', 'requested_item')
+            ->all();
     }
 
     private function topicCounts(array $events): array

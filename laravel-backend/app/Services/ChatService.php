@@ -195,7 +195,10 @@ class ChatService {
         $item = trim((string) ($signal['item'] ?? ''));
         if (!in_array($mode, ['out_of_stock', 'not_in_catalog'], true) || $item === '') return null;
 
-        return $this->leadCapture->promptForItem($conv, $chatbot, $mode, $item, $question);
+        $productId = isset($signal['product_id']) && is_numeric($signal['product_id'])
+            ? (int) $signal['product_id'] : null;
+
+        return $this->leadCapture->promptForItem($conv, $chatbot, $mode, $item, $question, $productId);
     }
 
     /** @return array{response:string,chunk_ids:array,scores:array,prompt_tokens:int,completion_tokens:int,total_tokens:int,cost_toman:int,model:string,latency_ms:int,is_fallback:bool,is_unanswered:bool,finish_reason:string} */

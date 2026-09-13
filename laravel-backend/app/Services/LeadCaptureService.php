@@ -45,14 +45,16 @@ class LeadCaptureService {
             'contact_type'    => $parsed['contact_type'],
             'question'        => $conv->pending_lead_question,
             'requested_item'  => $conv->pending_lead_item,
+            'requested_product_id' => $conv->pending_lead_product_id,
             'type'            => $conv->pending_lead_type ?: 'unanswered',
             'status'          => 'new',
         ]);
 
         $conv->update([
-            'pending_lead_question' => null,
-            'pending_lead_type'     => null,
-            'pending_lead_item'     => null,
+            'pending_lead_question'   => null,
+            'pending_lead_type'       => null,
+            'pending_lead_item'       => null,
+            'pending_lead_product_id' => null,
         ]);
 
         // The thank-you differs by mode: promising to text someone when a
@@ -82,16 +84,17 @@ class LeadCaptureService {
      * replacing: the customer still deserves the real answer ("that one is
      * out of stock") before being offered a callback.
      */
-    public function promptForItem(Conversation $conv, Chatbot $chatbot, string $mode, string $item, string $question): ?string {
+    public function promptForItem(Conversation $conv, Chatbot $chatbot, string $mode, string $item, string $question, ?int $productId = null): ?string {
         if (!self::isModeEnabled($chatbot, $mode)) return null;
 
         $texts = array_merge(WidgetDefaults::forLanguage($chatbot->language), $chatbot->widget_config ?? []);
         $key = $mode === 'out_of_stock' ? 'lead_capture_out_of_stock_prompt' : 'lead_capture_not_in_catalog_prompt';
 
         $conv->update([
-            'pending_lead_question' => $question,
-            'pending_lead_type'     => $mode,
-            'pending_lead_item'     => mb_substr($item, 0, 255),
+            'pending_lead_question'   => $question,
+            'pending_lead_type'       => $mode,
+            'pending_lead_item'       => mb_substr($item, 0, 255),
+            'pending_lead_product_id' => $productId,
         ]);
 
         return str_replace(':item', $item, $texts[$key]);
