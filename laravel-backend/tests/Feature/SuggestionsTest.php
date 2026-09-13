@@ -230,11 +230,13 @@ class SuggestionsTest extends TestCase
             DB::statement("SET search_path TO {$ctx['schema']}, public");
             DB::table('conversation_events')->insert([
                 'id' => (string) Str::uuid(), 'conversation_id' => $convId, 'chatbot_id' => $ctx['chatbotId'],
-                'event_type' => 'tool_called',
+                // The dedicated event the tool now writes — not tool_called,
+                // whose payload the pruning job nulls out after 90 days.
+                'event_type' => 'compared_pair',
                 // Reversed on purpose: comparing A,B and B,A is one finding.
                 'payload' => json_encode([
-                    'tool' => 'compare_products',
-                    'arguments' => ['product_ids' => $i % 2 ? [22, 11] : [11, 22]],
+                    'product_ids' => $i % 2 ? [22, 11] : [11, 22],
+                    'names' => $i % 2 ? ['ماگ قرمز', 'ماگ آبی'] : ['ماگ آبی', 'ماگ قرمز'],
                 ]),
                 'created_at' => now()->subDay(),
             ]);
@@ -245,6 +247,26 @@ class SuggestionsTest extends TestCase
 
         $this->assertNotNull($found);
         $this->assertEquals(3, $found['count']);
+    }
+
+    public function test_options_merely_shown_side_by_side_are_not_a_comparison_suggestion(): void
+    {
+        $ctx = $this->makeTenant();
+        // co_presented is a real signal, but "build a comparison page" is
+        // not warranted by the bot having listed some recommendations.
+        for ($i = 0; $i < 5; $i++) {
+            $convId = $this->ask($ctx, 'چی پیشنهاد میدی؟');
+            DB::statement("SET search_path TO {$ctx['schema']}, public");
+            DB::table('conversation_events')->insert([
+                'id' => (string) Str::uuid(), 'conversation_id' => $convId, 'chatbot_id' => $ctx['chatbotId'],
+                'event_type' => 'co_presented',
+                'payload' => json_encode(['product_ids' => [11, 22], 'names' => ['A', 'B']]),
+                'created_at' => now()->subDay(),
+            ]);
+            DB::statement('SET search_path TO public');
+        }
+
+        $this->assertNull(collect($this->build($ctx))->firstWhere('type', 'compared_pair'));
     }
 
     public function test_an_unanswered_question_asked_by_several_people_becomes_a_suggestion(): void
