@@ -1,6 +1,8 @@
 <?php
 namespace App\Filament\Resources;
 
+use App\Support\PlatformAccess;
+
 use App\Models\WalletTransaction;
 use App\Models\Tenant;
 use App\Services\WalletService;
@@ -14,6 +16,16 @@ use App\Support\Jalali;
 use App\Filament\Resources\WalletTransactionResource\Pages;
 
 class WalletTransactionResource extends Resource {
+    // Admin only: the ledger in aggregate is platform revenue, and editing
+    // it hands out money. Support sees a tenant's balance, read-only.
+    // Enforced by Filament on the direct route as well, not just in the
+    // navigation — see PlatformAccess.
+    public static function canViewAny(): bool { return PlatformAccess::allows('wallet_ledger'); }
+    public static function canView($record): bool { return PlatformAccess::allows('wallet_ledger'); }
+    public static function canCreate(): bool { return PlatformAccess::allows('wallet_ledger'); }
+    public static function canDeleteAny(): bool { return PlatformAccess::allows('wallet_ledger'); }
+    public static function shouldRegisterNavigation(): bool { return PlatformAccess::allows('wallet_ledger'); }
+
     protected static ?string $model = WalletTransaction::class;
     protected static ?string $navigationIcon = 'heroicon-o-banknotes';
     protected static ?int $navigationSort = 5;
@@ -26,7 +38,6 @@ class WalletTransactionResource extends Resource {
     // Only "create" is allowed here (for manual admin adjustments), via the
     // WalletService ledger helper — no Edit/Delete: transactions are an
     // append-only audit trail, not a table you correct in place.
-    public static function canCreate(): bool { return true; }
     public static function canEdit($record): bool { return false; }
     public static function canDelete($record): bool { return false; }
 

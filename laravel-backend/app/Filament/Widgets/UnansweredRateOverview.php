@@ -1,6 +1,8 @@
 <?php
 namespace App\Filament\Widgets;
 
+use App\Support\PlatformAccess;
+
 use App\Support\Numbers;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
@@ -10,6 +12,8 @@ use Illuminate\Support\Facades\{DB, Cache};
 // across the whole platform means the RAG pipeline (or a lot of tenants'
 // content) is falling short, regardless of how revenue/margin look.
 class UnansweredRateOverview extends StatsOverviewWidget {
+    public static function canView(): bool { return PlatformAccess::allows('usage_read'); }
+
     protected static ?string $pollingInterval = null;
     protected int|string|array $columnSpan = 'full';
     protected static bool $isLazy = false;

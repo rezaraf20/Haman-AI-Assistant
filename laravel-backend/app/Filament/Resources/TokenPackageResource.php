@@ -1,6 +1,8 @@
 <?php
 namespace App\Filament\Resources;
 
+use App\Support\PlatformAccess;
+
 use App\Models\TokenPackage;
 use App\Enums\ChatbotType;
 use Filament\Forms\Form;
@@ -13,6 +15,17 @@ use App\Support\Money;
 use App\Filament\Resources\TokenPackageResource\Pages;
 
 class TokenPackageResource extends Resource {
+    // Admin only: pricing.
+    // Enforced by Filament on the direct route as well, not just in the
+    // navigation — see PlatformAccess.
+    public static function canViewAny(): bool { return PlatformAccess::allows('pricing'); }
+    public static function canView($record): bool { return PlatformAccess::allows('pricing'); }
+    public static function canCreate(): bool { return PlatformAccess::allows('pricing'); }
+    public static function canEdit($record): bool { return PlatformAccess::allows('pricing'); }
+    public static function canDelete($record): bool { return PlatformAccess::allows('pricing'); }
+    public static function canDeleteAny(): bool { return PlatformAccess::allows('pricing'); }
+    public static function shouldRegisterNavigation(): bool { return PlatformAccess::allows('pricing'); }
+
     protected static ?string $model = TokenPackage::class;
     protected static ?string $navigationIcon = 'heroicon-o-cube';
     protected static ?int $navigationSort = 7;
@@ -22,9 +35,6 @@ class TokenPackageResource extends Resource {
     public static function getModelLabel(): string { return __('plan.token_package_singular'); }
     public static function getPluralModelLabel(): string { return __('plan.token_packages_nav'); }
 
-    public static function canCreate(): bool { return true; }
-    public static function canEdit($record): bool { return true; }
-    public static function canDelete($record): bool { return true; }
 
     public static function form(Form $form): Form {
         return $form->schema([

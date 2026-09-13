@@ -1,6 +1,8 @@
 <?php
 namespace App\Filament\Resources;
 
+use App\Support\PlatformAccess;
+
 use App\Models\ChatbotTypePrice;
 use App\Enums\ChatbotType;
 use Filament\Forms\Form;
@@ -13,6 +15,17 @@ use App\Support\Money;
 use App\Filament\Resources\ChatbotTypePriceResource\Pages;
 
 class ChatbotTypePriceResource extends Resource {
+    // Admin only: pricing.
+    // Enforced by Filament on the direct route as well, not just in the
+    // navigation — see PlatformAccess.
+    public static function canViewAny(): bool { return PlatformAccess::allows('pricing'); }
+    public static function canView($record): bool { return PlatformAccess::allows('pricing'); }
+    public static function canCreate(): bool { return PlatformAccess::allows('pricing'); }
+    public static function canEdit($record): bool { return PlatformAccess::allows('pricing'); }
+    public static function canDelete($record): bool { return PlatformAccess::allows('pricing'); }
+    public static function canDeleteAny(): bool { return PlatformAccess::allows('pricing'); }
+    public static function shouldRegisterNavigation(): bool { return PlatformAccess::allows('pricing'); }
+
     protected static ?string $model = ChatbotTypePrice::class;
     protected static ?string $navigationIcon = 'heroicon-o-tag';
     protected static ?int $navigationSort = 6;
@@ -22,9 +35,6 @@ class ChatbotTypePriceResource extends Resource {
     public static function getModelLabel(): string { return __('plan.chatbot_price_singular'); }
     public static function getPluralModelLabel(): string { return __('plan.chatbot_pricing_nav'); }
 
-    public static function canCreate(): bool { return true; }
-    public static function canEdit($record): bool { return true; }
-    public static function canDelete($record): bool { return true; }
 
     public static function form(Form $form): Form {
         return $form->schema([

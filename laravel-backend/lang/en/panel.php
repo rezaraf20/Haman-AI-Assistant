@@ -108,4 +108,7 @@ return [
     'trial_ends_at' => 'Trial Ends',
     'zarinpal_section' => 'Zarinpal',
     'zarinpal_section_desc' => 'Wallet top-up payment gateway. Get these from your Zarinpal dashboard (zarinpal.com).',
+    'plugin_key_issued' => 'Plugin key',
+    'plugin_last_contact' => 'Plugin last contact',
+    'plugin_never_contacted' => 'Never connected',
 ];

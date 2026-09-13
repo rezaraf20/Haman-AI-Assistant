@@ -111,4 +111,7 @@ return [
     'trial_ends_at' => 'پایان آزمایشی',
     'zarinpal_section' => 'زرین‌پال',
     'zarinpal_section_desc' => 'درگاه پرداخت شارژ کیف پول. این اطلاعات رو از پنل زرین‌پال (zarinpal.com) بردار.',
+    'plugin_key_issued' => 'کلید افزونه',
+    'plugin_last_contact' => 'آخرین ارتباط افزونه',
+    'plugin_never_contacted' => 'هرگز متصل نشده',
 ];

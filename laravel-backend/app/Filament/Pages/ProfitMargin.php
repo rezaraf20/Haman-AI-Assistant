@@ -1,6 +1,8 @@
 <?php
 namespace App\Filament\Pages;
 
+use App\Support\PlatformAccess;
+
 use App\Models\Tenant;
 use App\Models\WalletTransaction;
 use Filament\Pages\Page;
@@ -23,6 +25,12 @@ use Illuminate\Support\Carbon;
  */
 class ProfitMargin extends Page implements HasForms {
     use InteractsWithForms;
+    // Platform margin and revenue — admin only.
+    // canAccess() is what Filament checks on the direct route, so this is
+    // real authorisation and not merely a hidden menu item.
+    public static function canAccess(): bool { return PlatformAccess::allows('platform_finances'); }
+    public static function shouldRegisterNavigation(): bool { return PlatformAccess::allows('platform_finances'); }
+
 
     protected static string $view = 'filament.pages.profit-margin';
     protected static ?string $navigationIcon = 'heroicon-o-banknotes';

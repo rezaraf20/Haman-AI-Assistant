@@ -1,6 +1,8 @@
 <?php
 namespace App\Filament\Resources;
 
+use App\Support\PlatformAccess;
+
 use App\Models\ApiKey;
 use App\Models\Tenant;
 use App\Models\ChatbotIndexEntry;
@@ -16,6 +18,18 @@ use App\Support\Jalali;
 use App\Filament\Resources\ApiKeyResource\Pages;
 
 class ApiKeyResource extends Resource {
+    // Admin only: this resource shows key values. Support sees only
+    // whether a tenant HAS a key, on the tenant record.
+    // Enforced by Filament on the direct route as well, not just in the
+    // navigation — see PlatformAccess.
+    public static function canViewAny(): bool { return PlatformAccess::allows('api_key_values'); }
+    public static function canView($record): bool { return PlatformAccess::allows('api_key_values'); }
+    public static function canCreate(): bool { return PlatformAccess::allows('api_key_values'); }
+    public static function canEdit($record): bool { return PlatformAccess::allows('api_key_values'); }
+    public static function canDelete($record): bool { return PlatformAccess::allows('api_key_values'); }
+    public static function canDeleteAny(): bool { return PlatformAccess::allows('api_key_values'); }
+    public static function shouldRegisterNavigation(): bool { return PlatformAccess::allows('api_key_values'); }
+
     protected static ?string $model = ApiKey::class;
     protected static ?string $navigationIcon = 'heroicon-o-key';
     protected static ?int $navigationSort = 3;
@@ -27,8 +41,6 @@ class ApiKeyResource extends Resource {
 
     // See TenantResource — no per-model Policy is registered, and Filament's
     // action visibility otherwise silently hides Create/Edit/Delete without one.
-    public static function canCreate(): bool { return true; }
-    public static function canDelete($record): bool { return true; }
 
     public static function form(Form $form): Form {
         return $form->schema([

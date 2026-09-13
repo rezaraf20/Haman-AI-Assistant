@@ -3,6 +3,7 @@ namespace App\Filament\Resources\TicketResource\Pages;
 
 use App\Filament\Resources\TicketResource;
 use App\Models\TicketMessage;
+use App\Support\PlatformAccess;
 use Filament\Resources\Pages\Page;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Forms\Form;
@@ -16,6 +17,14 @@ class ManageTicket extends Page implements HasForms {
 
     protected static string $resource = TicketResource::class;
     protected static string $view = 'filament.resources.ticket-resource.pages.manage-ticket';
+
+    // Stated explicitly rather than inherited. The resource's canEdit() is
+    // false by design — staff reply to tickets, they do not rewrite them —
+    // so leaning on the resource's gates would tie this page's access to a
+    // rule about something else. Filament checks this on the direct route.
+    public static function canAccess(array $parameters = []): bool {
+        return PlatformAccess::allows('tickets');
+    }
 
     public ?array $data = [];
 
@@ -39,6 +48,7 @@ class ManageTicket extends Page implements HasForms {
     }
 
     public function submitReply(): void {
+        PlatformAccess::authorize('tickets');
         $state = $this->form->getState();
 
         if (filled($state['reply'] ?? null)) {

@@ -1,6 +1,8 @@
 <?php
 namespace App\Filament\Pages;
 
+use App\Support\PlatformAccess;
+
 use App\Models\PlatformSetting;
 use Filament\Pages\Page;
 use Filament\Forms\Form;
@@ -15,6 +17,12 @@ use Filament\Notifications\Notification;
 // row platform_settings table (see PlatformSetting::current()), not .env.
 class Settings extends Page implements HasForms {
     use InteractsWithForms;
+    // LLM credentials, payment gateway, SMS config — admin only.
+    // canAccess() is what Filament checks on the direct route, so this is
+    // real authorisation and not merely a hidden menu item.
+    public static function canAccess(): bool { return PlatformAccess::allows('platform_settings'); }
+    public static function shouldRegisterNavigation(): bool { return PlatformAccess::allows('platform_settings'); }
+
 
     protected static string $view = 'filament.pages.settings';
     protected static ?string $navigationIcon = 'heroicon-o-cog-6-tooth';
