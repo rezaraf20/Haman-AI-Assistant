@@ -140,4 +140,5 @@ return [
     'field_system_retention_activity_log_months' => 'Activity log detail retention (months)',
     'field_system_maintenance_mode' => 'Maintenance mode',
     'field_system_maintenance_message' => 'Maintenance message',
+    'health_unreachable' => 'Unreachable',
 ];

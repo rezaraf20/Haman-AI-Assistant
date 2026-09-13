@@ -140,4 +140,5 @@ return [
     'field_system_retention_activity_log_months' => 'نگهداشت جزئیات لاگ فعالیت (ماه)',
     'field_system_maintenance_mode' => 'حالت تعمیر',
     'field_system_maintenance_message' => 'پیام حالت تعمیر',
+    'health_unreachable' => 'در دسترس نیست',
 ];

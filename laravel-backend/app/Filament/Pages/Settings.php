@@ -445,15 +445,18 @@ class Settings extends Page implements HasForms
             return __('settings.health_jobs_pending', ['count' => $pending]);
         });
 
+        // Delegated rather than reimplemented: AiGatewayService already knows
+        // the path and that the call is authenticated. A second, slightly
+        // different idea of how to reach that service is how a probe ends up
+        // reporting on something the app never calls.
         $checks['python'] = $this->check(function () {
-            $base = rtrim((string) config('hamman.ai_service_url'), '/');
-            if ($base === '') return throw new \RuntimeException(__('settings.health_no_url'));
+            $result = app(\App\Services\AiGatewayService::class)->healthCheck();
 
-            $response = \Illuminate\Support\Facades\Http::timeout(5)->get($base . '/health');
-            if (!$response->successful()) {
-                throw new \RuntimeException('HTTP ' . $response->status());
+            if (($result['status'] ?? 'down') === 'down') {
+                throw new \RuntimeException($result['error'] ?? __('settings.health_unreachable'));
             }
-            return __('settings.health_ok');
+
+            return $result['status'] ?? __('settings.health_ok');
         });
 
         return $checks;
