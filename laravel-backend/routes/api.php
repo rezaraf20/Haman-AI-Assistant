@@ -84,7 +84,20 @@ Route::prefix('v1')->group(function () {
         Route::get('tenant/apikeys',         [TenantController::class, 'apiKeys']);
         Route::delete('tenant/apikeys/{id}', [TenantController::class, 'revokeApiKey']);
 
-        Route::apiResource('chatbots', ChatbotController::class);
+        // NOT apiResource. It generates GET chatbots and GET chatbots/{chatbot},
+        // which collide with the API-key routes above — and because this group
+        // is registered second, its `GET chatbots` silently overwrote the
+        // plugin's one in the route lookup. Every WordPress plugin install got
+        // 401 from its own "test connection" button as a result, since
+        // Hamman_Api_Client::get_chatbots() calls exactly that endpoint.
+        //
+        // So: only the verbs this group actually needs, spelled out, and the
+        // two GETs deliberately left to the API-key group. Param named {id}
+        // to match the routes above — two routes matching the same path with
+        // differently-named parameters is the other half of the same trap.
+        Route::post('chatbots',        [ChatbotController::class, 'store']);
+        Route::put('chatbots/{id}',    [ChatbotController::class, 'update']);
+        Route::delete('chatbots/{id}', [ChatbotController::class, 'destroy']);
         Route::post('chatbots/{id}/domains',          [ChatbotController::class, 'addDomain']);
         Route::delete('chatbots/{id}/domains/{domain}', [ChatbotController::class, 'removeDomain']);
         Route::get('chatbots/{id}/documents',         [ChatbotController::class, 'documents']);
