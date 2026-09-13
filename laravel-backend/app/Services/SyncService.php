@@ -1,13 +1,65 @@
 <?php
 namespace App\Services;
 
-use App\Models\Tenant\{Document, SyncJob, Product, Faq, Chunk};
+use App\Models\Tenant\{Document, SyncJob, Product, Faq, Chunk, Lead, Chatbot};
 use App\Jobs\EmbedDocumentJob;
 use App\Support\SkuNormalizer;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class SyncService {
+
+    /** Statuses a customer can actually buy in — a move INTO one of these
+     *  from anything else is what "back in stock" means. */
+    private const BUYABLE_STOCK = ['instock', 'onbackorder'];
+
+    /**
+     * Someone asked for this product while it was out of stock, left their
+     * number, and it has just come back. The merchant is told, and handed
+     * the numbers.
+     *
+     * The customers are deliberately NOT texted automatically: that is the
+     * shop's decision and the shop's SMS bill, and a bot that texts people
+     * on its own the moment stock moves is exactly the kind of thing that
+     * gets a sender number blocked. See the Requests page for where the
+     * merchant acts on this.
+     */
+    private function notifyRestockWaitlist(string $chatbotId, int $wooProductId, string $name, ?string $previousStock, string $newStock): void {
+        $was = strtolower((string) $previousStock);
+        $now = strtolower($newStock);
+        // Only the transition counts. A product that was already buyable, or
+        // one seen for the first time, must not fire anything — otherwise the
+        // first sync after this ships would notify for every product at once.
+        if ($previousStock === null) return;
+        if (in_array($was, self::BUYABLE_STOCK, true)) return;
+        if (!in_array($now, self::BUYABLE_STOCK, true)) return;
+
+        $waiting = Lead::where('chatbot_id', $chatbotId)
+            ->where('type', 'out_of_stock')
+            ->where('request_status', 'open')
+            ->where('requested_product_id', $wooProductId)
+            ->get();
+
+        if ($waiting->isEmpty()) return;
+
+        try {
+            $chatbot = Chatbot::find($chatbotId);
+            if (!$chatbot) return;
+
+            app(NotificationService::class)->send($chatbot, 'restock_waitlist', [
+                'item'       => $name,
+                'product_id' => $wooProductId,
+                'count'      => $waiting->count(),
+                'contacts'   => $waiting->pluck('contact')->all(),
+            ]);
+        } catch (\Throwable $e) {
+            // A failed notification must never fail the sync that triggered
+            // it — the waitlist rows stay open and the merchant still sees
+            // them on the Requests page.
+            Log::warning("Restock waitlist notification failed for chatbot {$chatbotId} product {$wooProductId}: {$e->getMessage()}");
+        }
+    }
 
     public function syncProducts(string $chatbotId, array $products, string $schema): SyncJob {
         $job = SyncJob::create(['chatbot_id'=>$chatbotId,'job_type'=>'products','triggered_by'=>'plugin','status'=>'running','items_total'=>count($products),'started_at'=>now()]);
@@ -55,6 +107,12 @@ class SyncService {
                         'type'         => 'product',
                     ],
                 ]);
+                // Read the stock status we last knew BEFORE overwriting it —
+                // the restock waitlist keys off the transition, not the
+                // current value, so this has to happen ahead of the upsert.
+                $previousStock = Product::where('chatbot_id', $chatbotId)
+                    ->where('woo_product_id', $p['id'])->value('stock_status');
+
                 Product::updateOrCreate(
                     ['chatbot_id'=>$chatbotId,'woo_product_id'=>$p['id']],
                     ['name'=>$p['name'],'sku'=>$p['sku']??null,'sku_normalized'=>SkuNormalizer::normalize($p['sku']??null),'type'=>$p['type']??'simple','status'=>$p['status']??'publish','description'=>strip_tags($p['description']??''),'price'=>$p['price']??null,'currency'=>$p['currency']??'USD','stock_status'=>$p['stock_status']??'instock','permalink'=>$p['permalink']??null,'featured_image'=>$p['featured_image']??null,'attributes'=>$p['attributes']??[],'tags'=>$p['tags']??[],'authenticity_status'=>$p['authenticity_status']??null,'brand'=>$p['brand']??null,'official_distributor'=>$p['official_distributor']??null,'warranty_period'=>$p['warranty_period']??null,'country_of_origin'=>$p['country_of_origin']??null,'embedding_status'=>'pending','synced_at'=>now()]
@@ -62,6 +120,7 @@ class SyncService {
                 if (in_array($outcome, ['new','updated'], true)) {
                     EmbedDocumentJob::dispatch($doc->id, $chatbotId, $schema);
                 }
+                $this->notifyRestockWaitlist($chatbotId, (int)$p['id'], $p['name'], $previousStock, $p['stock_status'] ?? 'instock');
                 $this->syncAttachments($chatbotId, (int)$p['id'], $p['name'], $p['attachments']??[], $schema);
                 $counts[$outcome]++;
             } catch (\Throwable $e) {

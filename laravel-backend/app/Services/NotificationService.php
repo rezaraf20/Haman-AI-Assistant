@@ -107,6 +107,7 @@ class NotificationService {
         return match ($event) {
             'lead_captured' => "New lead — {$chatbot->name}",
             'unanswered'    => "Unanswered question — {$chatbot->name}",
+            'restock_waitlist' => "Back in stock — people were waiting — {$chatbot->name}",
             default         => "{$chatbot->name}: {$event}",
         };
     }
@@ -120,6 +121,16 @@ class NotificationService {
             'unanswered' => sprintf(
                 "Unanswered question on %s\nQuery: %s\nBest score: %s",
                 $chatbot->name, $data['query'] ?? '-', $data['best_score'] ?? '-'
+            ),
+            // Tells the merchant who was waiting and hands them the numbers.
+            // Deliberately does NOT text the customers: that is the shop's
+            // call to make and their SMS bill to pay.
+            'restock_waitlist' => sprintf(
+                "%s is back in stock on %s.\n\n%d %s waiting:\n%s\n\nNothing has been sent to them — contact them from the Requests page when you're ready.",
+                $data['item'] ?? '-', $chatbot->name,
+                $data['count'] ?? 0,
+                (($data['count'] ?? 0) === 1 ? 'person was' : 'people were'),
+                implode("\n", array_map(fn ($c) => "- {$c}", $data['contacts'] ?? []))
             ),
             default => "{$chatbot->name}: {$event} — " . json_encode($data),
         };

@@ -63,6 +63,11 @@ class WidgetSettings extends Page implements HasForms {
             'quick_questions'    => $config['quick_questions'],
             'authenticity_unknown_message' => $bot?->authenticity_unknown_message ?? '',
             'max_payment_link_amount' => $bot?->max_payment_link_amount,
+            'lead_capture_enabled' => (bool) ($config['lead_capture_enabled'] ?? false),
+            'lead_capture_out_of_stock_enabled' => (bool) ($config['lead_capture_out_of_stock_enabled'] ?? false),
+            'lead_capture_not_in_catalog_enabled' => (bool) ($config['lead_capture_not_in_catalog_enabled'] ?? false),
+            'lead_capture_out_of_stock_prompt' => $config['lead_capture_out_of_stock_prompt'] ?? '',
+            'lead_capture_not_in_catalog_prompt' => $config['lead_capture_not_in_catalog_prompt'] ?? '',
         ]);
     }
 
@@ -109,6 +114,34 @@ class WidgetSettings extends Page implements HasForms {
                 ->helperText(__('chatbot.max_payment_link_amount_help'))
                 ->numeric()->minValue(0)->maxValue(999999999999)
                 ->nullable(),
+            // Lead capture. The two product modes are gated behind the
+            // master switch in the UI as well as in LeadCaptureService, so
+            // a merchant can never leave a mode "on" that silently does
+            // nothing because the feature itself is off.
+            Toggle::make('lead_capture_enabled')
+                ->label(__('chatbot.lead_capture_enabled_label'))
+                ->helperText(__('chatbot.lead_capture_enabled_help'))
+                ->live(),
+            Toggle::make('lead_capture_out_of_stock_enabled')
+                ->label(__('chatbot.lead_capture_out_of_stock_label'))
+                ->helperText(__('chatbot.lead_capture_out_of_stock_help'))
+                ->visible(fn ($get) => $get('lead_capture_enabled'))
+                ->live(),
+            Textarea::make('lead_capture_out_of_stock_prompt')
+                ->label(__('chatbot.lead_capture_out_of_stock_prompt_label'))
+                ->helperText(__('chatbot.lead_capture_item_placeholder_help'))
+                ->rows(2)->maxLength(1000)
+                ->visible(fn ($get) => $get('lead_capture_enabled') && $get('lead_capture_out_of_stock_enabled')),
+            Toggle::make('lead_capture_not_in_catalog_enabled')
+                ->label(__('chatbot.lead_capture_not_in_catalog_label'))
+                ->helperText(__('chatbot.lead_capture_not_in_catalog_help'))
+                ->visible(fn ($get) => $get('lead_capture_enabled'))
+                ->live(),
+            Textarea::make('lead_capture_not_in_catalog_prompt')
+                ->label(__('chatbot.lead_capture_not_in_catalog_prompt_label'))
+                ->helperText(__('chatbot.lead_capture_item_placeholder_help'))
+                ->rows(2)->maxLength(1000)
+                ->visible(fn ($get) => $get('lead_capture_enabled') && $get('lead_capture_not_in_catalog_enabled')),
             Repeater::make('quick_questions')
                 ->label(__('chatbot.quick_questions_label'))
                 ->schema([
@@ -128,6 +161,30 @@ class WidgetSettings extends Page implements HasForms {
         DB::statement("SET search_path TO {$this->schemaName}, public");
         $bot = Chatbot::find($this->chatbotId);
         if ($bot) {
+            $widgetConfig = array_merge($bot->widget_config ?? [], [
+                'chat_title'         => $data['chat_title'],
+                'ai_name'            => $data['ai_name'],
+                'avatar_url'         => $data['avatar_url'],
+                'primary_color'      => $data['primary_color'],
+                'position'           => $data['position'],
+                'powered_by_enabled' => (bool) $data['powered_by_enabled'],
+                'quick_questions'    => $data['quick_questions'] ?? [],
+                'lead_capture_enabled' => (bool) $data['lead_capture_enabled'],
+                'lead_capture_out_of_stock_enabled'   => (bool) $data['lead_capture_out_of_stock_enabled'],
+                'lead_capture_not_in_catalog_enabled' => (bool) $data['lead_capture_not_in_catalog_enabled'],
+                'lead_capture_out_of_stock_prompt'    => $data['lead_capture_out_of_stock_prompt'] ?? null,
+                'lead_capture_not_in_catalog_prompt'  => $data['lead_capture_not_in_catalog_prompt'] ?? null,
+            ]);
+
+            // Left blank means "use the built-in wording". The key has to be
+            // REMOVED, not stored as null or "": widget_config is merged over
+            // WidgetDefaults, so a present-but-empty key would override the
+            // default with nothing and leave the bot silent at exactly the
+            // moment it is meant to ask for a number.
+            foreach (['lead_capture_out_of_stock_prompt', 'lead_capture_not_in_catalog_prompt'] as $key) {
+                if (blank($widgetConfig[$key] ?? null)) unset($widgetConfig[$key]);
+            }
+
             $bot->update([
                 'welcome_message' => $data['welcome_message'] ?: null,
                 'system_prompt'   => $data['system_instruction'] ?: null,
@@ -137,15 +194,7 @@ class WidgetSettings extends Page implements HasForms {
                 // enabled; see ChatController::createPaymentLink().
                 'max_payment_link_amount' => $data['max_payment_link_amount'] !== '' && $data['max_payment_link_amount'] !== null
                     ? (float) $data['max_payment_link_amount'] : null,
-                'widget_config'   => array_merge($bot->widget_config ?? [], [
-                    'chat_title'         => $data['chat_title'],
-                    'ai_name'            => $data['ai_name'],
-                    'avatar_url'         => $data['avatar_url'],
-                    'primary_color'      => $data['primary_color'],
-                    'position'           => $data['position'],
-                    'powered_by_enabled' => (bool) $data['powered_by_enabled'],
-                    'quick_questions'    => $data['quick_questions'] ?? [],
-                ]),
+                'widget_config'   => $widgetConfig,
             ]);
         }
         DB::statement('SET search_path TO public');

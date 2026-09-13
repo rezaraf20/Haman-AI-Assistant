@@ -112,8 +112,13 @@ class Suggestions extends Page
             'missing_from_catalog' => __('suggestions.text_missing', [
                 'count' => $count, 'request' => $params['request'] ?? '',
             ]),
+            'restock_requested' => __('suggestions.text_restock_requested', [
+                'count' => $count, 'request' => $params['request'] ?? '',
+            ]),
             'compared_pair' => __('suggestions.text_compared', [
-                'count' => $count, 'products' => implode(' + ', $params['product_ids'] ?? []),
+                'count' => $count,
+                // Names when the event carried them, ids only as a fallback.
+                'products' => implode(' + ', ($params['names'] ?? null) ?: ($params['product_ids'] ?? [])),
             ]),
             default => __('suggestions.text_generic', ['count' => $count]),
         };
@@ -128,6 +133,7 @@ class Suggestions extends Page
             'unanswered_topic'     => __('suggestions.action_unanswered'),
             'missing_from_catalog' => __('suggestions.action_missing'),
             'compared_pair'        => __('suggestions.action_compared'),
+            'restock_requested'    => __('suggestions.action_restock_requested'),
             default                => __('suggestions.action_repeated_question'),
         };
     }

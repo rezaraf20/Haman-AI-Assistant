@@ -110,6 +110,75 @@ def _build_widget_block(fn_name: str, result: dict) -> Optional[dict]:
     return {"type": "product_compare", "products": products, "attribute_rows": result.get("attribute_rows", [])}
 
 
+_IN_STOCK_STATUSES = {"instock", "onbackorder"}
+
+
+def _detect_lead_signal(fn_name: str, args: dict, result: dict) -> Optional[dict]:
+    """Spots the two moments where a shop loses a sale it could still save:
+    the customer wanted something real that happens to be out of stock, and
+    the customer wanted something the shop does not carry at all.
+
+    Both are worth a callback, and they are NOT the same thing — "we'll
+    text you when it's back" is a promise the shop can keep; for something
+    it never stocked, the honest version is "we'll let you know if we get
+    it". Hence two modes rather than one, with their own copy and their own
+    off switch (LeadCaptureService on the Laravel side owns both).
+
+    Returns {"mode": ..., "item": ...} or None. `item` is what the customer
+    actually asked for, because a lead that only says "someone asked about
+    something" tells the merchant nothing they can act on.
+    """
+    if not isinstance(result, dict) or "error" in result:
+        return None
+
+    if fn_name == "get_product_availability":
+        # A live lookup that came back empty: the store genuinely has no
+        # such product. Only trust this when the check really ran live —
+        # an unreachable store must never be reported as "not stocked".
+        if result.get("live") and result.get("found") is False:
+            asked = args.get("sku") or args.get("product_id")
+            return {"mode": "not_in_catalog", "item": str(asked)} if asked else None
+
+        if result.get("found") and result.get("live"):
+            status = str(result.get("stock_status") or "").strip().lower()
+            if status and status not in _IN_STOCK_STATUSES:
+                name = result.get("name") or args.get("sku")
+                if not name:
+                    return None
+                # The numeric id travels with the signal so a restock can
+                # later be matched exactly, rather than by comparing a
+                # product name the customer never typed.
+                signal = {"mode": "out_of_stock", "item": str(name)}
+                if result.get("product_id"):
+                    signal["product_id"] = result["product_id"]
+                return signal
+
+    if fn_name == "search_products":
+        if not result.get("live"):
+            return None
+        asked = args.get("brand") or args.get("query") or args.get("category")
+        results = result.get("results") or []
+        if not results:
+            return {"mode": "not_in_catalog", "item": str(asked)} if asked else None
+
+        # Everything that matched is out of stock — the demand is real and
+        # the shop simply cannot fulfil it today.
+        statuses = [str(r.get("stock_status") or "").strip().lower() for r in results if isinstance(r, dict)]
+        if statuses and all(s and s not in _IN_STOCK_STATUSES for s in statuses):
+            first = next((r for r in results if isinstance(r, dict) and r.get("name")), None)
+            item = (first or {}).get("name") or asked
+            if not item:
+                return None
+            signal = {"mode": "out_of_stock", "item": str(item)}
+            # Only when exactly one product matched is the id unambiguous —
+            # with several, "the one they meant" is a guess.
+            if len(results) == 1 and first and first.get("product_id"):
+                signal["product_id"] = first["product_id"]
+            return signal
+
+    return None
+
+
 def _log_product_mentions(db: Session, conversation_id: Optional[str], chatbot_id: str, source: str, products: List[dict]) -> None:
     from app.services.rag_service import _log_event
     for p in products:
@@ -120,6 +189,51 @@ def _log_product_mentions(db: Session, conversation_id: Optional[str], chatbot_i
         _log_event(db, conversation_id, chatbot_id, "product_mentioned", {
             "product_id": p.get("product_id"), "name": p.get("name"), "source": source,
         })
+
+
+def _log_compared_pairs(
+    db: Session, conversation_id: Optional[str], chatbot_id: str,
+    products: List[dict], event_type: str,
+) -> None:
+    """Records which products were put in front of a customer together.
+
+    Two event types, deliberately not merged:
+      compared_pair — the customer explicitly asked for a comparison.
+      co_presented  — the bot showed several options side by side. That is
+                      an implicit comparison and worth knowing about, but
+                      it is a weaker signal than someone actually asking
+                      "which of these two", so a merchant reading the
+                      report should be able to tell them apart.
+
+    Every pair in the set is recorded, not just the first two: with three
+    products on screen the customer is weighing three pairings, and a
+    report that only ever saw (A,B) would miss that (B,C) is the matchup
+    that actually decides things.
+
+    Ids are sorted within a pair so (A,B) and (B,A) aggregate as one
+    matchup rather than two.
+    """
+    from app.services.rag_service import _log_event
+
+    ids = []
+    for p in products:
+        if not isinstance(p, dict) or not p.get("product_id"):
+            continue
+        if p.get("found") is False:  # a requested id that does not exist
+            continue
+        ids.append((p["product_id"], p.get("name")))
+
+    if len(ids) < 2:
+        return
+
+    for i in range(len(ids)):
+        for j in range(i + 1, len(ids)):
+            a, b = ids[i], ids[j]
+            pair = sorted([a, b], key=lambda x: str(x[0]))
+            _log_event(db, conversation_id, chatbot_id, event_type, {
+                "product_ids": [pair[0][0], pair[1][0]],
+                "names": [pair[0][1], pair[1][1]],
+            })
 
 
 def _log_cart_links(db: Session, conversation_id: Optional[str], chatbot_id: str, items: List[dict]) -> None:
@@ -281,6 +395,9 @@ def run_tool_calling_pipeline(
     model_used = "n/a"
     executed = 0
     widget_blocks: List[dict] = []
+    # First signal wins: if a turn touched several products, the merchant
+    # gets one callback offer about one thing, not a pile of them.
+    lead_signal: Optional[dict] = None
 
     # +1: guarantees one final call with tools disabled once the execution
     # budget is spent, so the turn always ends in a real text answer
@@ -320,6 +437,7 @@ def run_tool_calling_pipeline(
                 "model": model_used, "latency_ms": latency_ms,
                 "is_fallback": False, "is_unanswered": False, "finish_reason": "tool_stop",
                 "widget_blocks": widget_blocks,
+                "lead_signal": lead_signal,
             }
 
         messages.append({"role": "assistant", "content": message.get("content"), "tool_calls": tool_calls})
@@ -333,6 +451,15 @@ def run_tool_calling_pipeline(
             executed += 1
             result = _execute_tool_call(db, chatbot_id, conversation_id, call, tools)
             fn_name = call.get("function", {}).get("name", "")
+
+            if lead_signal is None:
+                try:
+                    call_args = json.loads(call.get("function", {}).get("arguments") or "{}")
+                except (ValueError, TypeError):
+                    call_args = {}
+                if isinstance(call_args, dict):
+                    lead_signal = _detect_lead_signal(fn_name, call_args, result)
+
             block = _build_widget_block(fn_name, result)
             if block:
                 widget_blocks.append(block)
@@ -346,6 +473,13 @@ def run_tool_calling_pipeline(
                     pass  # intent only — no SMS and no lookup happened yet; see order_status_viewed
                 else:
                     _log_product_mentions(db, conversation_id, chatbot_id, fn_name, block["products"])
+                    # An explicit comparison and a set of options shown side
+                    # by side are both matchups, but only one of them is the
+                    # customer asking — see _log_compared_pairs().
+                    _log_compared_pairs(
+                        db, conversation_id, chatbot_id, block["products"],
+                        "compared_pair" if fn_name == "compare_products" else "co_presented",
+                    )
             messages.append({
                 "role": "tool",
                 "tool_call_id": call.get("id", ""),

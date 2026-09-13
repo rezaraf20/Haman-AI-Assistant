@@ -43,6 +43,10 @@ class SuggestionEngine
         'authenticity_doubt'    => 3,
         'compared_pair'         => 3,
         'asked_not_sold'        => 5,
+        // Lower than the others on purpose: leaving a phone number is a far
+        // stronger signal than asking a question, so two people is already
+        // worth a merchant's attention.
+        'restock_requested'     => 2,
     ];
 
     /**
@@ -76,6 +80,7 @@ class SuggestionEngine
             $this->unansweredTopics($chatbotId, $since),
             $this->missingFromCatalog($chatbotId, $since),
             $this->comparedPairs($chatbotId, $since),
+            $this->openRequests($chatbotId, $since),
         );
 
         usort($found, fn ($a, $b) => $b['count'] <=> $a['count']);
@@ -223,9 +228,16 @@ class SuggestionEngine
      */
     private function comparedPairs(string $chatbotId, $since): array
     {
+        // Reads the dedicated compared_pair event rather than digging the
+        // pair back out of tool_called's arguments: tool_called payloads
+        // are nulled out after 90 days by hamman:prune-event-payloads, so
+        // deriving from them would quietly lose the history this rule
+        // exists to accumulate. Only explicit comparisons count here —
+        // co_presented (options shown side by side) is a weaker signal and
+        // does not justify telling a merchant to build a comparison page.
         $rows = DB::table('conversation_events')
             ->where('chatbot_id', $chatbotId)
-            ->where('event_type', 'tool_called')
+            ->where('event_type', 'compared_pair')
             ->where('created_at', '>=', $since)
             ->selectRaw('payload, conversation_id')
             ->limit(5000)
@@ -234,22 +246,18 @@ class SuggestionEngine
         $pairs = [];
         foreach ($rows as $r) {
             $payload = json_decode((string) $r->payload, true) ?: [];
-            if (($payload['tool'] ?? $payload['name'] ?? '') !== 'compare_products') continue;
-
-            $args = $payload['arguments'] ?? $payload['args'] ?? [];
-            if (is_string($args)) $args = json_decode($args, true) ?: [];
-            $ids = $args['product_ids'] ?? $args['products'] ?? [];
-            if (!is_array($ids) || count($ids) < 2) continue;
+            $ids = $payload['product_ids'] ?? [];
+            if (!is_array($ids) || count($ids) !== 2) continue;
 
             // Order-independent: comparing A with B is the same finding as
-            // comparing B with A.
+            // comparing B with A. The logger already sorts, but a pair
+            // arriving from an older event must not split the group.
             $ids = array_map('strval', $ids);
             sort($ids);
-            foreach ($this->pairsOf($ids) as $pair) {
-                $key = implode('|', $pair);
-                $pairs[$key]['ids'] = $pair;
-                $pairs[$key]['conversations'][$r->conversation_id] = true;
-            }
+            $key = implode('|', $ids);
+            $pairs[$key]['ids'] = $ids;
+            $pairs[$key]['names'] = $payload['names'] ?? null;
+            $pairs[$key]['conversations'][$r->conversation_id] = true;
         }
 
         $out = [];
@@ -259,7 +267,12 @@ class SuggestionEngine
             $out[] = [
                 'type'          => 'compared_pair',
                 'fingerprint'   => 'pair:' . substr(sha1($key), 0, 24),
-                'params'        => ['product_ids' => $p['ids']],
+                // Names where the event carried them — a merchant reading
+                // "12 and 34 were compared" learns nothing.
+                'params'        => [
+                    'product_ids' => $p['ids'],
+                    'names'       => array_values(array_filter($p['names'] ?? [])) ?: null,
+                ],
                 'count'         => $people,
                 'conversations' => array_slice(array_keys($p['conversations']), 0, 10),
             ];
@@ -267,14 +280,58 @@ class SuggestionEngine
         return $out;
     }
 
-    private function pairsOf(array $ids): array
+    /**
+     * The waitlist, as a suggestion. This is the strongest demand signal
+     * the system has: a customer did not merely type a name that matched
+     * nothing, they left a phone number and asked to be told. "19 people
+     * asked for Medicube, which you don't carry" comes from here.
+     *
+     * Restock requests are included too, since a product sitting out of
+     * stock with people queued on it is a reorder decision, not just a
+     * missing-catalog one.
+     */
+    private function openRequests(string $chatbotId, $since): array
     {
+        $rows = DB::table('leads')
+            ->selectRaw('type, requested_item, requested_product_id, COUNT(*) AS cnt')
+            ->where('chatbot_id', $chatbotId)
+            ->whereIn('type', ['out_of_stock', 'not_in_catalog'])
+            ->where('request_status', 'open')
+            ->whereNotNull('requested_item')
+            ->where('created_at', '>=', $since)
+            ->groupBy('type', 'requested_item', 'requested_product_id')
+            ->get();
+
         $out = [];
-        $n = count($ids);
-        for ($i = 0; $i < $n; $i++) {
-            for ($j = $i + 1; $j < $n; $j++) $out[] = [$ids[$i], $ids[$j]];
+        foreach ($rows as $r) {
+            $people = (int) $r->cnt;
+            $key = $r->type === 'out_of_stock' ? 'restock_requested' : 'missing_from_catalog';
+            if ($people < self::THRESHOLDS[$key === 'restock_requested' ? 'restock_requested' : 'missing_from_catalog']) continue;
+
+            $out[] = [
+                'type'        => $key,
+                'fingerprint' => $key . ':' . ($r->requested_product_id
+                    ? 'pid' . $r->requested_product_id
+                    : substr(sha1(TextSimilarity::normalize($r->requested_item)), 0, 24)),
+                'params'      => ['request' => $r->requested_item, 'product_id' => $r->requested_product_id],
+                'count'       => $people,
+                // The conversations are reachable from the Requests page,
+                // which is where a merchant acts on these; the suggestion
+                // links there rather than duplicating the contact list.
+                'conversations' => $this->conversationsForRequest($chatbotId, $r->requested_item),
+            ];
         }
         return $out;
+    }
+
+    private function conversationsForRequest(string $chatbotId, string $item): array
+    {
+        return DB::table('leads')
+            ->where('chatbot_id', $chatbotId)
+            ->where('requested_item', $item)
+            ->limit(10)
+            ->pluck('conversation_id')
+            ->all();
     }
 
     /**

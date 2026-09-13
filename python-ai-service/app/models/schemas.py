@@ -57,6 +57,13 @@ class ChatResponse(BaseModel):
     # that didn't call one of those two tools; the widget must never try to
     # render this as text.
     widget_blocks: List[dict] = []
+    # Set when a tool call showed the customer wanted something the shop
+    # cannot sell them right now — {"mode": "out_of_stock"|"not_in_catalog",
+    # "item": "..."}. Laravel's LeadCaptureService decides whether to offer
+    # a callback (each mode has its own off switch and its own copy); this
+    # service only reports what happened. See
+    # tool_calling_service._detect_lead_signal().
+    lead_signal: Optional[dict] = None
 
 class EmbedRequest(BaseModel):
     document_id: str

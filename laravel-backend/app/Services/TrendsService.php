@@ -70,6 +70,8 @@ class TrendsService
             $catalog = $this->catalogIndex();                            // 4
             $history = $this->historySpan();                             // 5
             $seasonal = $this->seasonal($history);                       // 6 (or 0)
+            $requested = $this->requestedItems($start, $end);            // 7
+            $compared = $this->comparedPairs($start, $end);              // 8-9
         } finally {
             DB::statement('SET search_path TO public');
         }
@@ -97,7 +99,8 @@ class TrendsService
             'asked_products'   => $askedProducts,
             'best_sellers'     => $bestSellers,
             'demand_gap'       => $this->demandGap($askedProducts, $bestSellers),
-            'missing_from_catalog' => $this->missingFromCatalog($curEvents),
+            'missing_from_catalog' => $this->missingFromCatalog($curEvents, $requested),
+            'compared_pairs'   => $compared,
             'emerging_topics'  => $this->emergingTopics($curEvents, $prevEvents),
             'declining_topics' => $this->decliningTopics($curEvents, $prevEvents),
             'unanswered_groups' => $this->unansweredGroups($curEvents),
@@ -398,7 +401,7 @@ class TrendsService
      * nothing, which is the one signal in this system that names a
      * specific product the shop does not carry.
      */
-    private function missingFromCatalog(array $events): array
+    private function missingFromCatalog(array $events, array $requestedItems = []): array
     {
         $counts = [];
         foreach ($events as $row) {
@@ -410,9 +413,132 @@ class TrendsService
             $counts[$query] = ($counts[$query] ?? 0) + (int) $row['cnt'];
         }
 
+        // The waitlist is the stronger signal of the two: someone cared
+        // enough to leave a phone number, not merely typed a name that
+        // matched nothing. Both feed the same list.
+        foreach ($requestedItems as $item => $count) {
+            $counts[$item] = ($counts[$item] ?? 0) + (int) $count;
+        }
+
         $items = [];
         foreach ($counts as $text => $count) $items[] = ['text' => $text, 'count' => $count];
         return TextSimilarity::group($items, 15);
+    }
+
+    /**
+     * Which products get weighed against each other, and which one the
+     * customer goes on to put in their cart.
+     *
+     * The second half is the part a merchant cannot get anywhere else: a
+     * pair that keeps coming up tells you what your customers see as
+     * substitutes, but the win rate tells you which one is actually
+     * winning those decisions — and therefore which product page, price
+     * or photo set is losing them.
+     *
+     * "Went on to" means a cart signal for one of the two products, later
+     * in the SAME conversation than the comparison. Nothing here infers a
+     * purchase: adding to a cart is the strongest signal this system
+     * observes, and it is reported as exactly that.
+     */
+    private function comparedPairs(Carbon $from, Carbon $to): array
+    {
+        $events = DB::table('conversation_events')
+            ->select('event_type', 'conversation_id', 'payload', 'created_at')
+            ->whereIn('event_type', ['compared_pair', 'co_presented'])
+            ->whereBetween('created_at', [$from, $to])
+            ->orderBy('created_at')
+            ->limit(5000)
+            ->get();
+
+        if ($events->isEmpty()) return [];
+
+        $carts = DB::table('conversation_events')
+            ->select('conversation_id', 'payload', 'created_at')
+            ->whereIn('event_type', ['cart_add_succeeded', 'cart_link_generated'])
+            ->whereBetween('created_at', [$from, $to])
+            ->orderBy('created_at')
+            ->limit(5000)
+            ->get();
+
+        // conversation_id => [[product_id, created_at], ...]
+        $cartsByConv = [];
+        foreach ($carts as $c) {
+            $payload = json_decode((string) $c->payload, true) ?: [];
+            if (empty($payload['product_id'])) continue;
+            $cartsByConv[$c->conversation_id][] = [(string) $payload['product_id'], $c->created_at];
+        }
+
+        $pairs = [];
+        foreach ($events as $e) {
+            $payload = json_decode((string) $e->payload, true) ?: [];
+            $ids = $payload['product_ids'] ?? [];
+            if (count($ids) !== 2) continue;
+
+            $a = (string) $ids[0];
+            $b = (string) $ids[1];
+            $key = $a . '|' . $b;
+            $names = $payload['names'] ?? [];
+
+            if (!isset($pairs[$key])) {
+                $pairs[$key] = [
+                    'product_ids' => [$a, $b],
+                    'names'       => [$names[0] ?? $a, $names[1] ?? $b],
+                    'count'       => 0,
+                    'explicit'    => 0,
+                    'wins'        => [$a => 0, $b => 0],
+                ];
+            }
+            $pairs[$key]['count']++;
+            if ($e->event_type === 'compared_pair') $pairs[$key]['explicit']++;
+
+            // The first of the two that reaches a cart after this moment
+            // takes the round. A comparison nobody acted on scores neither.
+            $winner = null;
+            $winnerAt = null;
+            foreach ($cartsByConv[$e->conversation_id] ?? [] as [$pid, $at]) {
+                if ($at <= $e->created_at) continue;
+                if ($pid !== $a && $pid !== $b) continue;
+                if ($winnerAt === null || $at < $winnerAt) {
+                    $winner = $pid;
+                    $winnerAt = $at;
+                }
+            }
+            if ($winner !== null) $pairs[$key]['wins'][$winner]++;
+        }
+
+        $out = array_map(function ($p) {
+            $a = $p['product_ids'][0];
+            $b = $p['product_ids'][1];
+            $decided = $p['wins'][$a] + $p['wins'][$b];
+            return [
+                'names'      => $p['names'],
+                'product_ids'=> $p['product_ids'],
+                'count'      => $p['count'],
+                'explicit'   => $p['explicit'],
+                'wins'       => [$p['wins'][$a], $p['wins'][$b]],
+                'decided'    => $decided,
+                // Null rather than 0% when nothing was ever added: "we
+                // don't know" and "nobody wanted it" are different answers.
+                'winner'     => $decided === 0 ? null
+                    : ($p['wins'][$a] === $p['wins'][$b] ? 'tie' : ($p['wins'][$a] > $p['wins'][$b] ? 0 : 1)),
+            ];
+        }, array_values($pairs));
+
+        usort($out, fn ($x, $y) => $y['count'] <=> $x['count']);
+        return array_slice($out, 0, 10);
+    }
+
+    /** requested_item => people, for not-in-catalog requests in the window. */
+    private function requestedItems(Carbon $from, Carbon $to): array
+    {
+        return DB::table('leads')
+            ->selectRaw('requested_item, COUNT(*) AS cnt')
+            ->where('type', 'not_in_catalog')
+            ->whereNotNull('requested_item')
+            ->whereBetween('created_at', [$from, $to])
+            ->groupBy('requested_item')
+            ->pluck('cnt', 'requested_item')
+            ->all();
     }
 
     private function topicCounts(array $events): array

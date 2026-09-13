@@ -107,6 +107,59 @@
 </x-filament::section>
 
 <x-filament::section>
+    <x-slot name="heading">{{ __('trends.compared') }}</x-slot>
+    <x-slot name="description">{{ __('trends.compared_desc') }}</x-slot>
+    @if (empty($data['compared_pairs']))
+        <p class="text-sm text-gray-500">{{ __('trends.empty_section') }}</p>
+    @else
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-gray-500 border-b">
+                        <th class="py-2 pe-4 text-start">{{ __('trends.col_pair') }}</th>
+                        <th class="py-2 pe-4 text-start">{{ __('trends.col_times') }}</th>
+                        <th class="py-2 text-start">{{ __('trends.col_winner') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach ($data['compared_pairs'] as $row)
+                        <tr class="border-b last:border-0">
+                            <td class="py-2 pe-4">
+                                {{ $row['names'][0] }}
+                                <span class="text-gray-400">{{ __('trends.versus') }}</span>
+                                {{ $row['names'][1] }}
+                            </td>
+                            <td class="py-2 pe-4">
+                                {{ number_format($row['count']) }}
+                                @if ($row['explicit'] > 0 && $row['explicit'] < $row['count'])
+                                    <span class="text-xs text-gray-400">
+                                        ({{ __('trends.explicit_n', ['n' => $row['explicit']]) }})
+                                    </span>
+                                @endif
+                            </td>
+                            <td class="py-2">
+                                @if ($row['winner'] === null)
+                                    {{-- Nobody added either one. "We don't know"
+                                         is a different answer from "it lost". --}}
+                                    <span class="text-gray-400">{{ __('trends.no_winner_yet') }}</span>
+                                @elseif ($row['winner'] === 'tie')
+                                    <span class="text-gray-500">{{ __('trends.tie') }}</span>
+                                @else
+                                    <span class="text-success-600 font-medium">{{ $row['names'][$row['winner']] }}</span>
+                                    <span class="text-xs text-gray-400" dir="ltr">
+                                        ({{ $row['wins'][0] }}–{{ $row['wins'][1] }})
+                                    </span>
+                                @endif
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+    @endif
+</x-filament::section>
+
+<x-filament::section>
     <x-slot name="heading">{{ __('trends.missing_from_catalog') }}</x-slot>
     <x-slot name="description">{{ __('trends.missing_from_catalog_desc') }}</x-slot>
     @if (empty($data['missing_from_catalog']))

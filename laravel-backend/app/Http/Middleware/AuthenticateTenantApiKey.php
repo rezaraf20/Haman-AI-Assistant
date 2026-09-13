@@ -6,6 +6,9 @@ use App\Models\ApiKey;
 use App\Models\ChatbotIndexEntry;
 
 class AuthenticateTenantApiKey {
+    /** How stale last_used_at may get before it is written again. */
+    private const TOUCH_THROTTLE_MINUTES = 5;
+
     public function handle(Request $request, Closure $next): mixed {
         $raw = $request->bearerToken();
         if (empty($raw) || !str_starts_with($raw, 'hfp_')) {
@@ -32,7 +35,36 @@ class AuthenticateTenantApiKey {
                 return response()->json(['error' => 'Chatbot suspended'], 403);
             }
         }
+        $this->touchLastUsed($apiKey, $request);
+
         app()->instance('current_tenant', $apiKey->tenant);
         return $next($request);
+    }
+
+    /**
+     * last_used_at is what CustomerOnboarding reads to decide whether the
+     * plugin is installed. Nothing wrote it, so that checklist told every
+     * customer their plugin was not installed forever — including the ones
+     * whose plugin was sitting right there syncing.
+     *
+     * Throttled rather than written on every request: a busy plugin can
+     * call this endpoint constantly, and an UPDATE per request would add a
+     * write to a hot path to keep a column that only needs minute-level
+     * accuracy. updateQuietly() skips model events for the same reason.
+     */
+    private function touchLastUsed(ApiKey $apiKey, Request $request): void
+    {
+        if ($apiKey->last_used_at && $apiKey->last_used_at->gt(now()->subMinutes(self::TOUCH_THROTTLE_MINUTES))) {
+            return;
+        }
+
+        try {
+            $apiKey->updateQuietly([
+                'last_used_at' => now(),
+                'last_used_ip' => $request->ip(),
+            ]);
+        } catch (\Throwable $e) {
+            // Recording usage must never break a working API call.
+        }
     }
 }

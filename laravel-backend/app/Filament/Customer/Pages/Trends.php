@@ -115,6 +115,15 @@ class Trends extends Page
             }
             fputcsv($out, []);
 
+            fputcsv($out, [__('trends.compared')]);
+            fputcsv($out, [__('trends.col_pair'), __('trends.col_times'), __('trends.col_winner')]);
+            foreach ($data['compared_pairs'] as $r) {
+                $winner = $r['winner'] === null ? __('trends.no_winner_yet')
+                    : ($r['winner'] === 'tie' ? __('trends.tie') : $r['names'][$r['winner']]);
+                fputcsv($out, [$r['names'][0] . ' / ' . $r['names'][1], $r['count'], $winner]);
+            }
+            fputcsv($out, []);
+
             fputcsv($out, [__('trends.missing_from_catalog')]);
             fputcsv($out, [__('trends.col_request'), __('trends.col_count')]);
             foreach ($data['missing_from_catalog'] as $r) fputcsv($out, [$r['label'], $r['count']]);
