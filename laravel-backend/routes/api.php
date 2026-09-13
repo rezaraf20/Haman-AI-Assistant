@@ -14,14 +14,18 @@ Route::prefix('v1')->group(function () {
 
     // ── Auth (Public) ──────────────────────────────────
     Route::prefix('auth')->group(function () {
-        Route::post('register', [AuthController::class, 'register']);
-        Route::post('login',    [AuthController::class, 'login']);
+        // Registration creates a tenant and a whole Postgres schema; login
+        // was guessable at full speed. Both were unthrottled until the
+        // abuse audit — see AppServiceProvider for how each is keyed.
+        Route::post('register', [AuthController::class, 'register'])->middleware('throttle:register');
+        Route::post('login',    [AuthController::class, 'login'])->middleware('throttle:login');
     });
 
     // Public, unauthenticated — the WordPress plugin's settings page
     // polls this (before necessarily having a valid API key entered) to
     // show an "update available" notice.
-    Route::get('wp-plugin/latest-version', [HealthController::class, 'wpPluginVersion']);
+    Route::get('wp-plugin/latest-version', [HealthController::class, 'wpPluginVersion'])
+        ->middleware('throttle:public-read');
 
     // ── Chat Widget (Public, but domain- and rate-limited) ─
     Route::prefix('chat')->group(function () {
@@ -57,7 +61,9 @@ Route::prefix('v1')->group(function () {
     });
 
     // ── Plugin API (API Key) ───────────────────────────
-    Route::middleware(['auth.apikey', 'tenant.schema'])->group(function () {
+    // Every sync call embeds text at the platform's expense, and a valid
+    // key could make them as fast as it liked.
+    Route::middleware(['auth.apikey', 'tenant.schema', 'throttle:plugin-api'])->group(function () {
         Route::prefix('sync')->group(function () {
             Route::post('products', [SyncController::class, 'syncProducts']);
             Route::post('pages',    [SyncController::class, 'syncPages']);

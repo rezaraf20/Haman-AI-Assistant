@@ -236,6 +236,30 @@ class Settings extends Page implements HasForms
     private function systemTab(): array
     {
         return [
+            Section::make(__('settings.backup'))
+                ->description(__('settings.backup_desc'))
+                ->icon(Config::isConfigured('backup') ? 'heroicon-o-check-circle' : 'heroicon-o-exclamation-triangle')
+                ->iconColor(Config::isConfigured('backup') ? 'success' : 'warning')
+                ->schema([
+                    Placeholder::make('backup_status')
+                        ->label('')
+                        ->content(fn () => view('filament.pages.partials.backup-status', [
+                            'latest'   => \App\Models\BackupRun::latestAttempt(),
+                            'success'  => \App\Models\BackupRun::latestSuccess(),
+                            'verified' => \App\Models\BackupRun::latestVerified(),
+                            'offsite'  => Config::get('backup.destination') === 's3' && Config::isConfigured('backup'),
+                        ])),
+                    $this->field('backup.destination'),
+                    $this->field('backup.s3.endpoint'),
+                    $this->field('backup.s3.region'),
+                    $this->field('backup.s3.bucket'),
+                    $this->field('backup.s3.access_key'),
+                    $this->field('backup.s3.secret_key'),
+                    $this->field('backup.s3.prefix'),
+                    $this->field('backup.keep_daily'),
+                    $this->field('backup.keep_weekly'),
+                ])->columns(2),
+
             Section::make(__('settings.system_status'))
                 ->description(__('settings.system_status_desc'))
                 ->schema([

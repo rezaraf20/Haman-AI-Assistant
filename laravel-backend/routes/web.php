@@ -11,7 +11,12 @@ use App\Services\TrendsService;
 
 // Zarinpal redirects the end user's browser here after payment — deliberately
 // outside any auth guard (see PaymentController for why that's safe).
-Route::any('/payments/zarinpal/callback', [PaymentController::class, 'zarinpalCallback'])
+// Route::any accepted seven verbs on an endpoint that makes a server-to-
+// server verify call to Zarinpal per request. A browser redirect back from
+// a gateway is a GET; POST is kept only because gateways occasionally use
+// it. Throttled because each call costs an outbound request.
+Route::match(['get', 'post'], '/payments/zarinpal/callback', [PaymentController::class, 'zarinpalCallback'])
+    ->middleware('throttle:public-read')
     ->name('payments.zarinpal.callback');
 
 // Customer portal's login/signup — phone+SMS-OTP (see CustomerPanelProvider
@@ -36,7 +41,7 @@ Route::get('/portal/login', function () {
     session(['portal_auth_method' => $method]);
 
     return view('auth.otp-login-page', ['method' => $method]);
-})->name('portal.login')->middleware(SetLocale::class);
+})->name('portal.login')->middleware([SetLocale::class, 'throttle:public-read']);
 
 /**
  * The Trends report as a standalone, print-styled page — this is the "PDF"

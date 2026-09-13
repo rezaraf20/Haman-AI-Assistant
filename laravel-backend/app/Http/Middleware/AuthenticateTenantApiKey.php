@@ -38,6 +38,12 @@ class AuthenticateTenantApiKey {
         $this->touchLastUsed($apiKey, $request);
 
         app()->instance('current_tenant', $apiKey->tenant);
+
+        // The plugin-api rate limiter keys on this. Without it the limiter
+        // falls back to IP, and a shared host would put unrelated customers
+        // in the same bucket — one busy shop throttling another.
+        $request->attributes->set('api_key_id', (string) $apiKey->id);
+
         return $next($request);
     }
 

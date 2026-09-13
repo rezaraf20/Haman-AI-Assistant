@@ -11,4 +11,6 @@ return [
     'please_wait' => 'Please wait a moment and try again.',
     'request_otp_first' => 'Please request a verification code first.',
     'sms_send_failed' => 'Failed to send SMS. Please try again later.',
+    'otp_too_many_requests' => 'Too many code requests. Please try again tomorrow.',
+    'too_many_attempts' => 'Too many attempts. Try again in :seconds seconds.',
 ];

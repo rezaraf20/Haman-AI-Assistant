@@ -190,6 +190,33 @@ class SettingsRegistry
             'limits.otp_ttl_minutes' => [
                 'tab' => 'limits', 'group' => 'otp', 'type' => 'int', 'default' => 5,
             ],
+            // Added by the abuse audit: every one of these guards an
+            // endpoint that either costs money or was brute-forceable.
+            'limits.login_attempts_per_minute' => [
+                'tab' => 'limits', 'group' => 'auth', 'type' => 'int', 'default' => 5,
+            ],
+            'limits.login_lockout_minutes' => [
+                'tab' => 'limits', 'group' => 'auth', 'type' => 'int', 'default' => 15,
+            ],
+            'limits.login_attempts_before_lockout' => [
+                'tab' => 'limits', 'group' => 'auth', 'type' => 'int', 'default' => 10,
+            ],
+            'limits.register_per_ip_per_day' => [
+                'tab' => 'limits', 'group' => 'auth', 'type' => 'int', 'default' => 3,
+            ],
+            'limits.portal_otp_per_ip_per_day' => [
+                'tab' => 'limits', 'group' => 'otp', 'type' => 'int', 'default' => 10,
+            ],
+            'limits.sync_requests_per_minute' => [
+                'tab' => 'limits', 'group' => 'sync', 'type' => 'int', 'default' => 30,
+            ],
+            'limits.sync_items_per_request' => [
+                'tab' => 'limits', 'group' => 'sync', 'type' => 'int', 'default' => 50,
+            ],
+            'limits.public_read_per_minute' => [
+                'tab' => 'limits', 'group' => 'chat', 'type' => 'int', 'default' => 60,
+            ],
+
             'limits.pdf_max_mb' => [
                 'tab' => 'limits', 'group' => 'documents', 'type' => 'int', 'default' => 10,
             ],
@@ -210,6 +237,39 @@ class SettingsRegistry
             'system.retention_activity_log_months' => [
                 'tab' => 'system', 'group' => 'retention', 'type' => 'int', 'default' => 18,
             ],
+            // Off-server backup destination. S3-compatible on purpose:
+            // Arvan, Liara and Backblaze all speak it, so the platform is
+            // not tied to one provider — and the whole point is that the
+            // copy does not live on the machine that just died.
+            'backup.destination' => [
+                'tab' => 'system', 'group' => 'backup', 'type' => 'select',
+                'options' => ['local_only', 's3'], 'default' => 'local_only',
+            ],
+            'backup.s3.endpoint' => [
+                'tab' => 'system', 'group' => 'backup', 'type' => 'string', 'default' => null,
+            ],
+            'backup.s3.region' => [
+                'tab' => 'system', 'group' => 'backup', 'type' => 'string', 'default' => 'us-east-1',
+            ],
+            'backup.s3.bucket' => [
+                'tab' => 'system', 'group' => 'backup', 'type' => 'string', 'default' => null,
+            ],
+            'backup.s3.access_key' => [
+                'tab' => 'system', 'group' => 'backup', 'type' => 'secret', 'default' => null,
+            ],
+            'backup.s3.secret_key' => [
+                'tab' => 'system', 'group' => 'backup', 'type' => 'secret', 'default' => null,
+            ],
+            'backup.s3.prefix' => [
+                'tab' => 'system', 'group' => 'backup', 'type' => 'string', 'default' => 'hamman-backups',
+            ],
+            'backup.keep_daily' => [
+                'tab' => 'system', 'group' => 'backup', 'type' => 'int', 'default' => 7,
+            ],
+            'backup.keep_weekly' => [
+                'tab' => 'system', 'group' => 'backup', 'type' => 'int', 'default' => 4,
+            ],
+
             'system.maintenance_mode' => [
                 'tab' => 'system', 'group' => 'maintenance', 'type' => 'bool', 'default' => false,
             ],
@@ -262,6 +322,9 @@ class SettingsRegistry
             'paddle'      => ['payments.paddle.api_key', 'payments.paddle.vendor_id'],
             'email'       => ['mail.host', 'mail.from_address'],
             'melipayamak' => ['sms.melipayamak.username', 'sms.melipayamak.password', 'sms.melipayamak.sender'],
+            // A backup that only ever lands on the same server is not an
+            // off-server backup, so "configured" means the remote is set up.
+            'backup'      => ['backup.s3.endpoint', 'backup.s3.bucket', 'backup.s3.access_key', 'backup.s3.secret_key'],
             default       => [],
         };
     }

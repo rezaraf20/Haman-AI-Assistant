@@ -1,6 +1,9 @@
 FROM php:8.3-fpm-alpine
 
-RUN apk add --no-cache git curl libpq-dev libzip-dev zip unzip linux-headers icu-dev $PHPIZE_DEPS
+# postgresql16-client for pg_dump/pg_restore: the nightly backup runs from
+# the scheduler in this image, and the major version must match the server
+# (16.x) or pg_dump refuses to run against it.
+RUN apk add --no-cache git curl libpq-dev libzip-dev zip unzip linux-headers icu-dev postgresql16-client $PHPIZE_DEPS
 
 RUN docker-php-ext-install pdo pdo_pgsql pgsql zip bcmath opcache pcntl intl
 RUN pecl install redis && docker-php-ext-enable redis
@@ -93,7 +96,12 @@ RUN find database/migrations -name '*_create_personal_access_tokens_table.php' \
     ! -name '2025_01_01_000006_create_personal_access_tokens_table.php' -delete || true
 
 # Permissions
-RUN mkdir -p storage/logs storage/framework/{cache,sessions,views} bootstrap/cache
+# storage/app/backups is the mount point for the laravel_backups volume and
+# is pre-created for the same reason /shared-assets is below: Docker creates
+# a new named volume root-owned, but seeds it from whatever exists at that
+# path in the image — so it has to exist, owned by www-data, before the
+# first mount, or pg_dump gets "Permission denied" writing into it.
+RUN mkdir -p storage/logs storage/framework/{cache,sessions,views} bootstrap/cache storage/app/backups
 RUN chown -R www-data:www-data /var/www/html
 RUN chmod -R 775 storage bootstrap/cache
 RUN chmod +x /docker-entrypoint.sh
