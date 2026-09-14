@@ -73,6 +73,17 @@ jobs:
   laravel-tests:
     name: Laravel tests
     runs-on: ubuntu-latest
+    # Run against the image that actually ships, rather than a composer
+    # install of the repo. This repository deliberately does not track the
+    # Laravel skeleton -- no artisan, no public/index.php, most of config/
+    # absent -- because the Dockerfile builds it with `composer
+    # create-project` (see .gitignore). A plain `composer install` here
+    # therefore could never work: it resolved fine once pcntl was added, then
+    # died in its own post-autoload-dump hook running `php artisan
+    # package:discover` against an artisan that is not in the repo.
+    #
+    # Building the image instead means CI tests the same artifact deployed to
+    # production, and nothing generated has to be committed to please it.
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -87,51 +98,12 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-    defaults:
-      run:
-        working-directory: laravel-backend
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.3'
-          # pcntl is required by laravel/horizon. Without it composer
-          # cannot resolve at all, which is why this job had never once
-          # got past its install step. The Dockerfile installs it too --
-          # CI and the runtime image should agree on the extension set.
-          extensions: pdo, pdo_pgsql, pgsql, bcmath, intl, mbstring, zip, opcache, pcntl
-          coverage: none
-
-      - name: Composer install
-        run: |
-          composer config -g policy.advisories.block false
-          composer install --no-interaction --prefer-dist --no-progress
-
-      - name: Minimal .env for testing
-        run: |
-          cat > .env <<'EOF'
-          APP_ENV=testing
-          APP_KEY=base64:aGFtbWFuLWNpLXRlc3Qta2V5LTMyLWJ5dGVzLWxvbmc=
-          APP_DEBUG=false
-          DB_CONNECTION=pgsql
-          DB_HOST=127.0.0.1
-          DB_PORT=5432
-          DB_DATABASE=hamman_test
-          DB_USERNAME=hamman_test
-          DB_PASSWORD=hamman_test
-          CACHE_STORE=array
-          SESSION_DRIVER=array
-          QUEUE_CONNECTION=sync
-          TELESCOPE_ENABLED=false
-          AI_SERVICE_SECRET=test-secret
-          EOF
-
-        # phpunit.xml's own <php> env block is what tests actually run
-        # under — this .env only exists so `composer install`'s
-        # post-autoload-dump (`artisan package:discover`) has something
-        # valid to boot the console kernel against.
+      - name: Build the Laravel image
+        run: docker build -t hamman-laravel-ci ./laravel-backend
 
       - name: Run tests
-        run: vendor/bin/phpunit
+        run: |
+          docker run --rm --network host             -e APP_ENV=testing             -e APP_KEY=base64:aGFtbWFuLWNpLXRlc3Qta2V5LTMyLWJ5dGVzLWxvbmc=             -e APP_DEBUG=false             -e DB_CONNECTION=pgsql             -e DB_HOST=127.0.0.1             -e DB_PORT=5432             -e DB_DATABASE=hamman_test             -e DB_USERNAME=hamman_test             -e DB_PASSWORD=hamman_test             -e CACHE_STORE=array             -e SESSION_DRIVER=array             -e QUEUE_CONNECTION=sync             -e TELESCOPE_ENABLED=false             -e AI_SERVICE_SECRET=test-secret             --entrypoint sh             hamman-laravel-ci -c "vendor/bin/phpunit"
