@@ -36,6 +36,16 @@ INTENTS = (
 def _P(*phrases: str) -> re.Pattern:
     return re.compile("|".join(re.escape(p) for p in phrases), re.IGNORECASE)
 
+
+def _P_RAW(*fragments: str) -> re.Pattern:
+    """Same as _P but the fragments are regex, not literals.
+
+    Needed for the one case where a literal is actively wrong: "دارین"
+    matched inside "ندارین", so "کانال تلگرام ندارین؟" — a negation, and not
+    a stock question at all — was classified as availability.
+    """
+    return re.compile("|".join(fragments), re.IGNORECASE)
+
 _PATTERNS = [
     ("authenticity", _P(
         "اصل است", "اصله", "اصل هست", "اصالت", "تقلبی", "فیک", "جعلی", "اورجینال", "غیر اصل",
@@ -64,13 +74,37 @@ _PATTERNS = [
         " vs ", "compare", "comparison", "difference between", "which is better", "better than",
     )),
     ("consultation", _P(
-        "پیشنهاد میدی", "چی بگیرم", "مناسب منه", "راهنمایی کن", "مشاوره میخوام", "کدوم مناسبه",
+        "پیشنهاد میدی", "چی بگیرم", "مناسب منه", "راهنمایی کن", "کدوم مناسبه",
+        # "مشاوره" bare, not just "مشاوره میخوام": the real messages ask for
+        # it every other way round — "امکان مشاوره رایگان هم هست؟", "چطور
+        # میتونم مشاوره رایگان بگیرم؟" — and the fixed phrase caught none of
+        # them. Same for someone describing a need rather than naming a
+        # product: "من دنبال چراغ مطالعه میگردم که شارژی باشه".
+        "مشاوره", "دنبال", "میگردم", "می‌گردم",
         "what do you recommend", "which one should i", "recommend for", "suggest a", "advice on",
-        "best for my", "what's good for",
+        "best for my", "what's good for", "looking for a", "i need something",
     )),
-    ("availability", _P(
-        "موجوده", "موجود است", "موجود هست", "تمام شده", "ناموجود", "در انبار",
-        "in stock", "out of stock", "do you have", "is it available", "available now",
+    ("availability", _P_RAW(
+        *[re.escape(x) for x in (
+            "موجوده", "موجود است", "موجود هست", "موجود داری", "تمام شده", "ناموجود", "در انبار",
+        )],
+        # Not preceded by ن: "ندارین/ندارید" is a negation, the opposite of
+        # what this intent means.
+        r"(?<!ن)دارید", r"(?<!ن)دارین", r"(?<!ن)داريد",
+        *[re.escape(x) for x in (
+        # "دارید" is how this question is actually asked in Persian, and its
+        # absence was the single biggest hole: every one of "ماگ سبز هم
+        # دارید؟", "کیف غذا هم دارید؟", "تراول ماگ خرس کلاه دار دارید؟" fell
+        # through to "other".
+
+        # The busiest tenant sells services, where "do you do X" is the same
+        # question as "do you have X". Spelled out rather than matching a
+        # bare verb, so "شرکت در چه حوزه‌هایی کار میکنه" stays out of it.
+        "انجام میدین", "انجام میدید", "انجام می‌دهید", "کار میکنید", "کار می‌کنید",
+        "طراحی میکنید", "طراحی می‌کنید",
+        "in stock", "out of stock", "do you have", "do you offer", "do you do",
+        "is it available", "available now",
+        )],
     )),
     ("price", _P(
         # "قیمت"/"هزینه" bare (price/cost, standalone nouns) are included
@@ -82,7 +116,7 @@ _PATTERNS = [
         # worded price questions entirely. Checked after the more specific
         # shipping/order_status patterns above, so "هزینه ارسال" still
         # correctly resolves to shipping, not price.
-        "قیمت", "هزینه", "قیمتش", "قیمت چنده", "چند تومانه", "چند ریاله", "تخفیف داره", "چقدره",
+        "قیمت", "هزینه", "قیمتش", "چنده", "چند تومانه", "چند ریاله", "تخفیف داره", "چقدره",
         "how much", "what's the price", "price of", "cost of", "is it expensive", "any discount",
     )),
     ("technical_support", _P(
