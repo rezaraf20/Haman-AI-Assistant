@@ -51,10 +51,24 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt
+
+      # A test job that collects nothing and goes green is worse than no
+      # job at all: it reports success for a suite that never ran. This
+      # fails the build if collection collapses, whatever the cause --
+      # a renamed directory, a broken import, a bad working-directory.
+      - name: Check the suite is actually discovered
+        run: |
+          set -e
+          collected=$(python -m pytest tests --collect-only -q 2>/dev/null | tail -1 | grep -oE '^[0-9]+' || echo 0)
+          echo "Collected $collected tests."
+          if [ "$collected" -lt 300 ]; then
+            echo "::error::Expected at least 300 tests, collected $collected. The suite is not being found."
+            exit 1
+          fi
 
       - name: Run tests
-        run: python -m unittest discover -s tests -v
+        run: python -m pytest tests -q
 
   laravel-tests:
     name: Laravel tests

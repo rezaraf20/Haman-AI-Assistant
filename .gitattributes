@@ -1,0 +1,30 @@
+# Normalise line endings in the repository.
+#
+# DocumentController.php differed between the server checkout and GitHub in
+# nothing but CRLF vs LF — a whole-file diff carrying zero changes. Storing
+# text as LF and letting each checkout use its platform's convention stops
+# that class of difference recurring.
+* text=auto
+
+# Files that must keep LF wherever they are checked out: a shell script or a
+# Dockerfile with CRLF fails at run time, not at review time.
+*.sh        text eol=lf
+*.php       text eol=lf
+*.py        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.json      text eol=lf
+*.blade.php text eol=lf
+Dockerfile  text eol=lf
+*.conf      text eol=lf
+
+# Never touched.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.zip  binary
+*.woff  binary
+*.woff2 binary

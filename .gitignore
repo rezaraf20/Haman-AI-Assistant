@@ -15,6 +15,12 @@ laravel-backend/storage/framework/views/*
 laravel-backend/bootstrap/cache/*.php
 
 # Python
+# Compiled Python, anywhere in the tree. Two .pyc files had been committed
+# under python-ai-service before these patterns existed; keeping the rules
+# unscoped means a new directory cannot reintroduce them.
+__pycache__/
+*.py[cod]
+*$py.class
 python-ai-service/**/__pycache__/
 python-ai-service/**/*.pyc
 python-ai-service/.venv/
