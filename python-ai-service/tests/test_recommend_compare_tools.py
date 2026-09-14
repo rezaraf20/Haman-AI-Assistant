@@ -47,7 +47,7 @@ class RecommendProductsPricingSafetyTest(unittest.TestCase):
 
     def test_live_query_failure_recommends_nothing(self):
         db = MagicMock()
-        site_row = MagicMock(primary_domain="example.test", webhook_secret="s3cret")
+        site_row = MagicMock(primary_domain="shop.example.com", webhook_secret="s3cret")
         db.execute.return_value.fetchone.return_value = site_row
         with patch("app.services.tools.product_tools._requests.post", side_effect=product_tools._requests.RequestException("timed out")):
             result = product_tools.recommend_products(db, "chatbot-1", need="oily skin")
@@ -56,7 +56,7 @@ class RecommendProductsPricingSafetyTest(unittest.TestCase):
 
     def test_live_success_returns_at_most_three_with_id_based_urls(self):
         db = MagicMock()
-        site_row = MagicMock(primary_domain="example.test", webhook_secret="s3cret")
+        site_row = MagicMock(primary_domain="shop.example.com", webhook_secret="s3cret")
         db.execute.return_value.fetchone.return_value = site_row
 
         fake_response = MagicMock(status_code=200)
@@ -76,7 +76,7 @@ class RecommendProductsPricingSafetyTest(unittest.TestCase):
         # Defense in depth: capped to 3 here even though the fake WP
         # response (deliberately) sent 4.
         self.assertEqual(len(result["products"]), 3)
-        self.assertEqual(result["products"][0]["product_url"], "https://example.test/?p=1")
+        self.assertEqual(result["products"][0]["product_url"], "https://shop.example.com/?p=1")
         for p in result["products"]:
             self.assertEqual(p["stock_status"], "instock")
 
@@ -85,7 +85,7 @@ class RecommendProductsPricingSafetyTest(unittest.TestCase):
         recommended — recommend_products doesn't even expose an
         in_stock_only parameter, unlike search_products."""
         db = MagicMock()
-        site_row = MagicMock(primary_domain="example.test", webhook_secret="s3cret")
+        site_row = MagicMock(primary_domain="shop.example.com", webhook_secret="s3cret")
         db.execute.return_value.fetchone.return_value = site_row
         fake_response = MagicMock(status_code=200)
         fake_response.json.return_value = {"currency": "IRT", "products": []}
@@ -138,7 +138,7 @@ class CompareProductsPricingSafetyTest(unittest.TestCase):
 
     def test_live_failure_returns_no_products_or_rows(self):
         db = MagicMock()
-        site_row = MagicMock(primary_domain="example.test", webhook_secret="s3cret")
+        site_row = MagicMock(primary_domain="shop.example.com", webhook_secret="s3cret")
         db.execute.return_value.fetchone.return_value = site_row
         with patch("app.services.tools.product_tools._requests.post", side_effect=product_tools._requests.RequestException("down")):
             result = product_tools.compare_products(db, "chatbot-1", product_ids=[1, 2])
@@ -148,7 +148,7 @@ class CompareProductsPricingSafetyTest(unittest.TestCase):
 
     def test_missing_attribute_on_one_product_is_left_blank_not_guessed(self):
         db = MagicMock()
-        site_row = MagicMock(primary_domain="example.test", webhook_secret="s3cret")
+        site_row = MagicMock(primary_domain="shop.example.com", webhook_secret="s3cret")
         db.execute.return_value.fetchone.return_value = site_row
 
         fake_response = MagicMock(status_code=200)
@@ -172,7 +172,7 @@ class CompareProductsPricingSafetyTest(unittest.TestCase):
 
     def test_a_not_found_product_id_does_not_crash_and_is_flagged(self):
         db = MagicMock()
-        site_row = MagicMock(primary_domain="example.test", webhook_secret="s3cret")
+        site_row = MagicMock(primary_domain="shop.example.com", webhook_secret="s3cret")
         db.execute.return_value.fetchone.return_value = site_row
 
         fake_response = MagicMock(status_code=200)

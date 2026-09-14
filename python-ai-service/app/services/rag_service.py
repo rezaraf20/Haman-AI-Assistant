@@ -998,7 +998,13 @@ def _chat_completion(db: Session, prompt: str, max_tokens: int, temperature: flo
                 is_last_attempt = attempt == attempts - 1
                 if status == 429 or is_last_attempt:
                     logger.warning(f"LLM provider '{profile['name']}' failed, trying next: {e}")
-                    llm_provider_service.record_outcome(db, profile['name'], success=False)
+                    # A 429 is transient and expected under load. Counting it
+                    # towards auto-disable turned a momentary throttle into a
+                    # permanent outage: five rate-limited messages in a row
+                    # disabled the only working profile and every request
+                    # after that failed instantly until a human re-enabled it.
+                    if status != 429:
+                        llm_provider_service.record_outcome(db, profile['name'], success=False)
                     break
                 logger.warning(f"LLM provider '{profile['name']}' failed (attempt {attempt + 1}/{attempts}), retrying: {e}")
                 time.sleep(1)

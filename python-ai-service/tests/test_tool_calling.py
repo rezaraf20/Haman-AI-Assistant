@@ -91,7 +91,7 @@ class ProductToolsValidationTest(unittest.TestCase):
 
     def test_search_query_over_200_chars_is_truncated_not_rejected(self):
         db = MagicMock()
-        site_row = MagicMock(primary_domain="example.test", webhook_secret="s3cret")
+        site_row = MagicMock(primary_domain="shop.example.com", webhook_secret="s3cret")
         db.execute.return_value.fetchone.return_value = site_row
 
         fake_response = MagicMock(status_code=200)
@@ -136,7 +136,7 @@ class ProductToolsPricingSafetyTest(unittest.TestCase):
 
     def test_live_query_timeout_returns_no_price_field(self):
         db = MagicMock()
-        site_row = MagicMock(primary_domain="example.test", webhook_secret="s3cret")
+        site_row = MagicMock(primary_domain="shop.example.com", webhook_secret="s3cret")
         db.execute.return_value.fetchone.return_value = site_row
 
         with patch("app.services.tools.product_tools._requests.post", side_effect=product_tools._requests.RequestException("timed out")):
@@ -148,11 +148,11 @@ class ProductToolsPricingSafetyTest(unittest.TestCase):
         self.assertIn("note", result)
         # product_id WAS known (the caller supplied it) even though the live
         # call failed, so a product_url should still be buildable.
-        self.assertEqual(result["product_url"], "https://example.test/?p=42")
+        self.assertEqual(result["product_url"], "https://shop.example.com/?p=42")
 
     def test_live_query_non_200_returns_no_price_field(self):
         db = MagicMock()
-        site_row = MagicMock(primary_domain="example.test", webhook_secret="s3cret")
+        site_row = MagicMock(primary_domain="shop.example.com", webhook_secret="s3cret")
         db.execute.return_value.fetchone.return_value = site_row
 
         fake_response = MagicMock(status_code=500, text="Internal Server Error")
@@ -164,7 +164,7 @@ class ProductToolsPricingSafetyTest(unittest.TestCase):
 
     def test_live_query_success_returns_live_price_and_id_based_url(self):
         db = MagicMock()
-        site_row = MagicMock(primary_domain="example.test", webhook_secret="s3cret")
+        site_row = MagicMock(primary_domain="shop.example.com", webhook_secret="s3cret")
         db.execute.return_value.fetchone.return_value = site_row
 
         fake_response = MagicMock(status_code=200)
@@ -182,7 +182,7 @@ class ProductToolsPricingSafetyTest(unittest.TestCase):
         self.assertEqual(result["price"], 15000)
         self.assertEqual(result["stock_status"], "instock")
         # By numeric ID, never by slug (see product_tools._product_url).
-        self.assertEqual(result["product_url"], "https://example.test/?p=42")
+        self.assertEqual(result["product_url"], "https://shop.example.com/?p=42")
 
     def test_search_products_unavailable_returns_empty_results_not_stale_data(self):
         db = MagicMock()
@@ -193,7 +193,7 @@ class ProductToolsPricingSafetyTest(unittest.TestCase):
 
     def test_search_products_success_tags_each_result_with_an_id_based_url(self):
         db = MagicMock()
-        site_row = MagicMock(primary_domain="example.test", webhook_secret="s3cret")
+        site_row = MagicMock(primary_domain="shop.example.com", webhook_secret="s3cret")
         db.execute.return_value.fetchone.return_value = site_row
 
         fake_response = MagicMock(status_code=200)
@@ -205,11 +205,11 @@ class ProductToolsPricingSafetyTest(unittest.TestCase):
             result = product_tools.search_products(db, "chatbot-1", query="shoes", in_stock_only=True)
 
         self.assertTrue(result["live"])
-        self.assertEqual(result["results"][0]["product_url"], "https://example.test/?p=7")
+        self.assertEqual(result["results"][0]["product_url"], "https://shop.example.com/?p=7")
 
     def test_variants_unavailable_returns_no_price_field(self):
         db = MagicMock()
-        site_row = MagicMock(primary_domain="example.test", webhook_secret="s3cret")
+        site_row = MagicMock(primary_domain="shop.example.com", webhook_secret="s3cret")
         db.execute.return_value.fetchone.return_value = site_row
 
         with patch("app.services.tools.product_tools._requests.post", side_effect=product_tools._requests.RequestException("connection refused")):
@@ -217,11 +217,11 @@ class ProductToolsPricingSafetyTest(unittest.TestCase):
 
         self.assertFalse(result["live"])
         self.assertNotIn("variants", result)
-        self.assertEqual(result["product_url"], "https://example.test/?p=99")
+        self.assertEqual(result["product_url"], "https://shop.example.com/?p=99")
 
     def test_variants_success_returns_each_variants_own_price_and_stock(self):
         db = MagicMock()
-        site_row = MagicMock(primary_domain="example.test", webhook_secret="s3cret")
+        site_row = MagicMock(primary_domain="shop.example.com", webhook_secret="s3cret")
         db.execute.return_value.fetchone.return_value = site_row
 
         fake_response = MagicMock(status_code=200)
@@ -478,7 +478,7 @@ class WidgetBlockTest(unittest.TestCase):
         self.assertEqual(block, {"type": "product_compare", "products": products, "attribute_rows": rows})
 
     def test_build_widget_block_cart_links_shape(self):
-        items = [{"product_id": 12, "quantity": 1, "url": "https://example.test/?add-to-cart=12&quantity=1"}]
+        items = [{"product_id": 12, "quantity": 1, "url": "https://shop.example.com/?add-to-cart=12&quantity=1"}]
         block = tool_calling_service._build_widget_block("build_cart_url", {"items": items})
         self.assertEqual(block, {"type": "cart_links", "items": items})
 
@@ -624,7 +624,7 @@ class WidgetBlockTest(unittest.TestCase):
             name="build_cart_url", description="test", access_level="read",
             parameters={"type": "object", "properties": {"items": {"type": "array"}}, "required": ["items"]},
             handler=lambda db, chatbot_id, **kw: {
-                "items": [{"product_id": 12, "quantity": 1, "url": "https://example.test/?add-to-cart=12&quantity=1"}],
+                "items": [{"product_id": 12, "quantity": 1, "url": "https://shop.example.com/?add-to-cart=12&quantity=1"}],
             },
         )
 
@@ -655,7 +655,7 @@ class WidgetBlockTest(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result["widget_blocks"], [{
             "type": "cart_links",
-            "items": [{"product_id": 12, "quantity": 1, "url": "https://example.test/?add-to-cart=12&quantity=1"}],
+            "items": [{"product_id": 12, "quantity": 1, "url": "https://shop.example.com/?add-to-cart=12&quantity=1"}],
         }])
         event_types = [c[0][3] for c in mock_log.call_args_list]
         self.assertIn("tool_called", event_types)

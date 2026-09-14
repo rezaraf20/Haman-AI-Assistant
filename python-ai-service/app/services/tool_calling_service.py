@@ -265,28 +265,92 @@ def _tool_rate_limited(chatbot_id: str) -> bool:
         return False
 
 
+class ProviderRateLimitedError(RuntimeError):
+    """The provider returned 429.
+
+    Kept apart from a real failure for the same reason as
+    ToolCallRefusedError, and more urgently: rate limiting is transient and
+    expected under load, but five in a row was enough to auto-disable the
+    platform's only working LLM permanently, turning a momentary throttle
+    into an outage that needed a human to undo.
+    """
+
+
+class ToolCallRefusedError(RuntimeError):
+    """The provider rejected the request because the model emitted a tool
+    call when none were offered.
+
+    Raised instead of a bare HTTPError so _tool_calling_chat can tell this
+    apart from a provider that is actually unhealthy. It is our request shape
+    meeting a model's habit, not an outage — counting it as a provider
+    failure auto-disabled the platform's only working LLM after five
+    messages, which is how this was found.
+    """
+
+
+# Told to answer, some models still try to call a tool. Appended to the final
+# tools-disabled turn to make the instruction explicit rather than implied by
+# the absence of a tools array.
+_ANSWER_NOW = {
+    "role": "system",
+    "content": (
+        "Do not call any tool now. Using only the tool results already in this "
+        "conversation, write the final answer to the customer in plain text."
+    ),
+}
+
+
 def _openai_tool_chat(profile: dict, messages: List[dict], tools_schema: Optional[List[dict]], max_tokens: int, temperature: float) -> tuple[dict, dict]:
-    body = {
-        "model": profile["model_name"],
-        "messages": messages,
-        "max_tokens": profile.get("max_tokens_response") or max_tokens,
-        "temperature": temperature,
-    }
-    if tools_schema:
-        body["tools"] = tools_schema
-        body["tool_choice"] = "auto"
-    resp = _requests.post(
-        f"{profile['base_url'].rstrip('/')}/chat/completions",
-        headers={
-            "Authorization": f"Bearer {profile['api_key']}",
-            "Content-Type": "application/json",
-        },
-        json=body,
-        timeout=profile.get("timeout_seconds") or 30,
-    )
+    def post(payload_messages: List[dict]) -> "_requests.Response":
+        body = {
+            "model": profile["model_name"],
+            "messages": payload_messages,
+            "max_tokens": profile.get("max_tokens_response") or max_tokens,
+            "temperature": temperature,
+        }
+        if tools_schema:
+            body["tools"] = tools_schema
+            body["tool_choice"] = "auto"
+        return _requests.post(
+            f"{profile['base_url'].rstrip('/')}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {profile['api_key']}",
+                "Content-Type": "application/json",
+            },
+            json=body,
+            timeout=profile.get("timeout_seconds") or 30,
+        )
+
+    resp = post(messages)
+
+    # A reasoning model asked to answer without tools may emit a tool call
+    # anyway; OpenAI-compatible providers reject that with a 400 rather than
+    # returning text. One retry with the instruction spelled out fixes it in
+    # practice, and costs nothing when the model behaves.
+    if resp.status_code == 400 and not tools_schema and _is_tool_use_failure(resp):
+        logger.info("Model emitted a tool call with none offered; retrying with an explicit answer-now instruction.")
+        resp = post(messages + [_ANSWER_NOW])
+
+        if resp.status_code == 400 and _is_tool_use_failure(resp):
+            raise ToolCallRefusedError(
+                "Model insists on calling a tool when none are offered: " + resp.text[:300]
+            )
+
+    if resp.status_code == 429:
+        raise ProviderRateLimitedError(
+            f"{profile['name']} is rate limited (429): " + resp.text[:200]
+        )
+
     resp.raise_for_status()
     response_body = resp.json()
     return response_body["choices"][0]["message"], response_body.get("usage", {})
+
+
+def _is_tool_use_failure(resp) -> bool:
+    try:
+        return (resp.json().get("error") or {}).get("code") == "tool_use_failed"
+    except Exception:  # noqa: BLE001 - a non-JSON body is simply not this case
+        return False
 
 
 def _tool_calling_chat(db: Session, messages: List[dict], tools_schema: Optional[List[dict]], max_tokens: int, temperature: float) -> tuple[dict, str, dict, float]:
@@ -306,6 +370,20 @@ def _tool_calling_chat(db: Session, messages: List[dict], tools_schema: Optional
             cost_toman = _compute_cost_toman(profile, usage)
             llm_provider_service.record_outcome(db, profile["name"], success=True)
             return message, f"{profile['provider']}/{profile['model_name']}", usage, cost_toman
+        except ProviderRateLimitedError as e:
+            # Transient by definition. Fail over to the next profile, but do
+            # NOT count it against this one.
+            last_error = e
+            logger.warning(f"Tool-calling provider '{profile['name']}' is rate limited, trying next: {e}")
+            continue
+        except ToolCallRefusedError as e:
+            # Deliberately NOT recorded as a provider failure: the provider
+            # answered, correctly, that our request was malformed for this
+            # model. Marking it down here is what auto-disabled the only
+            # working profile after five customer messages.
+            last_error = e
+            logger.warning(f"Tool-calling provider '{profile['name']}' refused a tools-disabled turn: {e}")
+            continue
         except Exception as e:
             last_error = e
             llm_provider_service.record_outcome(db, profile["name"], success=False)

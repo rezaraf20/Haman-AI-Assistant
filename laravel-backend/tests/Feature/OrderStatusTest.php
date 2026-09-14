@@ -25,11 +25,11 @@ class OrderStatusTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const DOMAIN = 'example.test';
-    private const ORIGIN = ['Origin' => 'https://example.test'];
+    private const DOMAIN = 'shop.example.com';
+    private const ORIGIN = ['Origin' => 'https://shop.example.com'];
     private const PHONE = '09121234567';
     private const SMS_URL = 'rest.payamak-panel.com/*';
-    private const LIVE_URL = 'https://example.test/wp-json/hamman/v1/live-query';
+    private const LIVE_URL = 'https://shop.example.com/wp-json/hamman/v1/live-query';
 
     private function makeChatbot(array $overrides = []): array
     {
@@ -40,7 +40,7 @@ class OrderStatusTest extends TestCase
         ]);
         $tenant = Tenant::create([
             'slug' => 'test-' . Str::random(8), 'name' => 'Test Tenant',
-            'email' => Str::random(12) . '@example.test', 'plan_id' => $plan->id,
+            'email' => Str::random(12) . '@shop.example.com', 'plan_id' => $plan->id,
             'schema_name' => 'placeholder', 'status' => 'active', 'trial_ends_at' => now()->addDays(14),
             'settings' => ['webhook_secret' => Str::random(32)],
             'wallet_balance_toman' => 100000,

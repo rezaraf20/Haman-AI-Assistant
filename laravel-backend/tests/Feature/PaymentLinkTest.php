@@ -31,8 +31,8 @@ class PaymentLinkTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const DOMAIN = 'example.test';
-    private const ORIGIN = ['Origin' => 'https://example.test'];
+    private const DOMAIN = 'shop.example.com';
+    private const ORIGIN = ['Origin' => 'https://shop.example.com'];
 
     private function makeChatbot(array $overrides = []): array
     {
@@ -43,7 +43,7 @@ class PaymentLinkTest extends TestCase
         ]);
         $tenant = Tenant::create([
             'slug' => 'test-' . Str::random(8), 'name' => 'Test Tenant',
-            'email' => Str::random(12) . '@example.test', 'plan_id' => $plan->id,
+            'email' => Str::random(12) . '@shop.example.com', 'plan_id' => $plan->id,
             'schema_name' => 'placeholder', 'status' => 'active', 'trial_ends_at' => now()->addDays(14),
             'settings' => ['webhook_secret' => Str::random(32)],
         ]);
@@ -288,7 +288,7 @@ class PaymentLinkTest extends TestCase
         ]);
         $tenant = Tenant::create([
             'slug' => 'test-' . Str::random(8), 'name' => 'Test Tenant',
-            'email' => Str::random(12) . '@example.test', 'plan_id' => $plan->id,
+            'email' => Str::random(12) . '@shop.example.com', 'plan_id' => $plan->id,
             'schema_name' => 'placeholder', 'status' => 'active', 'trial_ends_at' => now()->addDays(14),
             'settings' => ['webhook_secret' => Str::random(32)],
         ]);

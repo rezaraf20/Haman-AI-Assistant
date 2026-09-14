@@ -129,12 +129,45 @@ def _resolve_domain(db: Session, chatbot_id: str) -> Optional[str]:
     return row.primary_domain
 
 
+# Hostnames that cannot be a real merchant's site on the public internet.
+# Everything else is https, always — see _scheme().
+_PRIVATE_SUFFIXES = (".test", ".local", ".localhost", ".internal", ".invalid")
+
+
+def _scheme(domain: str) -> str:
+    """https for anything that could be a real shop; http only where it
+    provably could not be.
+
+    The live-query body is signed but its CONTENTS are the merchant's stock
+    and prices, and the request carries nothing that should ever cross the
+    public internet in the clear. So the rule is deliberately narrow: a bare
+    hostname with no dot (a Docker service name), a private-use TLD, or a
+    private/loopback IPv4 literal. A public domain can never be downgraded by
+    this, which is the property that matters — otherwise a hijacked
+    primary_domain would become a way to strip TLS off every live query.
+    """
+    host = domain.split("/")[0].split(":")[0].lower()
+
+    if "." not in host:
+        return "http"
+    if host.endswith(_PRIVATE_SUFFIXES):
+        return "http"
+    if re.match(r"^(10|127)\.\d+\.\d+\.\d+$", host):
+        return "http"
+    if re.match(r"^192\.168\.\d+\.\d+$", host):
+        return "http"
+    if re.match(r"^172\.(1[6-9]|2\d|3[01])\.\d+\.\d+$", host):
+        return "http"
+
+    return "https"
+
+
 def _query_live(domain: str, secret: str, action: str, params: dict) -> Optional[dict]:
     body = _json.dumps({"action": action, **params}, separators=(",", ":"))
     signature = "sha256=" + hmac.new(secret.encode(), body.encode(), hashlib.sha256).hexdigest()
     try:
         resp = _requests.post(
-            f"https://{domain}/wp-json/hamman/v1/live-query",
+            f"{_scheme(domain)}://{domain}/wp-json/hamman/v1/live-query",
             data=body.encode(),
             headers={"Content-Type": "application/json", "X-Hamman-Signature": signature},
             timeout=LIVE_QUERY_TIMEOUT_SECONDS,
@@ -154,7 +187,7 @@ def _product_url(domain: Optional[str], product_id: Optional[int]) -> Optional[s
     from under a link while the ID never does."""
     if not domain or not product_id:
         return None
-    return f"https://{domain}/?p={product_id}"
+    return f"{_scheme(domain)}://{domain}/?p={product_id}"
 
 
 def _unavailable_result(domain: Optional[str], known_product_id: Optional[int] = None) -> dict:
