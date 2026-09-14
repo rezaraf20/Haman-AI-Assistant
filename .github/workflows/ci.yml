@@ -97,7 +97,11 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
-          extensions: pdo, pdo_pgsql, pgsql, bcmath, intl, mbstring, zip, opcache
+          # pcntl is required by laravel/horizon. Without it composer
+          # cannot resolve at all, which is why this job had never once
+          # got past its install step. The Dockerfile installs it too --
+          # CI and the runtime image should agree on the extension set.
+          extensions: pdo, pdo_pgsql, pgsql, bcmath, intl, mbstring, zip, opcache, pcntl
           coverage: none
 
       - name: Composer install
