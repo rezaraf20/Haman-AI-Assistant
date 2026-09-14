@@ -182,9 +182,15 @@ docker compose build laravel python_ai
 docker compose up -d
 docker compose exec laravel php artisan migrate --force
 docker compose exec laravel php artisan config:cache
+# ری‌استارت nginx لازم نیست. قبلاً با بازساخته‌شدن کانتینر laravel آی‌پی‌اش
+# عوض می‌شد و nginx آدرس قدیمی را کش‌کرده نگه می‌داشت، و همه‌چیز ۵۰۲ می‌شد.
+# حالا nginx مقصد را در هر درخواست دوباره resolve می‌کند (nginx/conf.d/api.conf:
+# resolver + set $upstream_laravel) پس آی‌پی تازه خودبه‌خود پیدا می‌شود.
 
-# Backup database
-docker compose exec postgres pg_dump -U hamman_user hamman_saas > backup_$(date +%Y%m%d).sql
+# Backup database — شبانه خودکار اجرا می‌شود (۰۲:۳۰) و ۰۳:۴۵ واقعاً بازیابی
+# و بررسی می‌شود. این‌ها فقط برای اجرای دستی‌اند:
+docker compose exec laravel php artisan hamman:backup-database --kind=manual
+docker compose exec laravel php artisan hamman:verify-backup
 ```
 
 ---
@@ -194,6 +200,7 @@ docker compose exec postgres pg_dump -U hamman_user hamman_saas > backup_$(date 
 | مشکل | راه‌حل |
 |------|--------|
 | Laravel 500 error | `docker compose exec laravel php artisan config:clear && php artisan cache:clear` |
+| 502 روی همه‌ی مسیرها بعد از دیپلوی | دیگر نباید پیش بیاید — nginx در هر درخواست دوباره resolve می‌کند. اگر دیدید، `docker compose exec nginx nginx -t` و بررسی کنید `resolver 127.0.0.11` هنوز در `nginx/conf.d/api.conf` هست |
 | AI service unavailable | `docker compose restart python_ai` + بررسی OPENAI_API_KEY |
 | Migration failed | بررسی اتصال postgres: `docker compose exec postgres psql -U hamman_user -d hamman_saas -c '\l'` |
 | Widget not showing | در WordPress: بررسی Chatbot ID + Domain whitelist در داشبورد |

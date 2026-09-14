@@ -51,11 +51,11 @@ docker compose exec laravel php artisan migrate
 
 The admin panel is at `/admin`, the customer portal at `/portal`.
 
-Note that `nginx` resolves the `laravel` container's address once at start, so
-recreating that container requires restarting nginx alongside it:
+Recreating the `laravel` container needs nothing else — nginx re-resolves the
+backend address per request, so a new container ip is picked up on its own:
 
 ```bash
-docker compose up -d laravel && docker compose restart nginx
+docker compose up -d laravel
 ```
 
 ## Configuration
