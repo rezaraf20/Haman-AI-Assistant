@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Services\SyncService;
 use App\Models\Tenant\SyncJob;
 use Illuminate\Http\{Request, JsonResponse};
+use App\Support\Settings;
 
 class SyncController extends BaseApiController {
 
@@ -18,7 +19,7 @@ class SyncController extends BaseApiController {
         // below (as 'nullable' where not required), or it's discarded.
         $d = $req->validate([
             'chatbot_id'                    => 'required|uuid',
-            'products'                      => 'required|array|min:1|max:50',
+            'products'                      => 'required|array|min:1|max:' . $this->itemCap(),
             'products.*.id'                 => 'required|integer',
             'products.*.name'               => 'required|string',
             'products.*.sku'                => 'nullable|string',
@@ -57,10 +58,22 @@ class SyncController extends BaseApiController {
         return $this->accepted($this->jobArr($this->svc->syncProducts($d['chatbot_id'], $d['products'], $t->schema_name)));
     }
 
+    /**
+     * How many items one sync call may carry.
+     *
+     * products was capped at 50; pages and faqs were unbounded, so a single
+     * request could hand over an arbitrarily long array and every item of it
+     * gets embedded at the platform's expense. One setting now governs all
+     * three, because the cost is the same cost.
+     */
+    private function itemCap(): int {
+        return (int) Settings::get('limits.sync_items_per_request');
+    }
+
     public function syncPages(Request $req): JsonResponse {
         $d = $req->validate([
             'chatbot_id'            => 'required|uuid',
-            'pages'                 => 'required|array|min:1',
+            'pages'                 => 'required|array|min:1|max:' . $this->itemCap(),
             'pages.*.id'            => 'required|integer',
             'pages.*.title'         => 'required|string',
             'pages.*.content'       => 'nullable|string',
@@ -77,7 +90,7 @@ class SyncController extends BaseApiController {
         // SyncService::syncFaqs() also reads 'category', so it must be listed.
         $d = $req->validate([
             'chatbot_id'         => 'required|uuid',
-            'faqs'               => 'required|array|min:1',
+            'faqs'               => 'required|array|min:1|max:' . $this->itemCap(),
             'faqs.*.question'    => 'required|string',
             'faqs.*.answer'      => 'required|string',
             'faqs.*.category'    => 'nullable|string',

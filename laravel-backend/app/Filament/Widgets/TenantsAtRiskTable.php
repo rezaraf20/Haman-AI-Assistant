@@ -1,6 +1,8 @@
 <?php
 namespace App\Filament\Widgets;
 
+use App\Support\PlatformAccess;
+
 use App\Support\Money;
 use Filament\Widgets\Widget;
 use Illuminate\Support\Facades\{DB, Cache};
@@ -9,6 +11,9 @@ use Illuminate\Support\Facades\{DB, Cache};
 // Tenant/Plan rows — one joined query, no per-tenant schema switching
 // needed, unlike FailedSyncsTable.
 class TenantsAtRiskTable extends Widget {
+    // Wallet BALANCE and quota, which support needs to answer "why did my bot stop?". The wallet LEDGER stays admin-only.
+    public static function canView(): bool { return PlatformAccess::allows('usage_read'); }
+
     protected static string $view = 'filament.widgets.tenants-at-risk-table';
     protected int|string|array $columnSpan = 'full';
     protected static bool $isLazy = false;

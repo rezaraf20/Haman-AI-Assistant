@@ -3,6 +3,7 @@ namespace App\Filament\Resources\ChatbotResource\Pages;
 
 use App\Filament\Resources\ChatbotResource;
 use App\Models\Tenant\Chatbot;
+use App\Support\PlatformActivity;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -36,7 +37,25 @@ class EditChatbot extends EditRecord {
         $rerankThreshold    = $data['rerank_threshold'] ?? null;
         unset($data['retrieval_threshold'], $data['reranker_enabled'], $data['rerank_threshold']);
 
+        // Changing a customer's settings is the most common support request,
+        // so support can do it — but every change is recorded with the value
+        // before and after. "Support edited something" is not reviewable;
+        // "support changed welcome_message from X to Y" is.
+        $before = array_intersect_key($record->getOriginal(), $data);
+
         $updated = parent::handleRecordUpdate($record, $data);
+
+        $diff = PlatformActivity::diff($before, array_intersect_key($data, $before ?: $data));
+        if (!PlatformActivity::isEmptyDiff($diff)) {
+            PlatformActivity::record(
+                'chatbot_settings_changed',
+                tenantId: (string) $record->tenant_id,
+                subjectType: 'chatbot',
+                subjectId: (string) $record->chatbot_id,
+                before: $diff[0],
+                after: $diff[1],
+            );
+        }
 
         DB::statement("SET search_path TO {$record->schema_name}, public");
         $chatbot = Chatbot::find($record->chatbot_id);

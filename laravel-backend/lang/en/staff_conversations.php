@@ -1,0 +1,20 @@
+<?php
+return [
+    'title' => 'Customer conversations',
+    'reason_required' => 'Choose a reason to view conversations',
+    'reason_help' => "These contain real phone numbers and details customers gave the shop. Your reason is recorded along with the conversation id and the time.",
+    'reason' => 'Reason',
+    'reason_ticket' => 'Ticket review',
+    'reason_error' => 'Error report',
+    'reason_customer' => 'Customer request',
+    'tenant' => 'Customer',
+    'audit_note' => 'Every conversation opened, and every contact revealed, is recorded separately.',
+    'recent' => 'Recent conversations',
+    'none' => 'No conversations recorded.',
+    'transcript' => 'Transcript',
+    'pick_one' => 'Pick a conversation from the list.',
+    'masked_note' => 'Phone numbers and emails are hidden.',
+    'revealed_note' => 'Contact details shown — this was recorded.',
+    'reveal' => 'Reveal contact details',
+    'reveal_confirm' => 'Revealing the phone numbers and emails in this conversation will be recorded. Continue?',
+];

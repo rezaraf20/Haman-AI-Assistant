@@ -1,6 +1,8 @@
 <?php
 namespace App\Filament\Resources;
 
+use App\Support\PlatformAccess;
+
 use App\Models\ChatbotIndexEntry;
 use App\Models\Tenant;
 use App\Enums\ChatbotType;
@@ -20,6 +22,22 @@ use App\Support\DomainNormalizer;
 use App\Filament\Resources\ChatbotResource\Pages;
 
 class ChatbotResource extends Resource {
+    // Support reads chatbots and edits widget settings (the single most
+    // common support request); creating or deleting one does not.
+    // Enforced by Filament on the direct route as well, not just in the
+    // navigation — see PlatformAccess.
+    public static function canViewAny(): bool { return PlatformAccess::allows('chatbots_read'); }
+    public static function canView($record): bool { return PlatformAccess::allows('chatbots_read'); }
+    public static function canCreate(): bool { return PlatformAccess::allows('tenant_lifecycle'); }
+    // Editing is how support fixes the most common complaint, so it is
+    // allowed — but the pricing fields inside the form are disabled for
+    // support (see form()), and every change is recorded with its before
+    // and after value by EditChatbot::handleRecordUpdate().
+    public static function canEdit($record): bool { return PlatformAccess::allows('widget_settings_edit'); }
+    public static function canDelete($record): bool { return PlatformAccess::allows('tenant_lifecycle'); }
+    public static function canDeleteAny(): bool { return PlatformAccess::allows('tenant_lifecycle'); }
+    public static function shouldRegisterNavigation(): bool { return PlatformAccess::allows('chatbots_read'); }
+
     protected static ?string $model = ChatbotIndexEntry::class;
     protected static ?string $navigationIcon = 'heroicon-o-chat-bubble-left-right';
     protected static ?int $navigationSort = 2;
@@ -31,9 +49,6 @@ class ChatbotResource extends Resource {
 
     // See TenantResource — no per-model Policy is registered, and Filament's
     // action visibility otherwise silently hides Create/Edit/Delete without one.
-    public static function canCreate(): bool { return true; }
-    public static function canEdit($record): bool { return true; }
-    public static function canDelete($record): bool { return true; }
 
     public static function form(Form $form): Form {
         return $form->schema([
@@ -54,14 +69,22 @@ class ChatbotResource extends Resource {
             TextInput::make('primary_domain')->label(__('common.domain'))->maxLength(255)
                 ->dehydrateStateUsing(fn ($state) => DomainNormalizer::normalize($state))
                 ->helperText(__('chatbot.primary_domain_help')),
+            // Billing period and price are admin business. Support opens
+            // this same form to fix a name or a domain, so these two are
+            // shown read-only and — importantly — dehydrated away, so a
+            // hand-crafted Livewire payload cannot write them either.
             DateTimePicker::make('expires_at')->label(__('chatbot.renewal_expiry'))
-                ->helperText(__('chatbot.renewal_expiry_help')),
+                ->helperText(__('chatbot.renewal_expiry_help'))
+                ->disabled(fn () => !PlatformAccess::allows('pricing'))
+                ->dehydrated(fn () => PlatformAccess::allows('pricing')),
             TextInput::make('monthly_price_toman')
                 ->label(__('chatbot.monthly_price'))
                 ->numeric()
                 ->default(0)
                 ->required()
-                ->helperText(__('chatbot.monthly_price_help')),
+                ->helperText(__('chatbot.monthly_price_help'))
+                ->disabled(fn () => !PlatformAccess::allows('pricing'))
+                ->dehydrated(fn () => PlatformAccess::allows('pricing')),
 
             // These four live on the tenant-schema chatbots row, not this
             // form's own ChatbotIndexEntry model — EditChatbot.php's
@@ -121,10 +144,12 @@ class ChatbotResource extends Resource {
                     ->label(__('chatbot.suspend'))
                     ->icon('heroicon-o-no-symbol')
                     ->color('danger')
-                    ->visible(fn (ChatbotIndexEntry $record) => $record->is_active)
+                    ->visible(fn (ChatbotIndexEntry $record) => $record->is_active
+                        && PlatformAccess::allows('tenant_lifecycle'))
                     ->requiresConfirmation()
                     ->modalDescription(__('chatbot.suspend_description'))
                     ->action(function (ChatbotIndexEntry $record) {
+                        PlatformAccess::authorize('tenant_lifecycle');
                         $record->update(['is_active' => false]);
                         Notification::make()->title(__('chatbot.suspended_notice', ['name' => $record->name]))->success()->send();
                     }),
@@ -132,8 +157,10 @@ class ChatbotResource extends Resource {
                     ->label(__('chatbot.reactivate'))
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
-                    ->visible(fn (ChatbotIndexEntry $record) => !$record->is_active)
+                    ->visible(fn (ChatbotIndexEntry $record) => !$record->is_active
+                        && PlatformAccess::allows('tenant_lifecycle'))
                     ->action(function (ChatbotIndexEntry $record) {
+                        PlatformAccess::authorize('tenant_lifecycle');
                         $record->update(['is_active' => true]);
                         Notification::make()->title(__('chatbot.reactivated_notice', ['name' => $record->name]))->success()->send();
                     }),
@@ -142,10 +169,14 @@ class ChatbotResource extends Resource {
                     ->label(__('common.delete'))
                     ->icon('heroicon-o-trash')
                     ->color('danger')
+                    // NOT covered by canDelete(): that gates Filament's own
+                    // DeleteAction, and this is a hand-written one.
+                    ->visible(fn () => PlatformAccess::allows('tenant_lifecycle'))
                     ->requiresConfirmation()
                     ->modalHeading(fn (ChatbotIndexEntry $record) => __('chatbot.delete_heading', ['name' => $record->name]))
                     ->modalDescription(__('chatbot.delete_description'))
                     ->action(function (ChatbotIndexEntry $record) {
+                        PlatformAccess::authorize('tenant_lifecycle');
                         $chatbotId = $record->chatbot_id;
                         $schema    = $record->schema_name;
 

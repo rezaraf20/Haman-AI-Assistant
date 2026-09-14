@@ -1,6 +1,8 @@
 <?php
 namespace App\Filament\Resources;
 
+use App\Support\PlatformAccess;
+
 use App\Models\LlmProviderProfile;
 use Filament\Forms\Form;
 use Filament\Forms\Components\{TextInput, Select, Toggle};
@@ -12,6 +14,17 @@ use App\Support\Jalali;
 use App\Filament\Resources\LlmProviderProfileResource\Pages;
 
 class LlmProviderProfileResource extends Resource {
+    // Admin only: LLM provider credentials.
+    // Enforced by Filament on the direct route as well, not just in the
+    // navigation — see PlatformAccess.
+    public static function canViewAny(): bool { return PlatformAccess::allows('platform_settings'); }
+    public static function canView($record): bool { return PlatformAccess::allows('platform_settings'); }
+    public static function canCreate(): bool { return PlatformAccess::allows('platform_settings'); }
+    public static function canEdit($record): bool { return PlatformAccess::allows('platform_settings'); }
+    public static function canDelete($record): bool { return PlatformAccess::allows('platform_settings'); }
+    public static function canDeleteAny(): bool { return PlatformAccess::allows('platform_settings'); }
+    public static function shouldRegisterNavigation(): bool { return PlatformAccess::allows('platform_settings'); }
+
     protected static ?string $model = LlmProviderProfile::class;
     protected static ?string $navigationIcon = 'heroicon-o-cpu-chip';
     protected static ?int $navigationSort = 4;
@@ -21,8 +34,6 @@ class LlmProviderProfileResource extends Resource {
     public static function getModelLabel(): string { return __('panel.llm_provider_singular'); }
     public static function getPluralModelLabel(): string { return __('panel.llm_providers_nav'); }
 
-    public static function canCreate(): bool { return true; }
-    public static function canDelete($record): bool { return true; }
 
     public static function form(Form $form): Form {
         return $form->schema([

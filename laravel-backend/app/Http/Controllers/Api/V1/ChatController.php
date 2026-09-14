@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use App\Support\WidgetDefaults;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use App\Support\Settings;
 
 class ChatController extends BaseApiController
 {
@@ -25,19 +26,21 @@ class ChatController extends BaseApiController
     // enforced, not for a settings UI to tune them. max_payment_link_amount
     // is the one cap the task explicitly calls out as per-chatbot
     // configurable — that one lives on the chatbots table instead.
-    private const MAX_PAYMENT_LINKS_PER_CONVERSATION = 3;
-    private const MAX_PAYMENT_LINKS_PER_IP_PER_DAY = 5;
+    // These are now settings (SettingsRegistry, "limits" tab) rather than
+    // literals. The numbers below are gone, not moved: the defaults live in
+    // the registry, so a reset here and a reset there cannot disagree. The
+    // reasoning above still stands — the point was always that the limits be
+    // enforced, and they are; being tunable does not weaken that.
+    private function limit(string $key): int {
+        return (int) Settings::get('limits.' . $key);
+    }
 
     // get_order_status (doc-04). Every one of these is an anti-abuse
     // control first and a UX limit second: an OTP flow reachable from an
     // anonymous public chat widget, that spends the MERCHANT's money per
     // send, is exactly the shape of thing that gets turned into a free
     // SMS-harassment tool if any of them is missing.
-    private const MAX_CODES_PER_CONTACT_PER_HOUR = 3;
-    private const MAX_CODES_PER_CHATBOT_PER_DAY = 100;
-    private const MAX_CODE_REQUESTS_PER_IP_PER_DAY = 20;
-    private const ORDER_STATUS_CODE_TTL_MINUTES = 5;
-    private const MAX_ORDER_STATUS_VERIFY_ATTEMPTS = 3;
+    // Likewise settings — see limit() above.
 
     public function __construct(
         private ChatService $svc,
@@ -431,13 +434,13 @@ class ChatController extends BaseApiController
             ->where('conversation_id', $d['conversation_id'])
             ->where('event_type', 'payment_link_created')
             ->count();
-        if ($convCount >= self::MAX_PAYMENT_LINKS_PER_CONVERSATION) {
+        if ($convCount >= $this->limit('payment_links_per_conversation')) {
             return $this->tooManyRequests('Too many payment links requested in this conversation.');
         }
 
         // Rule: cap on draft orders per IP per day.
         $ipKey = 'hamman-payment-link:' . $d['chatbot_id'] . ':' . $req->ip();
-        if (RateLimiter::tooManyAttempts($ipKey, self::MAX_PAYMENT_LINKS_PER_IP_PER_DAY)) {
+        if (RateLimiter::tooManyAttempts($ipKey, $this->limit('payment_links_per_ip_per_day'))) {
             return $this->tooManyRequests('Too many payment links requested today.', RateLimiter::availableIn($ipKey));
         }
 
@@ -560,7 +563,7 @@ class ChatController extends BaseApiController
         // an order lookup at all — counted on every attempt, including the
         // ones that never result in an SMS.
         $ipKey = 'hamman-order-status-ip:' . $req->ip();
-        if (RateLimiter::tooManyAttempts($ipKey, self::MAX_CODE_REQUESTS_PER_IP_PER_DAY)) {
+        if (RateLimiter::tooManyAttempts($ipKey, $this->limit('otp_requests_per_ip_per_day'))) {
             return $this->tooManyRequests('Too many requests today.', RateLimiter::availableIn($ipKey));
         }
         RateLimiter::hit($ipKey, 86400);
@@ -572,14 +575,14 @@ class ChatController extends BaseApiController
         $contactSends = OrderStatusOtp::where('contact', $phone)
             ->where('created_at', '>=', now()->subHour())
             ->count();
-        if ($contactSends >= self::MAX_CODES_PER_CONTACT_PER_HOUR) {
+        if ($contactSends >= $this->limit('otp_codes_per_contact_per_hour')) {
             return $this->tooManyRequests('Too many code requests for this number. Please try again later.');
         }
 
         $chatbotSends = OrderStatusOtp::where('chatbot_id', $d['chatbot_id'])
             ->where('created_at', '>=', now()->subDay())
             ->count();
-        if ($chatbotSends >= self::MAX_CODES_PER_CHATBOT_PER_DAY) {
+        if ($chatbotSends >= $this->limit('otp_codes_per_chatbot_per_day')) {
             return $this->tooManyRequests('This store has reached its daily verification limit.');
         }
 
@@ -624,7 +627,7 @@ class ChatController extends BaseApiController
             'contact_type'    => 'phone',
             'code_hash'       => Hash::make($code),
             'ip'              => $req->ip(),
-            'expires_at'      => now()->addMinutes(self::ORDER_STATUS_CODE_TTL_MINUTES),
+            'expires_at'      => now()->addMinutes($this->limit('otp_ttl_minutes')),
         ]);
 
         // The merchant pays for their own customers' lookups, and sees it
@@ -639,7 +642,7 @@ class ChatController extends BaseApiController
         return $this->ok([
             'sent'       => true,
             'contact'    => $this->maskPhone($phone),
-            'expires_in' => self::ORDER_STATUS_CODE_TTL_MINUTES * 60,
+            'expires_in' => $this->limit('otp_ttl_minutes') * 60,
         ]);
     }
 
@@ -679,7 +682,7 @@ class ChatController extends BaseApiController
 
         if (!$otp) return $this->badRequest('Please request a code first.');
         if ($otp->expires_at->isPast()) return $this->badRequest('This code has expired. Please request a new one.');
-        if ($otp->attempts >= self::MAX_ORDER_STATUS_VERIFY_ATTEMPTS) {
+        if ($otp->attempts >= $this->limit('otp_verify_attempts')) {
             return $this->tooManyRequests('Too many incorrect attempts. Please request a new code.');
         }
 

@@ -1,11 +1,16 @@
 <?php
 namespace App\Filament\Widgets;
 
+use App\Support\PlatformAccess;
+
 use App\Support\Jalali;
 use Filament\Widgets\ChartWidget;
 use Illuminate\Support\Facades\{DB, Cache};
 
 class RevenueVsCostChart extends ChartWidget {
+    // Platform revenue against platform cost — finances, so admin only.
+    public static function canView(): bool { return PlatformAccess::allows('platform_finances'); }
+
     protected static ?string $pollingInterval = null;
     protected int|string|array $columnSpan = 2;
     protected static bool $isLazy = false;

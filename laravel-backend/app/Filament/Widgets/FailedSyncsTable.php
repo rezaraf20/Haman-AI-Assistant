@@ -1,6 +1,8 @@
 <?php
 namespace App\Filament\Widgets;
 
+use App\Support\PlatformAccess;
+
 use App\Models\Tenant;
 use App\Support\Jalali;
 use Filament\Widgets\Widget;
@@ -13,6 +15,8 @@ use Illuminate\Support\Facades\{DB, Cache};
 // revisit first (e.g. a public-schema failed_syncs rollup written
 // alongside AggregateAnalyticsJob).
 class FailedSyncsTable extends Widget {
+    public static function canView(): bool { return PlatformAccess::allows('sync_operate'); }
+
     protected static string $view = 'filament.widgets.failed-syncs-table';
     protected int|string|array $columnSpan = 'full';
     protected static bool $isLazy = false;

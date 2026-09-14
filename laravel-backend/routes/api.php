@@ -14,29 +14,33 @@ Route::prefix('v1')->group(function () {
 
     // ── Auth (Public) ──────────────────────────────────
     Route::prefix('auth')->group(function () {
-        Route::post('register', [AuthController::class, 'register']);
-        Route::post('login',    [AuthController::class, 'login']);
+        // Registration creates a tenant and a whole Postgres schema; login
+        // was guessable at full speed. Both were unthrottled until the
+        // abuse audit — see AppServiceProvider for how each is keyed.
+        Route::post('register', [AuthController::class, 'register'])->middleware('throttle:register');
+        Route::post('login',    [AuthController::class, 'login'])->middleware('throttle:login');
     });
 
     // Public, unauthenticated — the WordPress plugin's settings page
     // polls this (before necessarily having a valid API key entered) to
     // show an "update available" notice.
-    Route::get('wp-plugin/latest-version', [HealthController::class, 'wpPluginVersion']);
+    Route::get('wp-plugin/latest-version', [HealthController::class, 'wpPluginVersion'])
+        ->middleware('throttle:public-read');
 
     // ── Chat Widget (Public, but domain- and rate-limited) ─
     Route::prefix('chat')->group(function () {
         Route::post('session', [ChatController::class, 'createSession'])
-            ->middleware(['chatbot.domain', 'throttle:chat-session']);
+            ->middleware(['maintenance', 'chatbot.domain', 'throttle:chat-session']);
         Route::post('message', [ChatController::class, 'sendMessage'])
-            ->middleware(['chatbot.domain', 'throttle:chat-message']);
+            ->middleware(['maintenance', 'chatbot.domain', 'throttle:chat-message']);
         Route::get('history/{sessionId}', [ChatController::class, 'history'])
-            ->middleware(['chatbot.domain', 'throttle:chat-message']);
+            ->middleware(['maintenance', 'chatbot.domain', 'throttle:chat-message']);
         Route::get('conversation/{conversationId}/messages', [ChatController::class, 'conversationMessages'])
-            ->middleware(['chatbot.domain', 'throttle:chat-message']);
+            ->middleware(['maintenance', 'chatbot.domain', 'throttle:chat-message']);
         Route::post('feedback', [ChatController::class, 'submitFeedback'])
-            ->middleware('throttle:chat-message');
+            ->middleware(['maintenance', 'throttle:chat-message']);
         Route::post('cart-event', [ChatController::class, 'cartEvent'])
-            ->middleware('throttle:chat-message');
+            ->middleware(['maintenance', 'throttle:chat-message']);
         // create_payment_link (doc-04) — the one endpoint in this group
         // that creates real money-adjacent state, so it gets the same
         // origin check as session/message rather than cart-event/feedback's
@@ -44,20 +48,22 @@ Route::prefix('v1')->group(function () {
         // amount cap, per-conversation/per-IP-per-day limits) are on top
         // of this, not instead of it.
         Route::post('payment-link', [ChatController::class, 'createPaymentLink'])
-            ->middleware(['chatbot.domain', 'throttle:chat-message']);
+            ->middleware(['maintenance', 'chatbot.domain', 'throttle:chat-message']);
         // get_order_status (doc-04) — request-code spends the merchant's
         // money and verify exposes a customer's orders, so both get the
         // same origin check as session/message. Their own caps (per
         // contact/hour, per chatbot/day, per IP/day, 5-minute code, 3
         // attempts) are on top of this, not instead of it.
         Route::post('order-status/request-code', [ChatController::class, 'requestOrderStatusCode'])
-            ->middleware(['chatbot.domain', 'throttle:chat-message']);
+            ->middleware(['maintenance', 'chatbot.domain', 'throttle:chat-message']);
         Route::post('order-status/verify', [ChatController::class, 'verifyOrderStatusCode'])
-            ->middleware(['chatbot.domain', 'throttle:chat-message']);
+            ->middleware(['maintenance', 'chatbot.domain', 'throttle:chat-message']);
     });
 
     // ── Plugin API (API Key) ───────────────────────────
-    Route::middleware(['auth.apikey', 'tenant.schema'])->group(function () {
+    // Every sync call embeds text at the platform's expense, and a valid
+    // key could make them as fast as it liked.
+    Route::middleware(['auth.apikey', 'tenant.schema', 'throttle:plugin-api'])->group(function () {
         Route::prefix('sync')->group(function () {
             Route::post('products', [SyncController::class, 'syncProducts']);
             Route::post('pages',    [SyncController::class, 'syncPages']);

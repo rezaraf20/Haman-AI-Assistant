@@ -1,6 +1,8 @@
 <?php
 namespace App\Filament\Resources;
 
+use App\Support\PlatformAccess;
+
 use App\Models\Ticket;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -12,6 +14,15 @@ use App\Support\Jalali;
 use App\Filament\Resources\TicketResource\Pages;
 
 class TicketResource extends Resource {
+    // Answering tickets is the job. Deleting them is not.
+    // Enforced by Filament on the direct route as well, not just in the
+    // navigation — see PlatformAccess.
+    public static function canViewAny(): bool { return PlatformAccess::allows('tickets'); }
+    public static function canView($record): bool { return PlatformAccess::allows('tickets'); }
+    public static function canDelete($record): bool { return PlatformAccess::allows('tickets'); }
+    public static function canDeleteAny(): bool { return PlatformAccess::allows('tickets'); }
+    public static function shouldRegisterNavigation(): bool { return PlatformAccess::allows('tickets'); }
+
     protected static ?string $model = Ticket::class;
     protected static ?string $navigationIcon = 'heroicon-o-lifebuoy';
     protected static ?int $navigationSort = 8;
@@ -23,7 +34,6 @@ class TicketResource extends Resource {
 
     public static function canCreate(): bool { return false; } // admin replies to tickets, doesn't open them
     public static function canEdit($record): bool { return false; }
-    public static function canDelete($record): bool { return true; }
 
     // 'open' already means "customer created or replied and it hasn't been
     // handled yet" (see ManageTicket::submitReply() and the customer portal's

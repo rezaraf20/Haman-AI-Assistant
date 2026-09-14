@@ -4,6 +4,7 @@ use App\Models\Tenant\{Conversation, Message, Chatbot};
 use App\Support\WidgetDefaults;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use App\Support\Settings;
 
 class ChatService {
     public function __construct(
@@ -147,7 +148,7 @@ class ChatService {
     }
 
     private function gatewayPayload(Conversation $conv, string $msg, Chatbot $chatbot, object $tenant, array $history): array {
-        return ['chatbot_id'=>$conv->chatbot_id,'conversation_id'=>$conv->id,'session_id'=>$conv->session_id,'query'=>$msg,'history'=>$history,'schema_name'=>$tenant->schema_name,'top_k'=>$chatbot->retrieval_top_k,'threshold'=>$chatbot->retrieval_threshold,'temperature'=>$chatbot->temperature,'max_tokens'=>$chatbot->max_tokens_response,'llm_model'=>$chatbot->llm_model,'language'=>$chatbot->response_language??'auto','system_prompt'=>$chatbot->system_prompt,'fallback_response'=>$chatbot->fallback_response,'rerank_enabled'=>$chatbot->reranker_enabled,'rerank_threshold'=>$chatbot->rerank_threshold,'business_name'=>$chatbot->business_name,'enabled_tools'=>$chatbot->enabled_tools??[],'authenticity_unknown_message'=>$chatbot->authenticity_unknown_message];
+        return ['chatbot_id'=>$conv->chatbot_id,'conversation_id'=>$conv->id,'session_id'=>$conv->session_id,'query'=>$msg,'history'=>$history,'schema_name'=>$tenant->schema_name,'top_k'=>$chatbot->retrieval_top_k,'threshold'=>$chatbot->retrieval_threshold ?? Settings::get('limits.retrieval_threshold'),'temperature'=>$chatbot->temperature,'max_tokens'=>$chatbot->max_tokens_response,'llm_model'=>$chatbot->llm_model,'language'=>$chatbot->response_language??'auto','system_prompt'=>$chatbot->system_prompt,'fallback_response'=>$chatbot->fallback_response,'rerank_enabled'=>$chatbot->reranker_enabled,'rerank_threshold'=>$chatbot->rerank_threshold ?? Settings::get('limits.rerank_threshold'),'business_name'=>$chatbot->business_name,'enabled_tools'=>$chatbot->enabled_tools??[],'authenticity_unknown_message'=>$chatbot->authenticity_unknown_message];
     }
 
     /** Returns a handleVolunteeredContact()-shaped lead result if $msg

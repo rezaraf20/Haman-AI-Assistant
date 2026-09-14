@@ -6,6 +6,8 @@ use App\Services\SmsService;
 use App\Services\TenantService;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
+use App\Support\Settings;
+use Illuminate\Support\Facades\RateLimiter;
 
 // Phone+SMS-OTP login/signup for the customer portal (/portal). Deliberately
 // not a Filament auth page — see CustomerPanelProvider for why. Establishes a
@@ -27,11 +29,36 @@ class OtpLogin extends Component {
     public ?string $error = null;
     public ?string $info = null;
 
+    /**
+     * The per-IP ceiling on SMS sent from this form.
+     *
+     * SmsService only enforces a 60-second cooldown per phone NUMBER, so
+     * cycling numbers sent unlimited messages — each one billed to the
+     * platform, since nobody is authenticated here to bill instead. The
+     * route throttle on /portal/login cannot cover this: Livewire actions
+     * arrive on /livewire/update, not on the page's own URL.
+     */
+    private function withinIpBudget(): bool {
+        $cap = (int) Settings::get('limits.portal_otp_per_ip_per_day');
+        if ($cap <= 0) return true;
+
+        $key = 'portal-otp:' . request()->ip();
+        if (RateLimiter::tooManyAttempts($key, $cap)) {
+            $this->error = __('validation.otp_too_many_requests');
+            return false;
+        }
+
+        RateLimiter::hit($key, 86400);
+        return true;
+    }
+
     public function sendCode(SmsService $sms): void {
         $this->error = null;
         $this->validate(['phone' => ['required', 'regex:/^09\d{9}$/']], [
             'phone.regex' => __('validation.phone_format'),
         ]);
+
+        if (!$this->withinIpBudget()) return;
 
         $result = $sms->sendOtp($this->phone);
         if (!$result['ok']) {
@@ -45,6 +72,10 @@ class OtpLogin extends Component {
     public function resendCode(SmsService $sms): void {
         $this->error = null;
         $this->info = null;
+
+        // A resend is a send: it costs exactly the same message.
+        if (!$this->withinIpBudget()) return;
+
         $result = $sms->sendOtp($this->phone);
         if (!$result['ok']) {
             $this->error = $result['message'];

@@ -28,6 +28,9 @@ services:
     env_file: ./laravel-backend/.env
     volumes:
       - laravel_public_assets:/shared-assets
+      # Database dumps. Without this they live inside the container and are
+      # destroyed the next time it is recreated — which is every deploy.
+      - laravel_backups:/var/www/html/storage/app/backups
     depends_on:
       postgres: {condition: service_healthy}
       redis:    {condition: service_healthy}
@@ -52,6 +55,11 @@ services:
     container_name: hamman_scheduler
     command: sh -c "while true; do php artisan schedule:run >> /dev/null 2>&1; sleep 60; done"
     env_file: ./laravel-backend/.env
+    volumes:
+      # The nightly backup actually runs here, so the scheduler needs the
+      # same volume — and hamman:verify-backup, run from either container,
+      # has to find the file the other one wrote.
+      - laravel_backups:/var/www/html/storage/app/backups
     depends_on: [laravel]
     networks: [hamman_net]
     restart: unless-stopped
@@ -110,3 +118,4 @@ volumes:
   postgres_data:
   redis_data:
   laravel_public_assets:
+  laravel_backups:

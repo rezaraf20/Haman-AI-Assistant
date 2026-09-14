@@ -1,6 +1,8 @@
 <?php
 namespace App\Filament\Resources;
 
+use App\Support\PlatformAccess;
+
 use App\Models\Tenant;
 use App\Models\Plan;
 use App\Models\User;
@@ -9,16 +11,42 @@ use Filament\Forms\Form;
 use Filament\Forms\Components\{TextInput, Select, Section, Textarea};
 use Filament\Resources\Resource;
 use Filament\Tables\Table;
-use Filament\Tables\Columns\{TextColumn, BadgeColumn};
+use Filament\Tables\Columns\{TextColumn, BadgeColumn, IconColumn};
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Actions\Action;
 use Filament\Notifications\Notification;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\{DB, Cache};
+use App\Support\PlatformActivity;
 use App\Support\Jalali;
 use App\Support\Money;
+use App\Filament\Pages\TenantConversations;
 use App\Filament\Resources\TenantResource\Pages;
 
 class TenantResource extends Resource {
+    // Support sees the customer list and status; creating, editing or
+    // deleting a tenant (and with it plan changes) stays with admins.
+    // Enforced by Filament on the direct route as well, not just in the
+    // navigation — see PlatformAccess.
+    public static function canViewAny(): bool { return PlatformAccess::allows('tenants_read'); }
+    public static function canView($record): bool { return PlatformAccess::allows('tenants_read'); }
+    public static function canCreate(): bool { return PlatformAccess::allows('tenant_lifecycle'); }
+    public static function canEdit($record): bool { return PlatformAccess::allows('tenant_lifecycle'); }
+    public static function canDelete($record): bool { return PlatformAccess::allows('tenant_lifecycle'); }
+    public static function canDeleteAny(): bool { return PlatformAccess::allows('tenant_lifecycle'); }
+    public static function shouldRegisterNavigation(): bool { return PlatformAccess::allows('tenants_read'); }
+
+    /**
+     * The plugin-status columns are aggregated here rather than queried per
+     * row, so the list costs the same one query it did before. Revoked keys
+     * are not counted: an inactive key means the shop is not connected.
+     */
+    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        return parent::getEloquentQuery()
+            ->withCount(['apiKeys' => fn ($q) => $q->where('is_active', true)])
+            ->withMax('apiKeys', 'last_used_at');
+    }
+
     protected static ?string $model = Tenant::class;
     protected static ?string $navigationIcon = 'heroicon-o-building-office';
     protected static ?int $navigationSort = 1;
@@ -32,12 +60,6 @@ class TenantResource extends Resource {
     public static function getModelLabel(): string { return __('panel.tenant_singular'); }
     public static function getPluralModelLabel(): string { return __('panel.tenants_nav'); }
 
-    // Only 'owner'-role users reach this panel at all (see AdminPanelProvider /
-    // User::canAccessPanel()) — no per-model Policy is registered, and Filament's
-    // action visibility otherwise silently hides Create/Edit/Delete without one.
-    public static function canCreate(): bool { return true; }
-    public static function canEdit($record): bool { return true; }
-    public static function canDelete($record): bool { return true; }
 
     // Cleared in ListTenants::mount() the first time the admin opens this
     // list — see that file for why a bulk "mark all visible as seen" fits
@@ -96,6 +118,19 @@ class TenantResource extends Resource {
                 TextColumn::make('phone')->label(__('common.phone'))->searchable()->placeholder('—'),
                 TextColumn::make('owner.national_id')->label(__('panel.national_id'))->placeholder('—')->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('owner.address')->label(__('common.address'))->limit(30)->placeholder('—')->toggleable(isToggledHiddenByDefault: true),
+                // Whether the shop's plugin has a key, and when it last used
+                // it. Support needs this to answer "is it even installed?"
+                // without ever being shown the key itself — the VALUE is
+                // admin-only (PlatformAccess::ADMIN_ONLY 'api_key_values').
+                IconColumn::make('has_api_key')
+                    ->label(__('panel.plugin_key_issued'))
+                    ->boolean()
+                    ->getStateUsing(fn (Tenant $record) => (bool) $record->api_keys_count),
+                TextColumn::make('api_keys_max_last_used_at')
+                    ->label(__('panel.plugin_last_contact'))
+                    ->placeholder(__('panel.plugin_never_contacted'))
+                    ->formatStateUsing(fn ($state) => $state ? Jalali::dateTime($state) : null)
+                    ->color(fn ($state) => $state ? null : 'danger'),
                 TextColumn::make('plan.name')->label(__('panel.plan'))->badge(),
                 BadgeColumn::make('status')->label(__('common.status'))->colors([
                     'success' => 'active',
@@ -123,15 +158,92 @@ class TenantResource extends Resource {
                 SelectFilter::make('plan_id')->relationship('plan', 'name')->label(__('panel.plan')),
             ])
             ->actions([
+                // The reader itself demands a reason and masks contacts;
+                // this is only the way in. Hidden from anyone without the
+                // capability, and TenantConversations::canAccess() refuses
+                // the URL independently.
+                Action::make('conversations')
+                    ->label(__('staff_conversations.title'))
+                    ->icon('heroicon-o-chat-bubble-left-right')
+                    ->color('gray')
+                    ->visible(fn () => PlatformAccess::allows('conversations'))
+                    ->url(fn (Tenant $record) => TenantConversations::getUrl(['tenant' => $record->id])),
+                // Two things support is genuinely asked to do, and which
+                // need no sight of any secret value to do. Both are gated
+                // on their own capability and both write to the activity
+                // log — a rotation in particular is invisible afterwards
+                // unless it was recorded when it happened.
+                Action::make('clearCache')
+                    ->label(__('panel.clear_cache'))
+                    ->icon('heroicon-o-arrow-path')
+                    ->color('gray')
+                    ->visible(fn () => PlatformAccess::allows('sync_operate'))
+                    ->requiresConfirmation()
+                    ->modalDescription(__('panel.clear_cache_description'))
+                    ->action(function (Tenant $record) {
+                        PlatformAccess::authorize('sync_operate');
+                        $cleared = static::clearTenantCaches($record);
+
+                        PlatformActivity::record(
+                            'cache_cleared',
+                            tenantId: (string) $record->id,
+                            subjectType: 'tenant',
+                            subjectId: (string) $record->id,
+                            after: ['keys_cleared' => $cleared],
+                        );
+
+                        Notification::make()->title(__('panel.clear_cache_done'))->success()->send();
+                    }),
+
+                Action::make('rotateWebhookSecret')
+                    ->label(__('panel.rotate_webhook_secret'))
+                    ->icon('heroicon-o-key')
+                    ->color('warning')
+                    ->visible(fn () => PlatformAccess::allows('webhook_secret_rotate'))
+                    ->requiresConfirmation()
+                    ->modalDescription(__('panel.rotate_webhook_secret_description'))
+                    ->action(function (Tenant $record) {
+                        PlatformAccess::authorize('webhook_secret_rotate');
+
+                        // Neither the old nor the new value is shown to the
+                        // operator or written to the log. Only the fact that
+                        // it changed, and when, which is all a reviewer
+                        // needs and all support is entitled to.
+                        $record->update([
+                            'settings' => array_merge($record->settings ?? [], [
+                                'webhook_secret' => \Illuminate\Support\Str::random(32),
+                            ]),
+                        ]);
+
+                        PlatformActivity::record(
+                            'webhook_secret_rotated',
+                            tenantId: (string) $record->id,
+                            subjectType: 'tenant',
+                            subjectId: (string) $record->id,
+                            after: ['rotated' => true],
+                        );
+
+                        Notification::make()
+                            ->title(__('panel.rotate_webhook_secret_done'))
+                            ->body(__('panel.rotate_webhook_secret_done_body'))
+                            ->success()->send();
+                    }),
+
                 Action::make('delete')
                     ->label(__('common.delete'))
                     ->icon('heroicon-o-trash')
                     ->color('danger')
+                    // A hand-written action, so canDelete() does not gate it.
+                    // The closure below drops the customer's whole schema,
+                    // which makes this the single most dangerous button in
+                    // the panel — hence the guard inside it as well.
+                    ->visible(fn () => PlatformAccess::allows('tenant_lifecycle'))
                     ->requiresConfirmation()
                     ->modalHeading(fn (Tenant $record) => __('panel.delete_tenant_heading', ['name' => $record->name]))
                     ->modalDescription(__('panel.delete_tenant_description'))
                     ->modalSubmitActionLabel(__('panel.delete_tenant_confirm'))
                     ->action(function (Tenant $record) {
+                        PlatformAccess::authorize('tenant_lifecycle');
                         $schema = $record->schema_name;
                         $id     = $record->id;
 
@@ -148,6 +260,28 @@ class TenantResource extends Resource {
                     }),
             ])
             ->defaultSort('created_at', 'desc');
+    }
+
+    /**
+     * Drops the cached report and dashboard data derived from this tenant's
+     * own rows. Deliberately narrow: it clears what a stale-numbers
+     * complaint is actually about, and touches no other tenant.
+     */
+    public static function clearTenantCaches(Tenant $tenant): int
+    {
+        $schema = $tenant->schema_name;
+        $today  = now()->toDateString();
+
+        $keys = ["customer:dashboard:{$tenant->id}", "suggestions:badge:{$tenant->id}"];
+        foreach (['30d', '3m', '6m', '1y'] as $range) {
+            $keys[] = "trends:{$schema}:{$range}:{$today}";
+        }
+
+        $cleared = 0;
+        foreach ($keys as $key) {
+            if (Cache::forget($key)) $cleared++;
+        }
+        return $cleared;
     }
 
     public static function getPages(): array {

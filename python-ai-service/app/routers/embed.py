@@ -7,7 +7,7 @@ from app.core.config import settings
 from app.core.database import get_db, set_schema
 from app.models.schemas import EmbedRequest
 from app.services.embedding_service import chunk_text, get_embeddings, count_tokens
-from app.services import pdf_service
+from app.services import pdf_service, platform_settings_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -106,15 +106,20 @@ def _embed_pdf_attachment(db: Session, doc_id, chatbot_id: str, source_url: str,
     if not source_url:
         return _skip_document(db, doc_id, "No source URL for this attachment")
 
-    try:
-        pdf_bytes = pdf_service.download_pdf(source_url)
-    except pdf_service.PdfTooLargeError:
-        return _skip_document(db, doc_id, f"PDF exceeds the {pdf_service.MAX_PDF_BYTES // (1024*1024)}MB size limit")
+    # Both limits are admin-configurable (settings page, "limits" tab) and
+    # fall back to the same numbers they were hardcoded to.
+    max_mb = platform_settings_service.get_int(db, "limits.pdf_max_mb")
+    max_pages = platform_settings_service.get_int(db, "limits.pdf_max_pages")
 
     try:
-        pages = pdf_service.extract_pdf_pages(pdf_bytes)
+        pdf_bytes = pdf_service.download_pdf(source_url, max_bytes=max_mb * 1024 * 1024)
+    except pdf_service.PdfTooLargeError:
+        return _skip_document(db, doc_id, f"PDF exceeds the {max_mb}MB size limit")
+
+    try:
+        pages = pdf_service.extract_pdf_pages(pdf_bytes, max_pages=max_pages)
     except pdf_service.PdfTooManyPagesError:
-        return _skip_document(db, doc_id, f"PDF exceeds the {pdf_service.MAX_PDF_PAGES}-page limit")
+        return _skip_document(db, doc_id, f"PDF exceeds the {max_pages}-page limit")
 
     if not pdf_service.is_extractable(pages):
         return _skip_document(db, doc_id, "No extractable text found (likely a scanned PDF) — OCR is not currently supported")

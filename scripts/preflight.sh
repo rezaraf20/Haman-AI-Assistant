@@ -54,5 +54,11 @@ if ! php laravel-backend/scripts/scan-persian-strings.php; then
     exit 1
 fi
 
+echo "== Preflight: settings defaults agree across PHP and Python =="
+if ! php laravel-backend/scripts/check-settings-defaults.php; then
+    echo "FAIL: a shared setting default differs between SettingsRegistry.php and platform_settings_service.py."
+    exit 1
+fi
+
 echo ""
 echo "All preflight checks passed."
