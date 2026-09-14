@@ -60,5 +60,11 @@ if ! php laravel-backend/scripts/check-settings-defaults.php; then
     exit 1
 fi
 
+echo "== Preflight: chatbot tool catalogue matches the Python registry =="
+if ! php laravel-backend/scripts/check-tool-catalogue.php; then
+    echo "FAIL: a tool is missing from either ChatbotTools::CATALOGUE or the Python registry."
+    exit 1
+fi
+
 echo ""
 echo "All preflight checks passed."

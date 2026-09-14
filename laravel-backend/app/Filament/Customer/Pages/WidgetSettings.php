@@ -8,7 +8,8 @@ use Filament\Pages\Page;
 use Filament\Forms\Form;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Concerns\InteractsWithForms;
-use Filament\Forms\Components\{TextInput, Textarea, ColorPicker, Select, Toggle, Repeater};
+use Filament\Forms\Components\{TextInput, Textarea, ColorPicker, Select, Toggle, Repeater, CheckboxList, Section};
+use App\Support\ChatbotTools;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
 
@@ -68,6 +69,7 @@ class WidgetSettings extends Page implements HasForms {
             'lead_capture_not_in_catalog_enabled' => (bool) ($config['lead_capture_not_in_catalog_enabled'] ?? false),
             'lead_capture_out_of_stock_prompt' => $config['lead_capture_out_of_stock_prompt'] ?? '',
             'lead_capture_not_in_catalog_prompt' => $config['lead_capture_not_in_catalog_prompt'] ?? '',
+            'enabled_tools'      => ChatbotTools::sanitise($bot?->enabled_tools ?? []),
         ]);
     }
 
@@ -142,6 +144,30 @@ class WidgetSettings extends Page implements HasForms {
                 ->helperText(__('chatbot.lead_capture_item_placeholder_help'))
                 ->rows(2)->maxLength(1000)
                 ->visible(fn ($get) => $get('lead_capture_enabled') && $get('lead_capture_not_in_catalog_enabled')),
+            // The Python side has always gated each tool on this list; until
+            // now nothing could write to it, so every chatbot sat at [] and
+            // no tool had ever run.
+            Section::make(__('chatbot.tools_section'))
+                ->description(__('chatbot.tools_section_help'))
+                ->collapsed()
+                ->schema([
+                    CheckboxList::make('enabled_tools')
+                        ->label('')
+                        ->options(collect(ChatbotTools::names())
+                            ->mapWithKeys(fn ($name) => [$name => __('chatbot.tool_' . $name)])
+                            ->all())
+                        ->descriptions(collect(ChatbotTools::names())
+                            ->mapWithKeys(fn ($name) => [
+                                $name => __('chatbot.tool_' . $name . '_help')
+                                    . (ChatbotTools::cost($name) === 'none'
+                                        ? ''
+                                        : ' - ' . __('chatbot.tool_cost_' . ChatbotTools::cost($name))),
+                            ])
+                            ->all())
+                        ->columns(2)
+                        ->bulkToggleable(),
+                ]),
+
             Repeater::make('quick_questions')
                 ->label(__('chatbot.quick_questions_label'))
                 ->schema([
@@ -194,6 +220,10 @@ class WidgetSettings extends Page implements HasForms {
                 // enabled; see ChatController::createPaymentLink().
                 'max_payment_link_amount' => $data['max_payment_link_amount'] !== '' && $data['max_payment_link_amount'] !== null
                     ? (float) $data['max_payment_link_amount'] : null,
+                // Sanitised rather than stored as submitted: an unknown name
+                // would sit in the column where the panel, which only renders
+                // known tools, could never switch it off again.
+                'enabled_tools'   => ChatbotTools::sanitise($data['enabled_tools'] ?? []),
                 'widget_config'   => $widgetConfig,
             ]);
         }
