@@ -60,7 +60,7 @@ class InstallGuide extends Page
             'download' => $status['plugin_installed'],
             'connect'  => $status['plugin_installed'],
             'sync'     => $status['first_sync_done'],
-            'tools'    => $status['any_tool_enabled'],
+            'tools'    => $status['any_tool_enabled'] ?? false,
         ];
     }
 
