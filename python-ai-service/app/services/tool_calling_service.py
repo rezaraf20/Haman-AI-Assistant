@@ -31,6 +31,7 @@ from app.services import llm_provider_service, platform_settings_service
 from app.services.llm_provider_service import _redis
 from app.services.tools.registry import get_enabled_tools, to_openai_schema, Tool
 from app.services.claim_guard import proven_actions, verify_claims
+from app.lang.tool_results import PHRASED_TOOLS, tool_result_phrase
 from app.services.tool_router import route
 
 logger = logging.getLogger(__name__)
@@ -514,6 +515,27 @@ def _decision_messages(query: str, history: List[dict], forced: Optional[str] = 
     return messages
 
 
+def _phrasing_instruction(phrases: List[str], is_fa: bool) -> str:
+    """Tell the answering turn to use the true sentence for what a tool did.
+
+    Spelled out as "use this sentence" rather than "do not say it was added",
+    because a prohibition leaves the model to invent a replacement and it
+    invents the same claim in other words.
+    """
+    lines = "\n".join(f"- {p}" for p in dict.fromkeys(phrases))
+
+    if is_fa:
+        return (
+            "\n\nدرباره‌ی کاری که ابزارها انجام دادند، دقیقاً همین جمله‌ها را بیاور و "
+            "چیزی فراتر از آن‌ها ادعا نکن:\n" + lines
+        )
+
+    return (
+        "\n\nWhen describing what the tools did, use exactly these sentences and "
+        "claim nothing beyond them:\n" + lines
+    )
+
+
 def run_tool_calling_pipeline(
     db: Session, chatbot_id: str, conversation_id: Optional[str], query: str,
     history: List[dict], system_prompt_text: str, max_tokens: int, temperature: float,
@@ -537,7 +559,11 @@ def run_tool_calling_pipeline(
     # means it had no confident opinion, and the model chooses as before.
     plan = route(intent or "", enabled_tool_names, query, history)
     called_tools: List[str] = []
+    required_phrases: List[str] = []
     messages = _decision_messages(query, history, plan.forced_tool([]) if plan else None)
+
+    from app.services.rag_service import _looks_persian as _is_fa
+    _query_is_fa = _is_fa(query)
 
     start = time.time()
     total_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
@@ -562,6 +588,15 @@ def run_tool_calling_pipeline(
             from app.services.rag_service import _log_event
             _log_event(db, conversation_id, chatbot_id, "tool_budget_exceeded", {"reason": "time"})
             return None
+
+        if required_phrases:
+            # Restated every turn, immediately before the model writes, since
+            # a rule stated once several messages back is the kind a small
+            # model loses -- the same reason _grounding_reminder exists.
+            messages[0] = {
+                "role": "system",
+                "content": system_prompt_text + _phrasing_instruction(required_phrases, _query_is_fa),
+            }
 
         offer_tools = executed < max_tool_calls
         forced = plan.forced_tool(called_tools) if (plan and offer_tools) else None
@@ -674,6 +709,15 @@ def run_tool_calling_pipeline(
                 "tool_call_id": call.get("id", ""),
                 "content": json.dumps(result, ensure_ascii=False),
             })
+
+            # Three of the tools prepare something rather than doing it, and
+            # the model reports them as done unless it is given the true
+            # sentence. Only on success: a failed call has nothing to
+            # describe, and claim_guard removes any claim about it anyway.
+            if fn_name in PHRASED_TOOLS and isinstance(result, dict) and "error" not in result:
+                phrase = tool_result_phrase(fn_name, is_fa=_query_is_fa)
+                if phrase:
+                    required_phrases.append(phrase)
 
     logger.warning(f"Tool-calling loop exhausted {max_tool_calls + 1} iterations without a final answer for chatbot {chatbot_id}")
     return None

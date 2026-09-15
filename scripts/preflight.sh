@@ -72,5 +72,11 @@ if ! php laravel-backend/scripts/check-plugin-download.php; then
     exit 1
 fi
 
+echo "== Preflight: the advertised plugin version matches the shipped one =="
+if ! php laravel-backend/scripts/check-plugin-version.php; then
+    echo "FAIL: customers would not be told about the plugin version we ship."
+    exit 1
+fi
+
 echo ""
 echo "All preflight checks passed."

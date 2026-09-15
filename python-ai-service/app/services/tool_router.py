@@ -40,6 +40,23 @@ _INTENT_ROUTES = {
 # Acts on the customer's order or money: requires their explicit say-so.
 UNROUTABLE_TOOLS = frozenset({"add_to_cart", "create_payment_link", "build_cart_url"})
 
+# Which questions are worth a tool-deciding call at all.
+#
+# Wider than the routing table above, because a question can need a tool
+# without one being forced: "payment" reaches create_payment_link, which is
+# never routed but is exactly what that intent wants. Everything else --
+# shipping, returns, authenticity, technical support, and the "other" bucket
+# -- is answered from the indexed content, and running a deciding turn for
+# those spends a model call to be told there was nothing to call.
+#
+# The classifier is right about 80% of the time, so this trades a tool call
+# on a question it mislabels for no call on the majority that never needed
+# one. Measured on 30 real customer messages: see the deploy report.
+TOOL_CANDIDATE_INTENTS = frozenset({
+    "price", "availability", "comparison", "consultation", "order_status", "payment",
+})
+
+
 # Needs a numeric product id the customer never types, so it cannot be the
 # first call unless the question carries a SKU.
 _NEEDS_PRODUCT_LOOKUP = frozenset({"compare_products", "get_product_availability"})
@@ -53,6 +70,11 @@ _MOBILE = re.compile(r"(?:(?:\+?98|0)9\d{9})")
 # A part-number-like token: at least one digit and one letter/separator, or a
 # long digit run. Deliberately the same shape rag_service looks for.
 _SKU_LIKE = re.compile(r"\b(?=[A-Za-z0-9\-_/]*\d)[A-Za-z0-9][A-Za-z0-9\-_/]{3,}\b")
+
+
+def is_tool_candidate(intent: Optional[str]) -> bool:
+    """Whether this question is worth asking the model about tools."""
+    return (intent or "") in TOOL_CANDIDATE_INTENTS
 
 
 class RoutePlan:

@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.services import llm_provider_service
 from app.services.intent_classifier import classify_intent
 from app.services.claim_guard import verify_claims
+from app.services.tool_router import is_tool_candidate
 
 logger = logging.getLogger(__name__)
 
@@ -1370,7 +1371,11 @@ async def run_rag_pipeline_stream(
     # delta chunk followed by "done", the exact same pattern already used
     # for the SKU-shortcut and quota-exceeded paths above. See
     # run_rag_pipeline()'s identical, more detailed comment.
-    if enabled_tools:
+    # Only questions the classifier reads as needing live data get a
+    # tool-deciding call. The rest go straight to retrieval, which is where
+    # they were always going to end up -- previously by way of one wasted
+    # model call that answered "no tool applies".
+    if enabled_tools and is_tool_candidate(intent):
         from app.services.tool_calling_service import run_tool_calling_pipeline
         tool_result = run_tool_calling_pipeline(
             db, chatbot_id, conversation_id, query, history, sys_p, max_tokens, temperature, enabled_tools,
@@ -1578,7 +1583,11 @@ async def run_rag_pipeline(
     # enabled for this chatbot, no tool-calling-capable provider
     # configured, the call itself failed, or the time budget ran out) —
     # falls through to the normal completion below unchanged in that case.
-    if enabled_tools:
+    # Only questions the classifier reads as needing live data get a
+    # tool-deciding call. The rest go straight to retrieval, which is where
+    # they were always going to end up -- previously by way of one wasted
+    # model call that answered "no tool applies".
+    if enabled_tools and is_tool_candidate(intent):
         from app.services.tool_calling_service import run_tool_calling_pipeline
         tool_result = run_tool_calling_pipeline(
             db, chatbot_id, conversation_id, query, history, sys_p, max_tokens, temperature, enabled_tools,

@@ -41,10 +41,15 @@ return [
     // What the WordPress plugin's Advanced tab compares its own HAMMAN_VERSION
     // against to show an "update available" notice — bump this by hand
     // (env var, no dedicated UI yet) whenever a new plugin zip is actually
-    // published for customers to install. No infra exists to auto-detect
-    // this from the plugin source itself, so it's a manual value on purpose
-    // rather than something that could silently drift from reality.
+    // published for customers to install.
+    //
+    // This used to say it could not silently drift from reality, on the
+    // grounds that a manual value is a deliberate one. It drifted anyway:
+    // the plugin header reached 1.9.0 while this stayed at 1.8.0, so nobody
+    // running 1.8.0 was ever told an update existed. preflight now compares
+    // the two and fails when they disagree, which is what actually keeps
+    // them together.
     'wp_plugin' => [
-        'latest_version' => env('HAMMAN_WP_PLUGIN_LATEST_VERSION', '1.8.0'),
+        'latest_version' => env('HAMMAN_WP_PLUGIN_LATEST_VERSION', '1.9.0'),
     ],
 ];
