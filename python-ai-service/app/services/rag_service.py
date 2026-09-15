@@ -403,6 +403,53 @@ def _live_pricing_rule(enabled_tools: Optional[List[str]], is_fa: bool) -> str:
     )
 
 
+_CATALOGUE_LOOKUP_TOOL_NAMES = {"search_products"}
+
+
+def _catalogue_lookup_rule(enabled_tools: Optional[List[str]], is_fa: bool) -> str:
+    """Stop the CONTEXT from reading as the whole catalogue.
+
+    One run of eight real Persian questions against a real synced shop, asking
+    only which tool the model decides to call: 5/8 with the CONTEXT block in
+    the prompt, 7/8 without it. Both losses were the same mistake -- asked to
+    compare two products, and asked to put one in the cart, it looked at the
+    CONTEXT, found no product id there, and told the customer the information
+    was not recorded, instead of calling search_products, which finds both in
+    one call.
+
+    With this rule the same run scores 6/8 and 8/8: the cart question is
+    fixed, the comparison one is not, and a prompt carrying the CONTEXT still
+    does worse than one without it. Removing the block from this turn is the
+    bigger lever and remains open, but it costs an extra model call on every
+    message that ends up needing no tool, which this does not.
+
+    Single samples per cell, not an average -- treat the direction as the
+    finding, not the exact fractions.
+    """
+    if not enabled_tools or not (_CATALOGUE_LOOKUP_TOOL_NAMES & set(enabled_tools)):
+        return ""
+    if is_fa:
+        return (
+            "\n\nزمینه‌ی (context) بالا فقط چند قطعه‌ی بازیابی‌شده است، نه فهرست کامل محصولات، و "
+            "هیچ‌وقت شناسه‌ی محصول (product ID) در آن نیست. اگر محصولی در زمینه‌ی بالا نبود، یعنی "
+            "فقط بازیابی نشده؛ این به معنی نداشتن آن محصول نیست. هر وقت برای کاری (مقایسه، افزودن به سبد، "
+            "قیمت، موجودی، لینک پرداخت) به شناسه‌ی محصول نیاز داری، اول ابزار جست‌وجو را صدا بزن و "
+            "شناسه را از نتیجه‌ی آن بردار. هرگز به مشتری نگو «این اطلاعات ثبت نشده» یا «در اطلاعات "
+            "موجود نیست» وقتی یک ابزار می‌تواند همان را پیدا کند، و هرگز شناسه‌ای را از مشتری نپرس "
+            "وقتی خودت می‌توانی جست‌وجویش کنی."
+        )
+    return (
+        "\n\nThe CONTEXT above is a handful of retrieved passages, not the product "
+        "catalogue, and it never contains product IDs. A product missing from the "
+        "CONTEXT was simply not retrieved; it does not mean the shop has no such "
+        "product. Whenever you need a product ID for anything - comparing, adding "
+        "to a cart, price, stock, a payment link - call the search tool first and "
+        "take the ID from its result. Never tell the customer that information is "
+        "not recorded or not available when a tool can find it, and never ask the "
+        "customer for an ID you can look up yourself."
+    )
+
+
 def _grounding_reminder(is_fa: bool) -> str:
     """A short, final restatement of the highest-risk rules, placed right
     before the user's question — the repetition closest to the generated
@@ -1218,6 +1265,7 @@ async def run_rag_pipeline_stream(
     sys_p = _grounding_rules_for(query)
     sys_p += _business_name_rule(business_name, is_fa_question)
     sys_p += _live_pricing_rule(enabled_tools, is_fa_question)
+    sys_p += _catalogue_lookup_rule(enabled_tools, is_fa_question)
     sys_p += _product_display_rule(enabled_tools, is_fa_question)
     sys_p += _cart_link_rule(enabled_tools, is_fa_question)
     sys_p += _payment_link_rule(enabled_tools, is_fa_question)
@@ -1412,6 +1460,7 @@ async def run_rag_pipeline(
     sys_p = _grounding_rules_for(query)
     sys_p += _business_name_rule(business_name, is_fa_question)
     sys_p += _live_pricing_rule(enabled_tools, is_fa_question)
+    sys_p += _catalogue_lookup_rule(enabled_tools, is_fa_question)
     sys_p += _product_display_rule(enabled_tools, is_fa_question)
     sys_p += _cart_link_rule(enabled_tools, is_fa_question)
     sys_p += _payment_link_rule(enabled_tools, is_fa_question)
