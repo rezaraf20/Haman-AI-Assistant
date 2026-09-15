@@ -15,6 +15,9 @@ use Illuminate\Support\Facades\DB;
 use App\Support\Jalali;
 use App\Support\Money;
 use App\Support\Numbers;
+use App\Support\Settings;
+use App\Filament\Resources\TenantResource;
+use Illuminate\Support\Facades\Cache;
 
 class MyChatbots extends Page implements HasTable {
     use InteractsWithTable;
@@ -57,6 +60,20 @@ class MyChatbots extends Page implements HasTable {
                     ->icon('heroicon-o-swatch')
                     ->color('gray')
                     ->url(fn (ChatbotIndexEntry $record) => WidgetSettings::getUrl(['chatbot' => $record->chatbot_id])),
+                // The merchant's own copy of support's manual sync. Capped
+                // per day because each run re-embeds the catalogue and that
+                // costs real money; support is not capped here because the
+                // plugin already allows one per site per hour and a
+                // support-initiated sync is a deliberate act on a ticket.
+                Action::make('manual_sync')
+                    ->label(__('sync_trigger.action'))
+                    ->icon('heroicon-o-arrow-path-rounded-square')
+                    ->color('gray')
+                    ->requiresConfirmation()
+                    ->modalDescription(__('sync_trigger.confirm_customer'))
+                    ->modalSubmitActionLabel(__('sync_trigger.action'))
+                    ->action(fn (ChatbotIndexEntry $record) => $this->manualSync($record)),
+
                 Action::make('renew')
                     ->label(__('chatbot.renew_action'))
                     ->icon('heroicon-o-arrow-path')
@@ -103,6 +120,35 @@ class MyChatbots extends Page implements HasTable {
             'deleted' => Numbers::format($totals['deleted']),
             'when'    => Jalali::dateTime($lastSyncedAt),
         ]);
+    }
+
+    /**
+     * One counter per tenant per day, not per chatbot: the cost being
+     * bounded is the tenant's embedding spend, and a tenant with four
+     * chatbots should not get four times the budget.
+     */
+    private function manualSync(ChatbotIndexEntry $record): void {
+        $tenant = auth()->user()->tenant;
+        $cap = (int) Settings::get('limits.manual_sync_per_tenant_per_day');
+        $key = "manual-sync:{$tenant->id}:" . now()->toDateString();
+
+        if ($cap > 0 && (int) Cache::get($key, 0) >= $cap) {
+            Notification::make()
+                ->title(__('sync_trigger.failed_title'))
+                ->body(__('sync_trigger.daily_cap_reached', ['cap' => $cap]))
+                ->warning()->persistent()->send();
+            return;
+        }
+
+        $ok = TenantResource::runManualSync($tenant, $record->chatbot_id);
+
+        // Only a sync that actually ran counts against the budget — a
+        // customer whose plugin is missing should not burn their allowance
+        // discovering that three times.
+        if ($ok && $cap > 0) {
+            Cache::put($key, (int) Cache::get($key, 0) + 1,
+                max(60, now()->endOfDay()->diffInSeconds(now())));
+        }
     }
 
     private function renew(ChatbotIndexEntry $record): void {

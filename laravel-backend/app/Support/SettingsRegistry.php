@@ -207,6 +207,14 @@ class SettingsRegistry
             'limits.portal_otp_per_ip_per_day' => [
                 'tab' => 'limits', 'group' => 'otp', 'type' => 'int', 'default' => 10,
             ],
+            // Manual sync from the customer portal re-embeds the whole
+            // catalogue, so the merchant gets a bounded number per day.
+            // Support is not capped here: the plugin enforces its own
+            // one-per-hour guard per site, and a support-initiated sync is
+            // a deliberate act on a ticket, not a button anyone can lean on.
+            'limits.manual_sync_per_tenant_per_day' => [
+                'tab' => 'limits', 'group' => 'sync', 'type' => 'int', 'default' => 3,
+            ],
             'limits.sync_requests_per_minute' => [
                 'tab' => 'limits', 'group' => 'sync', 'type' => 'int', 'default' => 30,
             ],

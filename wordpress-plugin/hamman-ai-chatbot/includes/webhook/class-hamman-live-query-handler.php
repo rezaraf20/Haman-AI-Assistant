@@ -26,6 +26,9 @@ class Hamman_Live_Query_Handler {
     const MAX_ORDER_ITEMS           = 10;
     const MAX_ITEM_QUANTITY         = 20;
     const MAX_ORDERS_RETURNED       = 5;
+    // A full sync re-embeds the whole catalogue, so this is per-site and
+    // measured in hours, not the per-minute bucket live-query uses.
+    const SYNC_MIN_INTERVAL_HOURS   = 1;
 
     public function register_routes(): void {
         register_rest_route( 'hamman/v1', '/live-query', [
@@ -35,6 +38,76 @@ class Hamman_Live_Query_Handler {
             // system — same posture as class-hamman-webhook-handler.php.
             'permission_callback' => '__return_true',
         ] );
+
+        // Sync has only ever been push: the plugin decides when to send,
+        // and nobody on the platform side could ask for one. That left
+        // support unable to do anything about a customer whose catalogue
+        // had gone stale, even though refreshing it is part of the role.
+        // Same HMAC auth as live-query — no new credential to manage.
+        register_rest_route( 'hamman/v1', '/trigger-sync', [
+            'methods'             => 'POST',
+            'callback'            => [ $this, 'handle_trigger_sync' ],
+            'permission_callback' => '__return_true',
+        ] );
+    }
+
+    /**
+     * Runs a full sync on demand and reports what the site pushed.
+     *
+     * Deliberately synchronous: the caller is a human waiting on a button,
+     * and a fire-and-forget background job would give them nothing to look
+     * at. A separate, much tighter rate limit than live-query's, because
+     * one call here re-embeds the whole catalogue at the platform's expense.
+     */
+    public function handle_trigger_sync( WP_REST_Request $req ): WP_REST_Response {
+        if ( ! $this->verify_signature( $req ) ) {
+            return new WP_REST_Response( [ 'error' => 'Invalid signature' ], 403 );
+        }
+
+        $version = defined( 'HAMMAN_VERSION' ) ? HAMMAN_VERSION : '';
+
+        if ( ! $this->check_sync_rate_limit() ) {
+            return new WP_REST_Response( [
+                'error'             => 'sync_rate_limited',
+                'plugin_version'    => $version,
+                'retry_after_hours' => self::SYNC_MIN_INTERVAL_HOURS,
+            ], 429 );
+        }
+
+        if ( ! class_exists( 'Hamman_Sync_Manager' ) ) {
+            return new WP_REST_Response( [ 'error' => 'sync_unavailable', 'plugin_version' => $version ], 503 );
+        }
+
+        $started = time();
+        $results = ( new Hamman_Sync_Manager() )->run_full_sync();
+
+        if ( isset( $results['error'] ) ) {
+            // "Not configured" — the plugin is installed but has no API key
+            // or chatbot id yet, which is a different problem from a failure.
+            return new WP_REST_Response( [
+                'error'          => 'not_configured',
+                'detail'         => $results['error'],
+                'plugin_version' => $version,
+            ], 409 );
+        }
+
+        set_transient( 'hamman_last_manual_sync', $started, DAY_IN_SECONDS );
+
+        return new WP_REST_Response( [
+            'ok'              => true,
+            'plugin_version'  => $version,
+            'woocommerce'     => class_exists( 'WooCommerce' ),
+            'duration_seconds' => time() - $started,
+            'pushed'          => $results,
+        ], 200 );
+    }
+
+    /** One manual sync per site per interval, whoever asks for it. */
+    private function check_sync_rate_limit(): bool {
+        $last = (int) get_transient( 'hamman_manual_sync_guard' );
+        if ( $last ) return false;
+        set_transient( 'hamman_manual_sync_guard', time(), self::SYNC_MIN_INTERVAL_HOURS * HOUR_IN_SECONDS );
+        return true;
     }
 
     public function handle( WP_REST_Request $req ): WP_REST_Response {

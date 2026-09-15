@@ -173,6 +173,21 @@ class TenantResource extends Resource {
                 // on their own capability and both write to the activity
                 // log — a rotation in particular is invisible afterwards
                 // unless it was recorded when it happened.
+                // Sync was push-only, so a customer with a stale catalogue
+                // could not be helped by anyone. `sync_triggered` was already
+                // a registered activity-log action with no button behind it.
+                Action::make('manualSync')
+                    ->label(__('sync_trigger.action'))
+                    ->icon('heroicon-o-arrow-path-rounded-square')
+                    ->color('gray')
+                    ->visible(fn () => PlatformAccess::allows('sync_operate'))
+                    ->requiresConfirmation()
+                    ->modalDescription(__('sync_trigger.confirm_admin'))
+                    ->action(function (Tenant $record) {
+                        PlatformAccess::authorize('sync_operate');
+                        static::runManualSync($record);
+                    }),
+
                 Action::make('clearCache')
                     ->label(__('panel.clear_cache'))
                     ->icon('heroicon-o-arrow-path')
@@ -260,6 +275,63 @@ class TenantResource extends Resource {
                     }),
             ])
             ->defaultSort('created_at', 'desc');
+    }
+
+    /**
+     * Triggers a sync and reports what actually changed.
+     *
+     * Shared with the customer portal so both sides render the same counts
+     * and, more importantly, the same specific failure messages — "the
+     * plugin is not installed" and "the plugin is too old" are different
+     * conversations, and neither is a generic error.
+     */
+    public static function runManualSync(Tenant $record, ?string $chatbotId = null): bool
+    {
+        $chatbotId ??= DB::table('chatbot_index')->where('tenant_id', $record->id)->value('chatbot_id');
+
+        if (!$chatbotId) {
+            Notification::make()->title(__('sync_trigger.failed_title'))
+                ->body(__('sync_trigger.no_domain'))->danger()->persistent()->send();
+            return false;
+        }
+
+        $result = app(\App\Services\SyncTriggerService::class)->trigger($record, $chatbotId);
+
+        PlatformActivity::record(
+            'sync_triggered',
+            tenantId: (string) $record->id,
+            subjectType: 'chatbot',
+            subjectId: (string) $chatbotId,
+            after: $result['ok']
+                ? ['outcome' => 'ok'] + ($result['counts'] ?? [])
+                : ['outcome' => 'failed', 'reason' => $result['reason'] ?? 'unknown'],
+        );
+
+        if (!$result['ok']) {
+            Notification::make()
+                ->title(__('sync_trigger.failed_title'))
+                ->body(__($result['message_key'], $result['params'] ?? []))
+                ->danger()->persistent()->send();
+            return false;
+        }
+
+        $counts = $result['counts'] ?? [];
+        $touched = ($counts['new'] ?? 0) + ($counts['updated'] ?? 0) + ($counts['deleted'] ?? 0);
+
+        Notification::make()
+            ->title(__('sync_trigger.done'))
+            ->body($touched === 0 && ($counts['skipped'] ?? 0) === 0
+                ? __('sync_trigger.done_nothing')
+                : __('sync_trigger.done_body', [
+                    'new'     => $counts['new'] ?? 0,
+                    'updated' => $counts['updated'] ?? 0,
+                    'skipped' => $counts['skipped'] ?? 0,
+                    'deleted' => $counts['deleted'] ?? 0,
+                    'seconds' => $result['duration'] ?? 0,
+                ]))
+            ->success()->persistent()->send();
+
+        return true;
     }
 
     /**

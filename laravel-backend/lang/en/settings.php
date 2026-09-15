@@ -176,4 +176,5 @@ return [
     'backup_offsite_off' => 'No off-server destination — the backup stays on the machine it protects.',
     'backup_verified' => 'Restore tested',
     'backup_never_verified' => 'No backup has ever been restored. An untested backup is not a backup.',
+    'field_limits_manual_sync_per_tenant_per_day' => 'Manual syncs per customer per day',
 ];
