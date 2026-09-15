@@ -3,6 +3,7 @@ namespace Tests\Feature;
 
 use App\Models\{Plan, Tenant, User};
 use App\Services\SyncTriggerService;
+use App\Support\PluginLegacy;
 use App\Support\{PlatformAccess, Settings};
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\{DB, Http};
@@ -26,6 +27,11 @@ class ManualSyncTest extends TestCase
     private const DOMAIN = 'shop.example.com';
     private const TRIGGER = 'https://shop.example.com/wp-json/haman/v1/trigger-sync';
     private const LIVE = 'https://shop.example.com/wp-json/haman/v1/live-query';
+    // A 404 on the current namespace is retried against the 1.x one, so a
+    // scenario that means "no plugin" has to answer on both -- otherwise the
+    // retry is an unmatched request and the site looks unreachable instead.
+    private const OLD_TRIGGER = 'https://shop.example.com/wp-json/' . PluginLegacy::REST_NAMESPACE . '/trigger-sync';
+    private const OLD_LIVE = 'https://shop.example.com/wp-json/' . PluginLegacy::REST_NAMESPACE . '/live-query';
 
     protected function setUp(): void
     {
@@ -140,10 +146,13 @@ class ManualSyncTest extends TestCase
     {
         [$tenant, $chatbotId] = $this->tenant();
 
-        // 404 on trigger-sync AND on live-query: no plugin at all.
+        // 404 on trigger-sync AND on live-query, under both namespaces:
+        // no plugin at all, of any version.
         Http::fake([
-            self::TRIGGER => Http::response('', 404),
-            self::LIVE    => Http::response('', 404),
+            self::TRIGGER     => Http::response('', 404),
+            self::LIVE        => Http::response('', 404),
+            self::OLD_TRIGGER => Http::response('', 404),
+            self::OLD_LIVE    => Http::response('', 404),
         ]);
 
         $result = app(SyncTriggerService::class)->trigger($tenant, $chatbotId);
@@ -159,14 +168,36 @@ class ManualSyncTest extends TestCase
         // 404 on trigger-sync but live-query answers: installed since 1.4,
         // just too old to have the new route. A different conversation.
         Http::fake([
-            self::TRIGGER => Http::response('', 404),
-            self::LIVE    => Http::response(['error' => 'Invalid signature'], 403),
+            self::TRIGGER     => Http::response('', 404),
+            self::OLD_TRIGGER => Http::response('', 404),
+            self::LIVE        => Http::response(['error' => 'Invalid signature'], 403),
         ]);
 
         $result = app(SyncTriggerService::class)->trigger($tenant, $chatbotId);
 
         $this->assertSame('plugin_outdated', $result['reason']);
-        $this->assertSame('1.9.0', $result['params']['required']);
+        // Read from config rather than spelled out here: the version the
+        // platform advertises moves, and a copy of it in a test only tells
+        // you it moved.
+        $this->assertSame(config('haman.wp_plugin.latest_version'), $result['params']['required']);
+    }
+
+    public function test_a_site_still_on_the_old_plugin_is_reached_on_its_own_namespace(): void
+    {
+        [$tenant, $chatbotId] = $this->tenant();
+
+        // The 2.x namespace does not exist on a 1.9.0 site. The platform has
+        // to fall back, or every one of those shops silently stops syncing
+        // the moment the platform is updated.
+        Http::fake([
+            self::TRIGGER     => Http::response('', 404),
+            self::OLD_TRIGGER => Http::response(['ok' => true], 200),
+        ]);
+
+        $result = app(SyncTriggerService::class)->trigger($tenant, $chatbotId);
+
+        $this->assertTrue($result['ok'], 'a 1.x site must still be reachable');
+        Http::assertSent(fn ($request) => $request->url() === self::OLD_TRIGGER);
     }
 
     public function test_every_failure_mode_has_its_own_reason_and_message(): void

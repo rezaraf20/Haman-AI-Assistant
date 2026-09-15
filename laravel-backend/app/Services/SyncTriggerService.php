@@ -62,7 +62,10 @@ class SyncTriggerService
 
             return $installed
                 ? ['ok' => false, 'reason' => 'plugin_outdated', 'message_key' => 'sync_trigger.plugin_outdated',
-                   'params' => ['required' => '1.9.0']]
+                   // The version we actually publish, not a copy of it: a
+                   // hardcoded number here told customers to upgrade to a
+                   // release that was already two behind.
+                   'params' => ['required' => config('haman.wp_plugin.latest_version')]]
                 : ['ok' => false, 'reason' => 'plugin_missing', 'message_key' => 'sync_trigger.plugin_missing',
                    'params' => ['domain' => $domain]];
         }
