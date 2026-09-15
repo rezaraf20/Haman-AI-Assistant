@@ -254,6 +254,19 @@ class TenantService
         try {
             DB::statement("CREATE INDEX IF NOT EXISTS idx_{$schemaName}_products_sku_normalized ON {$schemaName}.products(chatbot_id, sku_normalized)");
         } catch (\Throwable $e) {}
+        // products.currency used to be CHAR(3) DEFAULT 'USD'. The plugin
+        // sends the shop's real currency with every product, so that default
+        // only ever applied when the value was missing — and then it stated
+        // the wrong one rather than none, which is how an Iranian shop's
+        // prices came out as USD. Dropped rather than changed to another
+        // guess: the value belongs to the shop.
+        try {
+            DB::statement("ALTER TABLE {$schemaName}.products ALTER COLUMN currency DROP DEFAULT");
+            DB::statement("ALTER TABLE {$schemaName}.products ALTER COLUMN currency TYPE VARCHAR(10)");
+            // CHAR(3) padded every stored code; trim so comparisons and
+            // display do not carry the padding forward.
+            DB::statement("UPDATE {$schemaName}.products SET currency = NULLIF(BTRIM(currency), '')");
+        } catch (\Throwable $e) {}
         // Tool calling — see createTenantTables()'s matching column comment.
         try {
             DB::statement("ALTER TABLE {$schemaName}.chatbots ADD COLUMN IF NOT EXISTS enabled_tools JSONB NOT NULL DEFAULT '[]'");
@@ -613,7 +626,15 @@ class TenantService
                 price DECIMAL(12,4),
                 regular_price DECIMAL(12,4),
                 sale_price DECIMAL(12,4),
-                currency CHAR(3) DEFAULT 'USD',
+                -- No default, and deliberately not USD. The WordPress
+                -- plugin sends the shop's own get_woocommerce_currency() with
+                -- every product, so a row with no currency means the value
+                -- genuinely did not arrive -- which must read as unknown, not
+                -- be quietly filled in with the wrong one. An Iranian shop's
+                -- prices were being shown to customers as USD.
+                -- Wider than CHAR(3) because WooCommerce currency codes are
+                -- not all three characters, and CHAR pads what it stores.
+                currency VARCHAR(10),
                 stock_status VARCHAR(20) DEFAULT 'instock',
                 stock_quantity INTEGER,
                 average_rating DECIMAL(3,2),

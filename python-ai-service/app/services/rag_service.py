@@ -490,8 +490,57 @@ SKU_CANDIDATE_PATTERN = re.compile(
 )
 
 
+# The pattern above requires a letter, because a bare number is usually a year
+# or an order number rather than a part number. That is true of a loose number
+# and false of a grouped one: a real customer's catalogue numbers every product
+# "440-128", "440-637", and 148 of its 173 products are shaped that way, so the
+# fast path never fired for the shop that needed it most.
+#
+# The separator is what makes it safe. "1407" stays an ordinary number; a digit
+# group split by a hyphen or slash is deliberate notation.
+SKU_NUMERIC_PATTERN = re.compile(r'\b\d{2,6}(?:[-/]\d{2,6}){1,3}\b')
+
+# A bare digit run is only a part number when the customer says it is --
+# "کد 440128 رو دارید؟" is a lookup, "سفارش 1407 من کجاست؟" is not. The
+# labelling word has to be there, and it must not be a word that labels
+# something else entirely: an order code, a tracking code, a discount code or
+# a verification code are all "کد" too, and none of them is a product.
+SKU_LABELLED_PATTERN = re.compile(
+    r'(?:کد|شناسه|sku|part\s*(?:number|no\.?)?|پارت\s*نامبر)'
+    r'\s*(?:محصول|کالا)?\s*:?\s*'
+    r'(?<!سفارش)(?<!پیگیری)(?<!تخفیف)(?<!تایید)(?<!تأیید)'
+    r'(\d{4,10})\b',
+    re.IGNORECASE,
+)
+
+_LABEL_EXCLUSIONS = ("سفارش", "پیگیری", "رهگیری", "تخفیف", "تایید", "تأیید", "پستی")
+
+# 2026-09-15 is a date, not a part number.
+_ISO_DATE = re.compile(r'^\d{4}[-/]\d{1,2}[-/]\d{1,2}$')
+
+# Longer than any part number, and the length at which phone numbers start:
+# 0912-111-2233 is not a lookup.
+_MAX_NUMERIC_SKU_DIGITS = 9
+
+
 def _extract_sku_candidates(query: str) -> List[str]:
-    return SKU_CANDIDATE_PATTERN.findall(query)
+    candidates = SKU_CANDIDATE_PATTERN.findall(query)
+
+    for token in SKU_NUMERIC_PATTERN.findall(query):
+        if token in candidates or _ISO_DATE.match(token):
+            continue
+        if sum(c.isdigit() for c in token) > _MAX_NUMERIC_SKU_DIGITS:
+            continue
+        candidates.append(token)
+
+    for match in SKU_LABELLED_PATTERN.finditer(query):
+        token = match.group(1)
+        preceding = query[max(0, match.start() - 24):match.start()]
+        if token in candidates or any(word in preceding for word in _LABEL_EXCLUSIONS):
+            continue
+        candidates.append(token)
+
+    return candidates
 
 
 def _normalize_sku(raw: str) -> str:
@@ -584,8 +633,23 @@ def _lookup_by_sku(db: Session, chatbot_id: str, query: str) -> Optional[dict]:
     return {"match_type": "none", "candidate": candidates[0]}
 
 
+def _format_price(product: dict) -> Optional[str]:
+    """The price with the shop's own currency, or with none at all.
+
+    A product whose sync did not carry a currency has no currency here, and
+    naming one anyway is how an Iranian shop's prices were shown to its
+    customers as USD. The number alone is incomplete; the number with the
+    wrong unit is wrong.
+    """
+    if product.get("price") is None:
+        return None
+    currency = (product.get("currency") or "").strip()
+    amount = f"{product['price']:,.0f}"
+    return f"{amount} {currency}" if currency else amount
+
+
 def _sku_exact_response(product: dict, is_fa: bool) -> str:
-    price = f"{product['price']:,.0f} {product['currency']}" if product.get('price') is not None else None
+    price = _format_price(product)
     if is_fa:
         parts = [f"بله، این محصول را داریم: {product['name']} (کد: {product['sku']})."]
         if price: parts.append(f"قیمت: {price}.")

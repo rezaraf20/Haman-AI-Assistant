@@ -70,7 +70,7 @@ class SyncService {
                 $content = implode("\n", array_filter([
     'Product: '.$p['name'],
     'SKU: '.($p['sku']??''),
-    'Price: '.($p['price']??'').' '.($p['currency']??'IRT'),
+    'Price: '.($p['price']??'').' '.($p['currency']??''),
     'Description: '.strip_tags($p['description']??''),
     'Short Description: '.strip_tags($p['short_description']??''),
     'Category: '.implode(', ', array_column($p['categories']??[], 'name')),
@@ -99,7 +99,9 @@ class SyncService {
                     'raw_content' => $content,
                     'metadata'    => [
                         'price'        => $p['price']??null,
-                        'currency'     => $p['currency']??'USD',
+                        // The shop's own currency, or nothing. Never a
+                        // guess: an Iranian shop was quoted in USD.
+                        'currency'     => $p['currency']??null,
                         'category'     => ($p['categories'][0]['name']??null),
                         'permalink'    => $p['permalink']??null,
                         'image'        => $p['featured_image']??null,
@@ -115,7 +117,7 @@ class SyncService {
 
                 Product::updateOrCreate(
                     ['chatbot_id'=>$chatbotId,'woo_product_id'=>$p['id']],
-                    ['name'=>$p['name'],'sku'=>$p['sku']??null,'sku_normalized'=>SkuNormalizer::normalize($p['sku']??null),'type'=>$p['type']??'simple','status'=>$p['status']??'publish','description'=>strip_tags($p['description']??''),'price'=>$p['price']??null,'currency'=>$p['currency']??'USD','stock_status'=>$p['stock_status']??'instock','permalink'=>$p['permalink']??null,'featured_image'=>$p['featured_image']??null,'attributes'=>$p['attributes']??[],'tags'=>$p['tags']??[],'authenticity_status'=>$p['authenticity_status']??null,'brand'=>$p['brand']??null,'official_distributor'=>$p['official_distributor']??null,'warranty_period'=>$p['warranty_period']??null,'country_of_origin'=>$p['country_of_origin']??null,'embedding_status'=>'pending','synced_at'=>now()]
+                    ['name'=>$p['name'],'sku'=>$p['sku']??null,'sku_normalized'=>SkuNormalizer::normalize($p['sku']??null),'type'=>$p['type']??'simple','status'=>$p['status']??'publish','description'=>strip_tags($p['description']??''),'price'=>$p['price']??null,'currency'=>$p['currency']??null,'stock_status'=>$p['stock_status']??'instock','permalink'=>$p['permalink']??null,'featured_image'=>$p['featured_image']??null,'attributes'=>$p['attributes']??[],'tags'=>$p['tags']??[],'authenticity_status'=>$p['authenticity_status']??null,'brand'=>$p['brand']??null,'official_distributor'=>$p['official_distributor']??null,'warranty_period'=>$p['warranty_period']??null,'country_of_origin'=>$p['country_of_origin']??null,'embedding_status'=>'pending','synced_at'=>now()]
                 );
                 if (in_array($outcome, ['new','updated'], true)) {
                     EmbedDocumentJob::dispatch($doc->id, $chatbotId, $schema);
