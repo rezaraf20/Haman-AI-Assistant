@@ -1,5 +1,5 @@
 """
-Hamman AI Platform - Python AI Microservice
+Haman AI Platform - Python AI Microservice
 Company: شرکت هامان فناوران پیشرو
 Author: Reza Rafiei
 """
@@ -20,12 +20,12 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Hamman AI Service starting...")
+    logger.info("Haman AI Service starting...")
     yield
-    logger.info("Hamman AI Service shutting down")
+    logger.info("Haman AI Service shutting down")
 
 app = FastAPI(
-    title="Hamman AI Service",
+    title="Haman AI Service",
     version="1.0.0",
     lifespan=lifespan,
     docs_url="/docs" if os.getenv("APP_ENV") != "production" else None,
@@ -51,4 +51,4 @@ app.include_router(search.router, prefix="/ai", tags=["search"], dependencies=[D
 
 @app.get("/")
 def root():
-    return {"service": "Hamman AI", "status": "running", "version": "1.0.0"}
+    return {"service": "Haman AI", "status": "running", "version": "1.0.0"}

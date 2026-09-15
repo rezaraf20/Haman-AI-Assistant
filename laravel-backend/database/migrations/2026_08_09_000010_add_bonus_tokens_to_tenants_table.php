@@ -4,7 +4,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 // Persistent purchased-token credit — unlike usage_tokens_current (resets
-// monthly, see hamman:reset-usage), this balance carries over and is only
+// monthly, see haman:reset-usage), this balance carries over and is only
 // drawn down once the plan's own monthly quota is exhausted. See
 // Tenant::isTokenQuotaExceeded() and TenantService::incrementUsage().
 return new class extends Migration {

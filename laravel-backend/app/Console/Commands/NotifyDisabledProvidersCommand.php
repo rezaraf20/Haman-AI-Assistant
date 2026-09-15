@@ -15,7 +15,7 @@ use Illuminate\Console\Command;
 // to every platform admin, then mark them announced so a later run doesn't
 // re-notify for the same event.
 class NotifyDisabledProvidersCommand extends Command {
-    protected $signature = 'hamman:notify-disabled-providers';
+    protected $signature = 'haman:notify-disabled-providers';
     protected $description = 'Alert platform admins about LLM provider profiles auto-disabled due to repeated failures';
 
     public function handle(): void {

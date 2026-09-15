@@ -81,8 +81,8 @@ service that reads the same row.
 Two operational commands worth knowing:
 
 ```bash
-php artisan hamman:abuse-audit      # every public endpoint: who can call it, its cap, what it costs
-php artisan hamman:verify-backup    # restores the latest backup into a scratch database and counts rows
+php artisan haman:abuse-audit      # every public endpoint: who can call it, its cap, what it costs
+php artisan haman:verify-backup    # restores the latest backup into a scratch database and counts rows
 ```
 
 ## Backups

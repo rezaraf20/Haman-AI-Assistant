@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     # llm_provider_profiles.api_key — see app/Support/LlmKeyCrypto.php on the
     # Laravel side for the encryption format. Must be kept equal to the
     # laravel-backend .env's APP_KEY whenever that's rotated.
-    HAMMAN_ENCRYPTION_KEY: str = ""
-    DATABASE_URL: str = "postgresql://hamman_user:secret@postgres:5432/hamman_saas"
+    HAMAN_ENCRYPTION_KEY: str = ""
+    DATABASE_URL: str = "postgresql://haman_user:secret@postgres:5432/haman_saas"
     REDIS_URL: str = "redis://:secret@redis:6379/0"
     GEMINI_API_KEY: str = ""
     GEMINI_CHAT_MODEL: str = "gemini-2.5-flash"

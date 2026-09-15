@@ -27,7 +27,7 @@ class CustomerPanelProvider extends PanelProvider {
         return $panel
             ->id('customer')
             ->path('portal')
-            ->brandName(fn () => config('hamman.brand.name') . ' — ' . __('common.customer_portal'))
+            ->brandName(fn () => config('haman.brand.name') . ' — ' . __('common.customer_portal'))
             // No ->login() — auth is phone+SMS-OTP via the plain Livewire flow
             // at routes/web.php's /portal/login (app/Livewire/OtpLogin.php),
             // not Filament's built-in email/password login page. It still
@@ -35,7 +35,7 @@ class CustomerPanelProvider extends PanelProvider {
             // Filament's Authenticate middleware below recognizes it exactly
             // like its own login would — bootstrap/app.php's redirectGuestsTo
             // sends unauthenticated /portal* visitors to that route instead.
-            ->colors(['primary' => config('hamman.brand.primary_color')])
+            ->colors(['primary' => config('haman.brand.primary_color')])
             // See AdminPanelProvider for why this is a render hook and not
             // ->font() (whose $family parameter is a plain, eagerly-evaluated
             // string, not string|Closure), and why it overrides the

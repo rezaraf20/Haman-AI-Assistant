@@ -7,7 +7,7 @@ return new class extends Migration {
         // This migration just ensures the helper function exists
         // Tenant schemas are created by TenantService::createSchema()
         DB::statement("
-            CREATE OR REPLACE FUNCTION hamman_create_schema(p_schema text)
+            CREATE OR REPLACE FUNCTION haman_create_schema(p_schema text)
             RETURNS void AS \$func\$
             BEGIN
                 EXECUTE 'CREATE SCHEMA IF NOT EXISTS ' || quote_ident(p_schema);
@@ -16,6 +16,6 @@ return new class extends Migration {
         ");
     }
     public function down(): void {
-        DB::statement('DROP FUNCTION IF EXISTS hamman_create_schema(text)');
+        DB::statement('DROP FUNCTION IF EXISTS haman_create_schema(text)');
     }
 };

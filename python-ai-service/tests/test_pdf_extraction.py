@@ -42,13 +42,13 @@ class RealPdfExtractionTest(unittest.TestCase):
     def test_content_lands_on_the_correct_page(self):
         pages = pdf_service.extract_pdf_pages(_read_fixture("sample_datasheet.pdf"))
         self.assertIn("LM358N", pages[0])
-        self.assertNotIn("HAMMAN_TEST_MARKER_42", pages[0])
-        self.assertIn("HAMMAN_TEST_MARKER_42", pages[1])
+        self.assertNotIn("HAMAN_TEST_MARKER_42", pages[0])
+        self.assertIn("HAMAN_TEST_MARKER_42", pages[1])
 
     def test_chunks_are_tagged_with_the_right_page_number(self):
         pages = pdf_service.extract_pdf_pages(_read_fixture("sample_datasheet.pdf"))
         chunks = pdf_service.chunk_pdf_pages(pages)
-        marker_chunks = [c for c in chunks if "HAMMAN_TEST_MARKER_42" in c["content"]]
+        marker_chunks = [c for c in chunks if "HAMAN_TEST_MARKER_42" in c["content"]]
         self.assertTrue(marker_chunks, "The marker text should survive chunking.")
         self.assertEqual(marker_chunks[0]["page"], 2)
 

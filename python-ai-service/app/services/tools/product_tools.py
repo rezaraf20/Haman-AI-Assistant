@@ -77,6 +77,8 @@ import requests as _requests
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.services.plugin_legacy import NAMESPACES
+
 from .registry import Tool, register
 
 logger = logging.getLogger(__name__)
@@ -165,20 +167,30 @@ def _scheme(domain: str) -> str:
 def _query_live(domain: str, secret: str, action: str, params: dict) -> Optional[dict]:
     body = _json.dumps({"action": action, **params}, separators=(",", ":"))
     signature = "sha256=" + hmac.new(secret.encode(), body.encode(), hashlib.sha256).hexdigest()
-    try:
-        resp = _requests.post(
-            f"{_scheme(domain)}://{domain}/wp-json/hamman/v1/live-query",
-            data=body.encode(),
-            headers={"Content-Type": "application/json", "X-Hamman-Signature": signature},
-            timeout=LIVE_QUERY_TIMEOUT_SECONDS,
-        )
+    # A site still on the 1.x plugin answers only the old namespace, and a
+    # 404 is how that looks. Any other status is the site's real answer and
+    # is not retried -- see plugin_legacy for when this stops.
+    for namespace in NAMESPACES:
+        try:
+            resp = _requests.post(
+                f"{_scheme(domain)}://{domain}/wp-json/{namespace}/live-query",
+                data=body.encode(),
+                headers={"Content-Type": "application/json", "X-Haman-Signature": signature},
+                timeout=LIVE_QUERY_TIMEOUT_SECONDS,
+            )
+        except _requests.RequestException as e:
+            logger.warning(f"Live query ({action}) to {domain} failed: {e}")
+            return None
+
+        if resp.status_code == 404 and namespace != NAMESPACES[-1]:
+            continue
+
         if resp.status_code != 200:
             logger.warning(f"Live query ({action}) to {domain} returned HTTP {resp.status_code}: {resp.text[:200]}")
             return None
         return resp.json()
-    except _requests.RequestException as e:
-        logger.warning(f"Live query ({action}) to {domain} failed: {e}")
-        return None
+
+    return None
 
 
 def _product_url(domain: Optional[str], product_id: Optional[int]) -> Optional[str]:
@@ -662,7 +674,7 @@ def add_to_cart(db: Session, chatbot_id: str, items: List[dict]) -> dict:
     returns pure INTENT — product_id, variation_id, quantity, and a
     display name — for the widget to render as a real "Add to cart" button.
     The actual add only happens in the customer's own browser, and only
-    after they click that button (see hamman-widget.js's
+    after they click that button (see haman-widget.js's
     handleAddToCartClick()); this function never adds anything itself.
 
     name is required from the model rather than looked up here, since a
@@ -751,7 +763,7 @@ register(Tool(
 ))
 
 
-MAX_PAYMENT_LINK_ITEMS = 10  # matches Hamman_Live_Query_Handler::MAX_ORDER_ITEMS on the plugin side
+MAX_PAYMENT_LINK_ITEMS = 10  # matches Haman_Live_Query_Handler::MAX_ORDER_ITEMS on the plugin side
 
 
 def _validate_customer(customer) -> Optional[dict]:

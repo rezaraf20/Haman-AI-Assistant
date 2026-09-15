@@ -1,6 +1,6 @@
 <?php
 return [
-    'verify_subject' => 'Verify your email — Hamman',
+    'verify_subject' => 'Verify your email — Haman',
     'verify_body' => "Hello :name,\n\nConfirm your email address to activate your account:\n\n:link\n\nThe link is valid for 48 hours. If you did not create an account, you can ignore this message.",
     'verification_sent' => 'A verification link has been sent to :email.',
     'verify_done' => 'Your email address is verified.',

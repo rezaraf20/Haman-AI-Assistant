@@ -11,8 +11,8 @@ namespace App\Services;
  * the public-schema join product_tools.py needs to reach the same value.
  *
  * Same HMAC scheme as every other live-query caller
- * (X-Hamman-Signature: sha256=hex(hmac_sha256(raw_body, secret))) — see
- * Hamman_Live_Query_Handler::verify_signature() on the plugin side.
+ * (X-Haman-Signature: sha256=hex(hmac_sha256(raw_body, secret))) — see
+ * Haman_Live_Query_Handler::verify_signature() on the plugin side.
  */
 class PaymentLinkService
 {

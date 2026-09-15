@@ -144,7 +144,7 @@ class TrendsService
     }
 
     /** Sales for the current window. Every checkout order is recorded here
-     *  (Hamman_Sync_Manager::on_order_placed hooks woocommerce_thankyou for
+     *  (Haman_Sync_Manager::on_order_placed hooks woocommerce_thankyou for
      *  all orders, not only bot-created ones), so this is real sales data,
      *  not just what the bot influenced. */
     private function orderRows(Carbon $from, Carbon $to): array

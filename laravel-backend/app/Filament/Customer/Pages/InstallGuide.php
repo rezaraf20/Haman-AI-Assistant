@@ -96,7 +96,7 @@ class InstallGuide extends Page
 
     public function pluginDownloadUrl(): string
     {
-        return url('/downloads/hamman-ai-chatbot.zip');
+        return url('/downloads/haman-ai-chatbot.zip');
     }
 
     public function apiBaseUrl(): string

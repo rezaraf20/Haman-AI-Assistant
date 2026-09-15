@@ -23,13 +23,13 @@ class AdminPanelProvider extends PanelProvider {
             ->default()
             ->id('admin')
             ->path('admin')
-            ->brandName(config('hamman.brand.name'))
+            ->brandName(config('haman.brand.name'))
             ->login()
-            ->colors(['primary' => config('hamman.brand.primary_color')])
+            ->colors(['primary' => config('haman.brand.primary_color')])
             // Bell icon + dropdown in the topbar, backed by the notifications
             // table (see its migration). First real use: alerting the
             // platform admin when an LLM provider auto-disables itself after
-            // repeated failures (hamman:notify-disabled-providers). Polls
+            // repeated failures (haman:notify-disabled-providers). Polls
             // every 30s rather than the 60s default so a fresh alert doesn't
             // sit unnoticed for a full minute on a page already open.
             ->databaseNotifications()

@@ -8,9 +8,9 @@ use Illuminate\Support\Facades\DB;
 // deploy-time config file can silently grant to a different address.
 return new class extends Migration {
     public function up(): void {
-        DB::table('users')->where('email', 'reza@hamman.ir')->update(['is_platform_admin' => true]);
+        DB::table('users')->where('email', 'reza@haman.ir')->update(['is_platform_admin' => true]);
     }
     public function down(): void {
-        DB::table('users')->where('email', 'reza@hamman.ir')->update(['is_platform_admin' => false]);
+        DB::table('users')->where('email', 'reza@haman.ir')->update(['is_platform_admin' => false]);
     }
 };

@@ -77,7 +77,7 @@ class Trends extends Page
     {
         $data = $this->getData();
         $range = $this->sanitizeRange($this->range);
-        $filename = 'hamman-trends-' . $range . '-' . now()->toDateString() . '.csv';
+        $filename = 'haman-trends-' . $range . '-' . now()->toDateString() . '.csv';
 
         return response()->streamDownload(function () use ($data) {
             $out = fopen('php://output', 'w');

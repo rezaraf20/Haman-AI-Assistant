@@ -44,7 +44,7 @@ class SyncController extends BaseApiController {
             'products.*.attachments'        => 'nullable|array|max:20',
             'products.*.attachments.*.url'  => 'required_with:products.*.attachments|string',
             'products.*.attachments.*.name' => 'nullable|string',
-            // "Is this genuine?" fields — see Hamman_Product_Sync::
+            // "Is this genuine?" fields — see Haman_Product_Sync::
             // authenticity_fields() on the plugin side. Each is whatever the
             // seller actually recorded (via the admin-configured field
             // mapping) or absent entirely; never guessed here either.

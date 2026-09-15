@@ -10,10 +10,10 @@ class AggregateAnalyticsJob implements ShouldQueue {
     use Dispatchable, Queueable;
     public int $timeout = 300;
 
-    // Optional so the scheduled run (routes/console.php's hamman:aggregate-
+    // Optional so the scheduled run (routes/console.php's haman:aggregate-
     // analytics, no args) keeps aggregating "yesterday" as before; a
     // specific date is only ever passed for backfilling history that
-    // predates this job actually being scheduled (see hamman:backfill-
+    // predates this job actually being scheduled (see haman:backfill-
     // analytics).
     public function __construct(private ?string $date = null) {}
 

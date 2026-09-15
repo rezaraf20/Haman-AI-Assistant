@@ -3,7 +3,10 @@ use Closure; use Illuminate\Http\Request;
 
 class VerifyWebhookSignature {
     public function handle(Request $request, Closure $next): mixed {
-        $sig    = $request->header('X-Hamman-Signature');
+        // A 1.x plugin signs with the old header name. The signature
+        // itself never changed, only what it is called.
+        $sig    = $request->header('X-Haman-Signature')
+                  ?: $request->header(\App\Support\PluginLegacy::SIGNATURE_HEADER);
         $tenant = app('current_tenant');
         $secret = $tenant?->getWebhookSecret();
         if (!$sig || !$secret) return response()->json(['error'=>'Missing signature'],401);

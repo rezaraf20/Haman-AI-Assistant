@@ -16,7 +16,7 @@ presented as more than it is.
 Run inside the python-ai-service container (needs DATABASE_URL,
 GEMINI_API_KEY, and at least one active LLM provider profile for the rerank
 leg):
-    docker exec hamman_python_ai python scripts/eval_retrieval.py
+    docker exec haman_python_ai python scripts/eval_retrieval.py
 """
 import sys
 import os

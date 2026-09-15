@@ -100,7 +100,7 @@ class SuggestionsTest extends TestCase
 
     private function runGenerator(array $ctx): void
     {
-        $this->artisan('hamman:generate-suggestions', ['--tenant' => $ctx['schema']])->run();
+        $this->artisan('haman:generate-suggestions', ['--tenant' => $ctx['schema']])->run();
     }
 
     private function stored(array $ctx, string $status = 'active'): array

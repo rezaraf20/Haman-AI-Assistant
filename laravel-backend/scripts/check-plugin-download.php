@@ -10,13 +10,13 @@
  */
 
 $root = dirname(__DIR__, 2);
-$canonical = $root . '/wordpress-plugin/hamman-ai-chatbot.zip';
-$served    = $root . '/laravel-backend/public/downloads/hamman-ai-chatbot.zip';
+$canonical = $root . '/wordpress-plugin/haman-ai-chatbot.zip';
+$served    = $root . '/laravel-backend/public/downloads/haman-ai-chatbot.zip';
 
 foreach ([$canonical, $served] as $path) {
     if (!is_file($path)) {
         fwrite(STDERR, "check-plugin-download: missing {$path}\n");
-        fwrite(STDERR, "  copy wordpress-plugin/hamman-ai-chatbot.zip to laravel-backend/public/downloads/\n");
+        fwrite(STDERR, "  copy wordpress-plugin/haman-ai-chatbot.zip to laravel-backend/public/downloads/\n");
         exit(1);
     }
 }
@@ -28,7 +28,7 @@ if ($a !== $b) {
     fwrite(STDERR, "The plugin zip served to customers is not the one we build.\n");
     fwrite(STDERR, "  wordpress-plugin/: {$a}\n");
     fwrite(STDERR, "  public/downloads/: {$b}\n");
-    fwrite(STDERR, "  Fix: cp wordpress-plugin/hamman-ai-chatbot.zip laravel-backend/public/downloads/\n");
+    fwrite(STDERR, "  Fix: cp wordpress-plugin/haman-ai-chatbot.zip laravel-backend/public/downloads/\n");
     exit(1);
 }
 
@@ -37,7 +37,7 @@ if ($a !== $b) {
  * copies matching.
  *
  * Built on Windows with Compress-Archive, the entries come out as
- * "hamman-ai-chatbot\hamman-ai-chatbot.php" -- the ZIP format requires a
+ * "haman-ai-chatbot\haman-ai-chatbot.php" -- the ZIP format requires a
  * forward slash, and a backslash is an ordinary character in a file name. So
  * WordPress sees no directory and no plugin header, and the download we hand
  * every new customer cannot be installed at all. It shipped that way, and
@@ -58,7 +58,7 @@ for ($i = 0; $i < $zip->numFiles; $i++) {
     if (str_contains($name, '\\')) {
         $backslashed[] = $name;
     }
-    if ($name === 'hamman-ai-chatbot/hamman-ai-chatbot.php') {
+    if ($name === 'haman-ai-chatbot/haman-ai-chatbot.php') {
         $hasHeader = true;
     }
 }
@@ -70,12 +70,12 @@ if ($backslashed) {
     fwrite(STDERR, '  e.g. ' . $backslashed[0] . "\n");
     fwrite(STDERR, "  Cause: built on Windows with Compress-Archive.\n");
     fwrite(STDERR, "  Fix: rebuild on Linux, from wordpress-plugin/:\n");
-    fwrite(STDERR, "       zip -rq -X hamman-ai-chatbot.zip hamman-ai-chatbot -x 'hamman-ai-chatbot/tests/*'\n");
+    fwrite(STDERR, "       zip -rq -X haman-ai-chatbot.zip haman-ai-chatbot -x 'haman-ai-chatbot/tests/*'\n");
     exit(1);
 }
 
 if (!$hasHeader) {
-    fwrite(STDERR, "The plugin zip has no hamman-ai-chatbot/hamman-ai-chatbot.php at its root.\n");
+    fwrite(STDERR, "The plugin zip has no haman-ai-chatbot/haman-ai-chatbot.php at its root.\n");
     fwrite(STDERR, "  WordPress finds a plugin by that header file; without it the archive installs into nothing.\n");
     exit(1);
 }

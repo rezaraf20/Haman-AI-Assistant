@@ -12,7 +12,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 
 /**
  * Guards the fix for quick questions being answered entirely client-side in
- * the WordPress widget (class-hamman-public.php) — that path never called
+ * the WordPress widget (class-haman-public.php) — that path never called
  * /chat/message, so a visitor clicking a quick question left zero trace in
  * the messages table and was invisible to analytics/token accounting. The
  * fix routes a quick-question click through the exact same send path as a

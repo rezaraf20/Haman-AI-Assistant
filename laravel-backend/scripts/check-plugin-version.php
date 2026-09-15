@@ -3,8 +3,8 @@
 /*
  * The version we advertise must be the version we ship.
  *
- * The plugin's Advanced tab compares its own HAMMAN_VERSION against
- * config('hamman.wp_plugin.latest_version') to decide whether to show an
+ * The plugin's Advanced tab compares its own HAMAN_VERSION against
+ * config('haman.wp_plugin.latest_version') to decide whether to show an
  * "update available" notice. The config value is maintained by hand, which
  * was described as safe because a manual value is a deliberate one. It
  * drifted anyway: the plugin header reached 1.9.0 while the config stayed at
@@ -13,8 +13,8 @@
  */
 
 $root = dirname(__DIR__, 2);
-$pluginFile = $root . '/wordpress-plugin/hamman-ai-chatbot/hamman-ai-chatbot.php';
-$configFile = $root . '/laravel-backend/config/hamman.php';
+$pluginFile = $root . '/wordpress-plugin/haman-ai-chatbot/haman-ai-chatbot.php';
+$configFile = $root . '/laravel-backend/config/haman.php';
 
 foreach ([$pluginFile, $configFile] as $path) {
     if (!is_file($path)) {
@@ -33,7 +33,7 @@ $pluginVersion = $m[1];
 // without booting Laravel, and the default is what every environment that
 // does not override it will use.
 if (!preg_match("/'latest_version'\s*=>\s*env\([^,]+,\s*'([^']+)'\)/", file_get_contents($configFile), $m)) {
-    fwrite(STDERR, "check-plugin-version: could not read latest_version from config/hamman.php.\n");
+    fwrite(STDERR, "check-plugin-version: could not read latest_version from config/haman.php.\n");
     exit(1);
 }
 $advertised = $m[1];
@@ -42,7 +42,7 @@ if ($pluginVersion !== $advertised) {
     fwrite(STDERR, "The plugin version and the advertised version disagree.\n");
     fwrite(STDERR, "  plugin header : {$pluginVersion}\n");
     fwrite(STDERR, "  config default: {$advertised}\n");
-    fwrite(STDERR, "  Fix: set latest_version in laravel-backend/config/hamman.php to {$pluginVersion},\n");
+    fwrite(STDERR, "  Fix: set latest_version in laravel-backend/config/haman.php to {$pluginVersion},\n");
     fwrite(STDERR, "       or bump the Version header if the plugin is not released yet.\n");
     exit(1);
 }

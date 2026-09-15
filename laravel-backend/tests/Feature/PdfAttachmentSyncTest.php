@@ -15,7 +15,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
  * Guards the sync-time half of PDF datasheet indexing (see
  * python-ai-service/tests/test_pdf_extraction.py for the extraction/
  * embedding side): each attachment the WordPress plugin reports for a
- * product (see class-hamman-product-sync.php's product_pdf_attachments())
+ * product (see class-haman-product-sync.php's product_pdf_attachments())
  * must become its own 'product_attachment' document, distinct from the
  * product's own document, so it gets its own EmbedDocumentJob and its own
  * page-aware chunking in pdf_service.py.

@@ -116,13 +116,13 @@ class ApiKeyResource extends Resource {
                             ->label(__('panel.api_key'))
                             ->default(fn () => $record->revealKey())
                             ->readOnly()
-                            ->extraInputAttributes(['class' => 'font-mono text-sm', 'id' => "hamman-key-{$record->id}"])
+                            ->extraInputAttributes(['class' => 'font-mono text-sm', 'id' => "haman-key-{$record->id}"])
                             ->suffixActions([
                                 FieldAction::make('copy')
                                     ->icon('heroicon-m-clipboard')
                                     ->label(__('common.copy'))
                                     ->alpineClickHandler(
-                                        "navigator.clipboard.writeText(document.getElementById('hamman-key-{$record->id}').value)"
+                                        "navigator.clipboard.writeText(document.getElementById('haman-key-{$record->id}').value)"
                                     ),
                             ]),
                     ] : []),

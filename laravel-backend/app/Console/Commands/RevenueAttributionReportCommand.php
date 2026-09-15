@@ -15,14 +15,14 @@ use Illuminate\Support\Facades\DB;
  * order's own line items.
  *
  * This is a report, not a guarantee — a conversation_id only exists when
- * the customer's browser still had the hamman_conv_id cookie at checkout
- * time (see hamman-widget.js's persistConv()), and a product match is
+ * the customer's browser still had the haman_conv_id cookie at checkout
+ * time (see haman-widget.js's persistConv()), and a product match is
  * correlation within one conversation, not a certainty the mention caused
  * the purchase. Stated plainly in the report's own output rather than
  * oversold as more than it is.
  */
 class RevenueAttributionReportCommand extends Command {
-    protected $signature = 'hamman:revenue-attribution {chatbot_id} {--days=90}';
+    protected $signature = 'haman:revenue-attribution {chatbot_id} {--days=90}';
     protected $description = 'Show which recent orders for a chatbot can be attributed to a bot-driven product mention or cart link';
 
     public function handle(): void {

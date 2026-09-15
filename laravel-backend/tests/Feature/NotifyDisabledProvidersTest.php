@@ -43,14 +43,14 @@ class NotifyDisabledProvidersTest extends TestCase
             'disabled_reason' => 'Auto-disabled after 5 consecutive failures.',
         ]);
 
-        $this->artisan('hamman:notify-disabled-providers')->assertSuccessful();
+        $this->artisan('haman:notify-disabled-providers')->assertSuccessful();
 
         $this->assertEquals(1, $admin1->fresh()->unreadNotifications()->count());
         $this->assertEquals(1, $admin2->fresh()->unreadNotifications()->count());
         $this->assertNotNull($profile->fresh()->disabled_notified_at);
 
         // A second run must not re-notify — disabled_notified_at is now set.
-        $this->artisan('hamman:notify-disabled-providers')->assertSuccessful();
+        $this->artisan('haman:notify-disabled-providers')->assertSuccessful();
         $this->assertEquals(1, $admin1->fresh()->unreadNotifications()->count());
     }
 
@@ -62,7 +62,7 @@ class NotifyDisabledProvidersTest extends TestCase
             'priority' => 1, 'is_active' => true, 'consecutive_failures' => 0,
         ]);
 
-        $this->artisan('hamman:notify-disabled-providers')->assertSuccessful();
+        $this->artisan('haman:notify-disabled-providers')->assertSuccessful();
 
         $this->assertEquals(0, $admin->fresh()->unreadNotifications()->count());
     }

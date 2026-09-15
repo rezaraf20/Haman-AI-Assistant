@@ -5,7 +5,7 @@
                 <x-slot name="heading">چت‌بات «{{ $newChatbotName }}» با موفقیت ساخته شد</x-slot>
                 <p class="mb-2 text-sm text-gray-600 dark:text-gray-400">
                     این کلید فقط همین یک‌بار نمایش داده می‌شود. آن را کپی کرده و در تنظیمات پلاگین وردپرس سایت خود
-                    (Settings → Hamman AI → API Key) وارد کنید.
+                    (Settings → Haman AI → API Key) وارد کنید.
                 </p>
                 <input type="text" readonly value="{{ $newApiKey }}" onclick="this.select()"
                     class="w-full font-mono text-sm p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700" />

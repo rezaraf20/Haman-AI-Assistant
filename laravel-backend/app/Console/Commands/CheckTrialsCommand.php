@@ -3,7 +3,7 @@ namespace App\Console\Commands;
 use Illuminate\Console\Command;
 use App\Models\Tenant;
 class CheckTrialsCommand extends Command {
-    protected $signature   = 'hamman:check-trials';
+    protected $signature   = 'haman:check-trials';
     protected $description = 'Suspend tenants with expired trials and no active subscription';
     public function handle(): void {
         $expired = Tenant::where('status','trial')->where('trial_ends_at','<',now())->get();

@@ -22,7 +22,7 @@ use Illuminate\Support\Str;
  */
 class GenerateSuggestionsCommand extends Command
 {
-    protected $signature = 'hamman:generate-suggestions {--tenant= : Only this schema} {--chatbot= : Only this chatbot id}';
+    protected $signature = 'haman:generate-suggestions {--tenant= : Only this schema} {--chatbot= : Only this chatbot id}';
     protected $description = 'Rebuild rule-based, zero-cost improvement suggestions from recent conversations';
 
     public function handle(SuggestionEngine $engine): int

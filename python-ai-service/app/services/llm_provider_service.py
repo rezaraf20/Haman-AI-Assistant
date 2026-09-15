@@ -10,8 +10,8 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-CACHE_KEY = "hamman:llm_provider_profiles:active"
-TOOL_CALLING_CACHE_KEY = "hamman:llm_provider_profiles:tool_calling"
+CACHE_KEY = "haman:llm_provider_profiles:active"
+TOOL_CALLING_CACHE_KEY = "haman:llm_provider_profiles:tool_calling"
 CACHE_TTL_SECONDS = 45
 
 # A dead provider left active in the failover chain doesn't just do nothing —
@@ -31,13 +31,13 @@ def _decrypt_api_key(value: str) -> str:
     failure — malformed input, missing key, pre-migration plaintext rows —
     the same fallback posture as the PHP side, so neither language's read
     path hard-fails while the other half of a rollout is still in flight."""
-    if not value or ":" not in value or not settings.HAMMAN_ENCRYPTION_KEY:
+    if not value or ":" not in value or not settings.HAMAN_ENCRYPTION_KEY:
         return value
     try:
         nonce_b64, data_b64 = value.split(":", 1)
         nonce = base64.b64decode(nonce_b64)
         data = base64.b64decode(data_b64)
-        key = base64.b64decode(settings.HAMMAN_ENCRYPTION_KEY)
+        key = base64.b64decode(settings.HAMAN_ENCRYPTION_KEY)
         return AESGCM(key).decrypt(nonce, data, None).decode("utf-8")
     except Exception:
         return value

@@ -56,13 +56,13 @@ class ListApiKeys extends ListRecords {
                         ->label(__('panel.api_key'))
                         ->default(fn () => $this->newPlaintextKey)
                         ->readOnly()
-                        ->extraInputAttributes(['class' => 'font-mono text-sm', 'id' => 'hamman-new-api-key'])
+                        ->extraInputAttributes(['class' => 'font-mono text-sm', 'id' => 'haman-new-api-key'])
                         ->suffixActions([
                             FieldAction::make('copy')
                                 ->icon('heroicon-m-clipboard')
                                 ->label(__('common.copy'))
                                 ->alpineClickHandler(
-                                    "navigator.clipboard.writeText(document.getElementById('hamman-new-api-key').value)"
+                                    "navigator.clipboard.writeText(document.getElementById('haman-new-api-key').value)"
                                 ),
                         ]),
                 ]),

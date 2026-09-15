@@ -1,6 +1,7 @@
 <?php
 namespace App\Services;
 
+use App\Support\PluginLegacy;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -11,8 +12,8 @@ use Illuminate\Support\Facades\Http;
  * endpoint with its own copy of this scheme, since it resolves the secret
  * differently (a public-schema join rather than Tenant::getWebhookSecret()).
  *
- * Signature scheme: X-Hamman-Signature: sha256=hex(hmac_sha256(raw_body,
- * secret)) — see Hamman_Live_Query_Handler::verify_signature().
+ * Signature scheme: X-Haman-Signature: sha256=hex(hmac_sha256(raw_body,
+ * secret)) — see Haman_Live_Query_Handler::verify_signature().
  */
 class LiveQueryClient
 {
@@ -58,16 +59,24 @@ class LiveQueryClient
         if ($body === false) return null;
         $signature = 'sha256=' . hash_hmac('sha256', $body, $secret);
 
-        try {
-            $response = Http::withBody($body, 'application/json')
-                ->withHeaders(['X-Hamman-Signature' => $signature])
-                ->timeout(self::TIMEOUT_SECONDS)
-                ->post(self::scheme($domain) . "://{$domain}/wp-json/hamman/v1/live-query");
-        } catch (\Throwable $e) {
-            return null;
+        // A site still on the 1.x plugin only answers the old namespace, and
+        // a 404 is how that looks. Any other failure is a real one and is not
+        // retried -- see PluginLegacy for when this stops.
+        $response = null;
+        foreach (PluginLegacy::namespaces() as $namespace) {
+            try {
+                $response = Http::withBody($body, 'application/json')
+                    ->withHeaders(['X-Haman-Signature' => $signature])
+                    ->timeout(self::TIMEOUT_SECONDS)
+                    ->post(self::scheme($domain) . "://{$domain}/wp-json/{$namespace}/live-query");
+            } catch (\Throwable $e) {
+                return null;
+            }
+
+            if ($response->status() !== 404) break;
         }
 
-        if (!$response->successful()) return null;
+        if ($response === null || !$response->successful()) return null;
         $data = $response->json();
         return is_array($data) ? $data : null;
     }

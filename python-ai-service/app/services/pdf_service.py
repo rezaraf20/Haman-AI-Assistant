@@ -1,5 +1,5 @@
 """
-Datasheet/PDF attachment handling — see class-hamman-product-sync.php for
+Datasheet/PDF attachment handling — see class-haman-product-sync.php for
 where these get discovered (product downloads + attached media + links
 inside the description) and SyncService::syncProducts() for how each one
 becomes its own `documents` row (source_type='product_attachment',

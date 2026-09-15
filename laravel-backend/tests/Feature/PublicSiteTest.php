@@ -224,7 +224,7 @@ class PublicSiteTest extends TestCase
 
     public function test_the_new_public_routes_are_classified(): void
     {
-        $exit = \Illuminate\Support\Facades\Artisan::call('hamman:abuse-audit', ['--fail-on-gap' => true]);
+        $exit = \Illuminate\Support\Facades\Artisan::call('haman:abuse-audit', ['--fail-on-gap' => true]);
 
         $this->assertEquals(0, $exit, \Illuminate\Support\Facades\Artisan::output());
     }
@@ -268,8 +268,8 @@ class PublicSiteTest extends TestCase
 
     public function test_the_offered_plugin_zip_is_the_one_we_build(): void
     {
-        $served = public_path('downloads/hamman-ai-chatbot.zip');
-        $canonical = base_path('../wordpress-plugin/hamman-ai-chatbot.zip');
+        $served = public_path('downloads/haman-ai-chatbot.zip');
+        $canonical = base_path('../wordpress-plugin/haman-ai-chatbot.zip');
 
         $this->assertFileExists($served, 'public/downloads is not in the image, so the download link 404s');
 

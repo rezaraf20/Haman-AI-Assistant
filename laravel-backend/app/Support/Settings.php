@@ -149,7 +149,7 @@ class Settings
     private static function invalidateSharedCache(): void
     {
         try {
-            \Illuminate\Support\Facades\Redis::del('hamman:platform_settings:values');
+            \Illuminate\Support\Facades\Redis::del('haman:platform_settings:values');
         } catch (\Throwable $e) {
             Log::debug('Could not invalidate shared settings cache: ' . $e->getMessage());
         }

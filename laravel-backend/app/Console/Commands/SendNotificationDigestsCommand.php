@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\{DB, Log};
 // needs) and sends one rollup per chatbot/channel/event instead of one
 // message per occurrence.
 class SendNotificationDigestsCommand extends Command {
-    protected $signature   = 'hamman:send-notification-digests';
+    protected $signature   = 'haman:send-notification-digests';
     protected $description = 'Send one daily summary per chatbot/channel for events configured with digest mode, instead of one alert per occurrence';
 
     public function handle(NotificationService $notifications): void {
@@ -47,7 +47,7 @@ class SendNotificationDigestsCommand extends Command {
                         }
                     }
                 } catch (\Throwable $e) {
-                    Log::warning("hamman:send-notification-digests: skipping tenant {$tenant->id} ({$tenant->schema_name}) — {$e->getMessage()}");
+                    Log::warning("haman:send-notification-digests: skipping tenant {$tenant->id} ({$tenant->schema_name}) — {$e->getMessage()}");
                 } finally {
                     DB::statement('SET search_path TO public');
                 }

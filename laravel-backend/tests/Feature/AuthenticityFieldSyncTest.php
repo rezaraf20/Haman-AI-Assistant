@@ -15,7 +15,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
  * "Is this genuine?" was the most common customer question in both real
  * interviews this feature was built from — and MUST be sourced only from
  * data the seller actually entered (synced from an admin-configured
- * WooCommerce field mapping — see Hamman_Product_Sync::
+ * WooCommerce field mapping — see Haman_Product_Sync::
  * authenticity_fields() on the plugin side), never something the model
  * infers. This guards the sync-time half: a product with these fields
  * filled gets them stored AND embedded (so retrieval can surface them);

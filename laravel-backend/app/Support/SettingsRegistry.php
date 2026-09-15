@@ -106,7 +106,7 @@ class SettingsRegistry
             'mail.username' => ['tab' => 'email', 'group' => 'smtp', 'type' => 'string', 'default' => null],
             'mail.password' => ['tab' => 'email', 'group' => 'smtp', 'type' => 'secret', 'default' => null],
             'mail.from_address' => ['tab' => 'email', 'group' => 'sender', 'type' => 'string', 'default' => null],
-            'mail.from_name' => ['tab' => 'email', 'group' => 'sender', 'type' => 'string', 'default' => 'Hamman AI'],
+            'mail.from_name' => ['tab' => 'email', 'group' => 'sender', 'type' => 'string', 'default' => 'Haman AI'],
 
             // ── Tab 3: sms ───────────────────────────────────────────────
             'sms.provider' => [
@@ -269,7 +269,7 @@ class SettingsRegistry
                 'tab' => 'system', 'group' => 'backup', 'type' => 'secret', 'default' => null,
             ],
             'backup.s3.prefix' => [
-                'tab' => 'system', 'group' => 'backup', 'type' => 'string', 'default' => 'hamman-backups',
+                'tab' => 'system', 'group' => 'backup', 'type' => 'string', 'default' => 'haman-backups',
             ],
             'backup.keep_daily' => [
                 'tab' => 'system', 'group' => 'backup', 'type' => 'int', 'default' => 7,

@@ -142,7 +142,7 @@ class DocumentSyncSkipTest extends TestCase
         $response = $this->call('POST', '/api/v1/sync/webhook', [], [], [], [
             'CONTENT_TYPE' => 'application/json',
             'HTTP_AUTHORIZATION' => "Bearer {$rawKey}",
-            'HTTP_X_HAMMAN_SIGNATURE' => $sig,
+            'HTTP_X_HAMAN_SIGNATURE' => $sig,
         ], $body);
         $response->assertStatus(200);
 

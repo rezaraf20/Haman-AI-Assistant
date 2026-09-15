@@ -33,7 +33,7 @@ class PaymentService {
             'description' => "Wallet top-up: {$amountToman} Toman",
         ]);
 
-        $result = $gateway->requestPayment($amountToman, $currency, $callbackUrl, "Hamman AI wallet top-up — {$tenant->name}");
+        $result = $gateway->requestPayment($amountToman, $currency, $callbackUrl, "Haman AI wallet top-up — {$tenant->name}");
 
         if (!$result['ok']) {
             $this->wallet->failPendingTransaction($txn, $result['message'] ?? 'Payment request failed');

@@ -24,8 +24,8 @@ class ManualSyncTest extends TestCase
     use RefreshDatabase;
 
     private const DOMAIN = 'shop.example.com';
-    private const TRIGGER = 'https://shop.example.com/wp-json/hamman/v1/trigger-sync';
-    private const LIVE = 'https://shop.example.com/wp-json/hamman/v1/live-query';
+    private const TRIGGER = 'https://shop.example.com/wp-json/haman/v1/trigger-sync';
+    private const LIVE = 'https://shop.example.com/wp-json/haman/v1/live-query';
 
     protected function setUp(): void
     {
@@ -130,7 +130,7 @@ class ManualSyncTest extends TestCase
         Http::assertSent(function ($request) {
             $expected = 'sha256=' . hash_hmac('sha256', $request->body(), 'top-secret');
             return $request->url() === self::TRIGGER
-                && $request->header('X-Hamman-Signature')[0] === $expected;
+                && $request->header('X-Haman-Signature')[0] === $expected;
         });
     }
 

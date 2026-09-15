@@ -13,7 +13,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 /**
  * doc-04's revenue-attribution prerequisite: SyncService::recordOrder()
  * (reached via processWebhook()'s 'order.placed' event, fired by
- * Hamman_Sync_Manager::on_order_placed() on the plugin side) is the
+ * Haman_Sync_Manager::on_order_placed() on the plugin side) is the
  * critical trust boundary — conversation_id arrives from a browser cookie
  * a customer's own machine sent, so it must never be attached to an order
  * without being re-validated server-side against this chatbot's OWN
@@ -165,7 +165,7 @@ class RevenueAttributionTest extends TestCase
     public function test_a_bare_status_update_never_nulls_out_an_existing_conversation_id(): void
     {
         // Reflects create_payment_link's real flow (doc-04):
-        // Hamman_Sync_Manager::on_order_status_changed() deliberately sends
+        // Haman_Sync_Manager::on_order_status_changed() deliberately sends
         // NO conversation_id at all on a status-only update, since Laravel
         // already recorded the real one directly when it first created the
         // order. That must never erase what's already on the row.

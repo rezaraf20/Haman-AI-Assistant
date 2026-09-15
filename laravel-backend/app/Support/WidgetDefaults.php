@@ -13,7 +13,7 @@ use App\Models\Tenant\Chatbot;
  * ChatController::createSession() merges this under whatever's already in
  * the chatbot's widget_config, so an admin-set value (via
  * ChatbotController::updateWidgetSettings) always wins; this only fills in
- * what's missing. The WordPress plugin (class-hamman-public.php) applies
+ * what's missing. The WordPress plugin (class-haman-public.php) applies
  * these once /chat/session responds — get_locale() only drives its own
  * *first-paint* fallback, before that response exists.
  */
@@ -47,10 +47,10 @@ class WidgetDefaults {
     // same way an explicit send_button_label etc. already does).
     private static function common(): array {
         return [
-            'primary_color'       => config('hamman.brand.primary_color'),
+            'primary_color'       => config('haman.brand.primary_color'),
             'powered_by_enabled'  => true,
-            'powered_by_name'     => config('hamman.brand.name'),
-            'powered_by_url'      => config('hamman.brand.url'),
+            'powered_by_name'     => config('haman.brand.name'),
+            'powered_by_url'      => config('haman.brand.url'),
             // Which corner of the page the floating widget sits in — must
             // NOT be derived from the chatbot's text direction (a Persian
             // site owner may still want the widget bottom-right, matching

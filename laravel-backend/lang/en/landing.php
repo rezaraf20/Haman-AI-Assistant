@@ -13,7 +13,7 @@
  */
 
 return [
-    'brand' => 'Hamman',
+    'brand' => 'Haman',
     'nav_features' => 'Features',
     'nav_reports' => 'Reports',
     'nav_pricing' => 'Pricing',

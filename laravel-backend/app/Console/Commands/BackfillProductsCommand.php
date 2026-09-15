@@ -32,7 +32,7 @@ use Illuminate\Support\Facades\DB;
  */
 class BackfillProductsCommand extends Command
 {
-    protected $signature = 'hamman:backfill-products
+    protected $signature = 'haman:backfill-products
         {--tenant= : Only this tenant id or schema name}
         {--dry-run : Report what would be written, write nothing}';
 

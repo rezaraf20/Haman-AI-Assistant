@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\DB;
  * merchant can always be told exactly why they are seeing something.
  *
  * Reads only the suggestions table, written nightly by
- * hamman:generate-suggestions.
+ * haman:generate-suggestions.
  */
 class Suggestions extends Page
 {

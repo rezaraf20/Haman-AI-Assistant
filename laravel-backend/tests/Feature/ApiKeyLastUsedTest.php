@@ -170,7 +170,7 @@ class ApiKeyLastUsedTest extends TestCase
         ]);
         DB::statement('SET search_path TO public');
 
-        $this->artisan('hamman:backfill-api-key-usage')->run();
+        $this->artisan('haman:backfill-api-key-usage')->run();
 
         $this->assertNotNull($key->fresh()->last_used_at, 'A completed sync proves the key was used.');
     }
@@ -179,7 +179,7 @@ class ApiKeyLastUsedTest extends TestCase
     {
         ['key' => $key] = $this->makeTenantWithKey();
 
-        $this->artisan('hamman:backfill-api-key-usage')->run();
+        $this->artisan('haman:backfill-api-key-usage')->run();
 
         $this->assertNull(
             $key->fresh()->last_used_at,
@@ -204,7 +204,7 @@ class ApiKeyLastUsedTest extends TestCase
         ]);
         DB::statement('SET search_path TO public');
 
-        $this->artisan('hamman:backfill-api-key-usage', ['--dry-run' => true])->run();
+        $this->artisan('haman:backfill-api-key-usage', ['--dry-run' => true])->run();
 
         $this->assertNull($key->fresh()->last_used_at);
     }

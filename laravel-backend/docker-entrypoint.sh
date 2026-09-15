@@ -1,6 +1,6 @@
 #!/bin/sh
 set -e
-echo "=== Hamman AI Platform Starting ==="
+echo "=== Haman AI Platform Starting ==="
 
 # Remove Sanctum's auto-generated personal_access_tokens migration (we have our
 # own, 2025_01_01_000006_..., kept below) — matched by exact suffix and excluding
@@ -43,7 +43,7 @@ fi
 php artisan migrate --force
 
 # Fix all existing tenant schemas (adds missing columns)
-php artisan hamman:fix-tenants 2>/dev/null || true
+php artisan haman:fix-tenants 2>/dev/null || true
 
 # Seed plans
 php artisan db:seed --force 2>/dev/null || true
@@ -68,7 +68,7 @@ cp -a public/js/.  /shared-assets/js/  2>/dev/null || true
 mkdir -p /shared-assets/downloads
 cp -a public/downloads/. /shared-assets/downloads/ 2>/dev/null || true
 
-echo "=== Hamman AI Ready ==="
+echo "=== Haman AI Ready ==="
 
 if [ "$#" -gt 0 ]; then
     exec "$@"

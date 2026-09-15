@@ -20,7 +20,7 @@ use Tests\TestCase;
  * something that is not a scratch database.
  *
  * The real dump-and-restore is exercised against production by
- * hamman:backup-database followed by hamman:verify-backup, which is the only
+ * haman:backup-database followed by haman:verify-backup, which is the only
  * test of a backup that means anything.
  */
 class BackupAndAbuseTest extends TestCase
@@ -141,7 +141,7 @@ class BackupAndAbuseTest extends TestCase
         $method = new \ReflectionMethod($command, 'assertScratchName');
         $method->setAccessible(true);
 
-        foreach (['hamman', 'postgres', 'template1', 'verify_', 'verify_SHORT', '"; DROP DATABASE hamman; --'] as $name) {
+        foreach (['haman', 'postgres', 'template1', 'verify_', 'verify_SHORT', '"; DROP DATABASE haman; --'] as $name) {
             try {
                 $method->invoke($command, $name);
                 $this->fail("assertScratchName accepted [{$name}]");
@@ -159,7 +159,7 @@ class BackupAndAbuseTest extends TestCase
     {
         // No pg_dump in the test image, and that is the point: the command
         // has to surface the failure rather than claim success.
-        $exit = Artisan::call('hamman:backup-database', ['--kind' => 'manual']);
+        $exit = Artisan::call('haman:backup-database', ['--kind' => 'manual']);
 
         $run = BackupRun::latestAttempt();
         $this->assertNotNull($run);
@@ -177,9 +177,9 @@ class BackupAndAbuseTest extends TestCase
 
     public function test_every_public_endpoint_that_costs_money_is_rate_limited(): void
     {
-        $exit = Artisan::call('hamman:abuse-audit', ['--fail-on-gap' => true]);
+        $exit = Artisan::call('haman:abuse-audit', ['--fail-on-gap' => true]);
 
-        $this->assertEquals(0, $exit, "hamman:abuse-audit found a gap:\n" . Artisan::output());
+        $this->assertEquals(0, $exit, "haman:abuse-audit found a gap:\n" . Artisan::output());
     }
 
     public function test_login_and_register_are_throttled(): void

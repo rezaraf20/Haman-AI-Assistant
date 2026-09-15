@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\Route;
  */
 class AbuseAuditCommand extends Command
 {
-    protected $signature = 'hamman:abuse-audit
+    protected $signature = 'haman:abuse-audit
                             {--fail-on-gap : Exit non-zero if anything that costs money is uncapped or unclassified}
                             {--all : Include authenticated routes too}';
 

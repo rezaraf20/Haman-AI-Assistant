@@ -35,7 +35,7 @@ class DailyConversationsChart extends ChartWidget {
             'datasets' => [[
                 'label' => __('dashboard.customer_chart_conversations_label'),
                 'data'  => $values,
-                'borderColor' => config('hamman.brand.primary_color'),
+                'borderColor' => config('haman.brand.primary_color'),
                 'backgroundColor' => 'rgba(27, 58, 107, 0.1)',
                 'fill' => true,
             ]],

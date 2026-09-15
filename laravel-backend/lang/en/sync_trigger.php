@@ -11,7 +11,7 @@ return [
 
     // failure — each one says exactly what is wrong
     'failed_title' => 'Sync did not run',
-    'plugin_missing' => 'The Hamman plugin is not installed on :domain. No sync is possible until it is installed and connected.',
+    'plugin_missing' => 'The Haman plugin is not installed on :domain. No sync is possible until it is installed and connected.',
     'plugin_outdated' => 'The installed plugin is too old to support this. The customer needs to update to version :required or later.',
     'unreachable' => ':domain could not be reached. It may be down, or the domain may have changed.',
     'bad_secret' => 'The site rejected our signature. This customer\'s webhook secret does not match — regenerate it and ask them to paste the new value into the plugin.',

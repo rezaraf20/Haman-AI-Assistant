@@ -8,8 +8,8 @@ class AiGatewayService {
     private string $secret;
 
     public function __construct() {
-        $this->url    = config('hamman.ai_service.url');
-        $this->secret = config('hamman.ai_service.secret', '');
+        $this->url    = config('haman.ai_service.url');
+        $this->secret = config('haman.ai_service.secret', '');
     }
 
     public function chat(array $payload): array {
@@ -21,7 +21,7 @@ class AiGatewayService {
      * fragment as it arrives from the Python service's /ai/chat/stream, and
      * returns the final "done" event's payload (same fields chat()'s return
      * array has) once the stream ends. Uses its own, longer timeout
-     * (hamman.ai_service.stream_timeout, not the regular request timeout) —
+     * (haman.ai_service.stream_timeout, not the regular request timeout) —
      * a streamed answer's total wall time can genuinely exceed a normal
      * request's timeout even though bytes are arriving the whole time.
      */
@@ -29,7 +29,7 @@ class AiGatewayService {
         try {
             $response = Http::withToken($this->secret)
                 ->withOptions(['stream' => true])
-                ->timeout(config('hamman.ai_service.stream_timeout', 120))
+                ->timeout(config('haman.ai_service.stream_timeout', 120))
                 ->post("{$this->url}/ai/chat/stream", $payload);
         } catch (\Throwable $e) {
             throw new AiServiceException('AI service unreachable: ' . $e->getMessage(), 502);
@@ -95,8 +95,8 @@ class AiGatewayService {
     private function post(string $path, array $data): array {
         try {
             $r = Http::withToken($this->secret)
-                     ->timeout(config('hamman.ai_service.timeout', 30))
-                     ->retry(config('hamman.ai_service.retry', 2), 500)
+                     ->timeout(config('haman.ai_service.timeout', 30))
+                     ->retry(config('haman.ai_service.retry', 2), 500)
                      ->post("{$this->url}{$path}", $data);
             if ($r->failed()) throw new AiServiceException("AI error {$r->status()}: {$r->body()}", $r->status());
             return $r->json() ?? [];

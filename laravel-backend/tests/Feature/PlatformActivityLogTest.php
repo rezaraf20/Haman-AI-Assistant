@@ -386,7 +386,7 @@ class PlatformActivityLogTest extends TestCase
         // One recent row, which must be left completely alone.
         PlatformActivity::record('contact_revealed', before: ['x' => 'old'], after: ['x' => 'new']);
 
-        $this->artisan('hamman:prune-activity-log')->assertExitCode(0);
+        $this->artisan('haman:prune-activity-log')->assertExitCode(0);
 
         $this->assertEquals(3, DB::table('platform_activity_log')->count(), 'No row may be deleted.');
 
@@ -410,7 +410,7 @@ class PlatformActivityLogTest extends TestCase
         PlatformActivity::record('chatbot_settings_changed', before: ['a' => 1], after: ['a' => 2]);
         DB::table('platform_activity_log')->update(['created_at' => now()->subMonths(24)]);
 
-        $this->artisan('hamman:prune-activity-log --dry-run')->assertExitCode(0);
+        $this->artisan('haman:prune-activity-log --dry-run')->assertExitCode(0);
 
         $this->assertNotNull(DB::table('platform_activity_log')->first()->before);
     }

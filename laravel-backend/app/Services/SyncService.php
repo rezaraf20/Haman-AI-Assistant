@@ -79,7 +79,7 @@ class SyncService {
     'Link: '.($p['permalink']??''),
     'Image: '.($p['featured_image']??''),
     // "Is this genuine?" fields — only a line if the seller actually
-    // recorded that specific field (see Hamman_Product_Sync::
+    // recorded that specific field (see Haman_Product_Sync::
     // authenticity_fields() on the plugin side); array_filter() above
     // drops any of these that are empty, so an unmapped/unfilled field
     // leaves no trace in the indexed text at all — the grounding rule
@@ -137,7 +137,7 @@ class SyncService {
     /**
      * Each PDF attachment (a WordPress media file attached to the product
      * post, or a PDF link found inside its description — see
-     * class-hamman-product-sync.php's product_to_array()) becomes its own
+     * class-haman-product-sync.php's product_to_array()) becomes its own
      * document, one per distinct URL. raw_content is deliberately left
      * empty here: pdf_service.py (Python) downloads and extracts the
      * actual text at embed time, since that's where the extraction
@@ -251,9 +251,9 @@ class SyncService {
 
     /**
      * Revenue attribution (doc-04, prerequisite for Intent analytics) —
-     * fired from Hamman_Sync_Manager::on_order_placed() (WooCommerce's
+     * fired from Haman_Sync_Manager::on_order_placed() (WooCommerce's
      * woocommerce_thankyou hook) once per real order. conversation_id
-     * arrives from a hamman_conv_id browser cookie the plugin read at
+     * arrives from a haman_conv_id browser cookie the plugin read at
      * checkout time — since that value ultimately came from the customer's
      * own browser, it's never trusted blindly: it must look like a real
      * UUID AND actually belong to a conversation on THIS chatbot before
@@ -265,7 +265,7 @@ class SyncService {
      * initial insert, never touched again, so a repeat call can't silently
      * swap the primary key underneath an existing row.
      *
-     * Also reached from Hamman_Sync_Manager::on_order_status_changed() (a
+     * Also reached from Haman_Sync_Manager::on_order_status_changed() (a
      * bot-created order's payment status changing — see
      * create_payment_link, doc-04) — that payload deliberately carries no
      * conversation_id at all, since Laravel's own ChatController::
@@ -325,7 +325,7 @@ class SyncService {
     /**
      * Handles a real-time "this no longer exists at the source" signal
      * (woocommerce_delete_product / delete_post / wp_trash_post on the
-     * WordPress side — see Hamman_Sync_Manager) — archives the matching
+     * WordPress side — see Haman_Sync_Manager) — archives the matching
      * document (soft: status flips to 'archived', never hard-deleted, same
      * conservative posture as chatbot deletion elsewhere in this app) and
      * removes its chunks so the bot stops citing content that's gone.

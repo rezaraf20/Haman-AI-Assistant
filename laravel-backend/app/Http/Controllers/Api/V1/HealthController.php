@@ -12,6 +12,6 @@ class HealthController extends Controller {
     // tab polls this to show an "update available" notice before the
     // customer has necessarily even entered a valid API key yet.
     public function wpPluginVersion() {
-        return response()->json(['latest_version' => config('hamman.wp_plugin.latest_version')], 200);
+        return response()->json(['latest_version' => config('haman.wp_plugin.latest_version')], 200);
     }
 }

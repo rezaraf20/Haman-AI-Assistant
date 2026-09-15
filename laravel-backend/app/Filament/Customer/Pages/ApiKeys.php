@@ -55,13 +55,13 @@ class ApiKeys extends Page implements HasTable {
                             ->label(__('panel.api_key'))
                             ->default(fn () => $record->revealKey())
                             ->readOnly()
-                            ->extraInputAttributes(['class' => 'font-mono text-sm', 'id' => "hamman-cust-key-{$record->id}"])
+                            ->extraInputAttributes(['class' => 'font-mono text-sm', 'id' => "haman-cust-key-{$record->id}"])
                             ->suffixActions([
                                 FieldAction::make('copy')
                                     ->icon('heroicon-m-clipboard')
                                     ->label(__('common.copy'))
                                     ->alpineClickHandler(
-                                        "navigator.clipboard.writeText(document.getElementById('hamman-cust-key-{$record->id}').value)"
+                                        "navigator.clipboard.writeText(document.getElementById('haman-cust-key-{$record->id}').value)"
                                     ),
                             ]),
                     ] : []),

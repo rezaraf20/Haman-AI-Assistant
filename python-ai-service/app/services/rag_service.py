@@ -214,7 +214,7 @@ _PRICING_TOOL_NAMES = {"get_product_availability", "get_product_variants", "sear
 
 # recommend_products / compare_products (doc-04's "Product compare", Very
 # high) results render as actual widget UI — product cards or a comparison
-# table (see hamman-widget.js's renderProductCards()/renderCompareTable())
+# table (see haman-widget.js's renderProductCards()/renderCompareTable())
 # — never as text the model re-describes or re-tables itself.
 _PRODUCT_DISPLAY_TOOL_NAMES = {"recommend_products", "compare_products"}
 

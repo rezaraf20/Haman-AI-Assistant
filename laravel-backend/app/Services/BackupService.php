@@ -14,7 +14,7 @@ use Symfony\Component\Process\Process;
  * already compressed, it can be restored selectively, and pg_restore can
  * read it into a differently-named database without the sed-the-CREATE-
  * DATABASE-line trick that plain dumps need. That last part is what makes
- * hamman:verify-backup able to restore into a scratch database on the same
+ * haman:verify-backup able to restore into a scratch database on the same
  * server without touching the real one.
  *
  * The password is passed through PGPASSWORD in the child process's
@@ -41,7 +41,7 @@ class BackupService
         ]);
 
         try {
-            $filename = sprintf('hamman-%s-%s.dump', $kind, $startedAt->format('Y-m-d-His'));
+            $filename = sprintf('haman-%s-%s.dump', $kind, $startedAt->format('Y-m-d-His'));
             $localPath = $this->localPath($filename);
 
             @mkdir(dirname($localPath), 0775, true);

@@ -13,7 +13,7 @@ namespace App\Support;
  * simple enough to implement identically on both sides and easy to verify.
  *
  * Key material: APP_KEY's raw 32 bytes (already present on both sides — see
- * HAMMAN_ENCRYPTION_KEY in python-ai-service/.env, which must be kept equal
+ * HAMAN_ENCRYPTION_KEY in python-ai-service/.env, which must be kept equal
  * to this app's APP_KEY). Not a new secret to provision or rotate separately.
  */
 class LlmKeyCrypto {

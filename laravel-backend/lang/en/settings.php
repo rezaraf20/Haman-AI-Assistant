@@ -28,7 +28,7 @@ return [
     'send_test_email' => 'Send test email',
     'test_email_ok' => 'Email sent',
     'test_email_failed' => 'Sending failed',
-    'test_email_subject' => 'Hamman AI test email',
+    'test_email_subject' => 'Haman AI test email',
     'test_email_body' => 'If you can read this, the SMTP settings are correct.',
     'test_email_sent' => 'Sent to :address.',
     'email_not_configured' => 'SMTP is not configured.',

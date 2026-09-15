@@ -12,7 +12,7 @@ use App\Support\Settings;
 // citations, etc.) ages out after the retention window, since that's the
 // part carrying anything resembling real user content.
 class PruneConversationEventPayloadsCommand extends Command {
-    protected $signature   = 'hamman:prune-event-payloads {--days= : Payloads older than this many days get nulled out (default: the settings page value)}';
+    protected $signature   = 'haman:prune-event-payloads {--days= : Payloads older than this many days get nulled out (default: the settings page value)}';
     protected $description = 'Null out conversation_events.payload past the retention window, keeping the event row itself';
 
     public function handle(): void {
@@ -41,7 +41,7 @@ class PruneConversationEventPayloadsCommand extends Command {
                     // FailedSyncsTable's identical fix — a real, seen
                     // production case) must not stop this from running for
                     // every other tenant.
-                    Log::warning("hamman:prune-event-payloads: skipping tenant {$tenant->id} ({$tenant->schema_name}) — {$e->getMessage()}");
+                    Log::warning("haman:prune-event-payloads: skipping tenant {$tenant->id} ({$tenant->schema_name}) — {$e->getMessage()}");
                 } finally {
                     DB::statement('SET search_path TO public');
                 }

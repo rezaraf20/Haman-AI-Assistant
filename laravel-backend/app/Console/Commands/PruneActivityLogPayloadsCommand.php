@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\DB;
  */
 class PruneActivityLogPayloadsCommand extends Command
 {
-    protected $signature = 'hamman:prune-activity-log
+    protected $signature = 'haman:prune-activity-log
                             {--months= : Blank payloads older than this many months (default: the settings page value)}
                             {--chunk=5000 : Rows per statement}
                             {--dry-run : Report what would be blanked and change nothing}';

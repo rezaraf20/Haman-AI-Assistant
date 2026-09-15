@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Schema;
  * month. The admin panel reads the latest row of either kind, so "last
  * backup failed" and "last backup was 9 days ago" are both visible.
  *
- * verified_at / verified_rows are stamped by hamman:verify-backup, which
+ * verified_at / verified_rows are stamped by haman:verify-backup, which
  * restores the dump into a scratch database and counts what came back.
  * A backup nobody has restored is a guess, so the panel shows the
  * verification separately from the dump.

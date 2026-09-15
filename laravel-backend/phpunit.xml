@@ -33,15 +33,15 @@
              application database, and the only thing that stopped
              RefreshDatabase from dropping every table was migrate:fresh
              refusing to run while APP_ENV=production. The credentials below
-             belong to a role that owns hamman_test and has no rights on the
+             belong to a role that owns haman_test and has no rights on the
              application database, so a mistake here fails instead of
              destroying anything. TestCase re-checks this at runtime. -->
         <env name="DB_CONNECTION" value="pgsql" force="true"/>
         <env name="DB_HOST" value="127.0.0.1"/>
         <env name="DB_PORT" value="5432" force="true"/>
-        <env name="DB_DATABASE" value="hamman_test" force="true"/>
-        <env name="DB_USERNAME" value="hamman_test" force="true"/>
-        <env name="DB_PASSWORD" value="hamman_test" force="true"/>
+        <env name="DB_DATABASE" value="haman_test" force="true"/>
+        <env name="DB_USERNAME" value="haman_test" force="true"/>
+        <env name="DB_PASSWORD" value="haman_test" force="true"/>
         <env name="MAIL_MAILER" value="array" force="true"/>
         <env name="QUEUE_CONNECTION" value="sync" force="true"/>
         <env name="SESSION_DRIVER" value="array" force="true"/>
@@ -52,7 +52,7 @@
         <env name="TELESCOPE_ENABLED" value="false" force="true"/>
         <!-- Never actually called — tests mock the AI Gateway HTTP call via
              Http::fake() — but AiGatewayService::$secret is a non-nullable
-             string property, so config('hamman.ai_service.secret') must
+             string property, so config('haman.ai_service.secret') must
              resolve to *something* for the service to even construct. -->
         <env name="AI_SERVICE_SECRET" value="test-secret" force="true"/>
     </php>

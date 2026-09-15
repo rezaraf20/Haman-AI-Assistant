@@ -29,7 +29,7 @@ class OrderStatusTest extends TestCase
     private const ORIGIN = ['Origin' => 'https://shop.example.com'];
     private const PHONE = '09121234567';
     private const SMS_URL = 'rest.payamak-panel.com/*';
-    private const LIVE_URL = 'https://shop.example.com/wp-json/hamman/v1/live-query';
+    private const LIVE_URL = 'https://shop.example.com/wp-json/haman/v1/live-query';
 
     private function makeChatbot(array $overrides = []): array
     {

@@ -23,7 +23,7 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-CACHE_KEY = "hamman:platform_settings:values"
+CACHE_KEY = "haman:platform_settings:values"
 CACHE_TTL_SECONDS = 60
 
 # Must match SettingsRegistry.php. Verified by a test on the PHP side that

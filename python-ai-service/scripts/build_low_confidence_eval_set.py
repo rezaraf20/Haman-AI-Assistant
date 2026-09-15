@@ -21,8 +21,8 @@ output is for — once filled in by hand, the same score_result() function
 eval_retrieval.py already uses can score this set the same way.
 
 Run inside the container:
-    docker exec hamman_python_ai python scripts/build_low_confidence_eval_set.py
-    docker exec hamman_python_ai python scripts/build_low_confidence_eval_set.py --days 30 --limit 50 --out /tmp/low_confidence_eval.jsonl
+    docker exec haman_python_ai python scripts/build_low_confidence_eval_set.py
+    docker exec haman_python_ai python scripts/build_low_confidence_eval_set.py --days 30 --limit 50 --out /tmp/low_confidence_eval.jsonl
 """
 import sys
 import os

@@ -13,7 +13,7 @@ use Illuminate\Console\Command;
  */
 class BackupDatabaseCommand extends Command
 {
-    protected $signature = 'hamman:backup-database
+    protected $signature = 'haman:backup-database
                             {--kind= : daily | weekly | manual (default: weekly on Mondays, else daily)}
                             {--prune-only : Apply retention without taking a new backup}';
 

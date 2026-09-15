@@ -53,11 +53,11 @@ MAX_TOTAL_SECONDS = 12.0
 # before anything else in the pipeline, including before even looking at
 # whether this chatbot has any tools enabled at all.
 TOOL_RATE_LIMIT_MAX_PER_MINUTE = 10
-TOOL_RATE_LIMIT_KEY_PREFIX = "hamman:tool_rate_limit:"
+TOOL_RATE_LIMIT_KEY_PREFIX = "haman:tool_rate_limit:"
 
 # Tools whose successful result must render as an actual widget UI element
 # (product cards / a comparison table / one-click "add to cart" controls)
-# rather than as text the model paraphrases — see hamman-widget.js's
+# rather than as text the model paraphrases — see haman-widget.js's
 # renderProductCards()/renderCompareTable()/renderCartLinks()/
 # renderAddToCartIntent(). Every product shown this way also gets a
 # conversation_event (product_mentioned or cart_link_generated —

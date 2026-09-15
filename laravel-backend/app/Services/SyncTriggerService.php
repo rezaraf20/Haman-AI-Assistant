@@ -2,6 +2,7 @@
 namespace App\Services;
 
 use App\Models\Tenant;
+use App\Support\PluginLegacy;
 use App\Models\Tenant\SyncJob;
 use Illuminate\Support\Facades\{DB, Http, Log};
 
@@ -190,14 +191,24 @@ class SyncTriggerService
         $body = json_encode($payload ?: new \stdClass(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         $scheme = LiveQueryClient::scheme($domain);
 
-        try {
-            return Http::withBody($body, 'application/json')
-                ->withHeaders(['X-Hamman-Signature' => 'sha256=' . hash_hmac('sha256', $body, $secret)])
-                ->timeout(self::TIMEOUT_SECONDS)
-                ->post("{$scheme}://{$domain}/wp-json/hamman/v1" . $path);
-        } catch (\Throwable $e) {
-            Log::warning("Manual sync call to {$domain}{$path} failed: " . $e->getMessage());
-            return null;
+        // The current namespace first, the 1.x one if the site 404s it.
+        // A 404 from both is returned as-is: the caller reads that as "no
+        // plugin installed" and tells the customer so.
+        $response = null;
+        foreach (PluginLegacy::namespaces() as $namespace) {
+            try {
+                $response = Http::withBody($body, 'application/json')
+                    ->withHeaders(['X-Haman-Signature' => 'sha256=' . hash_hmac('sha256', $body, $secret)])
+                    ->timeout(self::TIMEOUT_SECONDS)
+                    ->post("{$scheme}://{$domain}/wp-json/{$namespace}" . $path);
+            } catch (\Throwable $e) {
+                Log::warning("Manual sync call to {$domain}{$path} failed: " . $e->getMessage());
+                return null;
+            }
+
+            if ($response->status() !== 404) break;
         }
+
+        return $response;
     }
 }

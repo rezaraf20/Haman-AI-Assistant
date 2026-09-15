@@ -44,7 +44,7 @@ class DailyMessagesChart extends ChartWidget {
             'datasets' => [[
                 'label' => __('dashboard.admin_chart_daily_messages_label'),
                 'data'  => $values,
-                'borderColor' => config('hamman.brand.primary_color'),
+                'borderColor' => config('haman.brand.primary_color'),
                 'backgroundColor' => 'rgba(27, 58, 107, 0.1)',
                 'fill' => true,
             ]],

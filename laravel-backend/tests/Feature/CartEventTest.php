@@ -14,7 +14,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
  * outcome (see tool_calling_service.py's docstring: the tool call itself
  * logs nothing, since nothing has happened yet; this endpoint is what the
  * widget calls AFTER a genuine browser-side WooCommerce Store API success,
- * see handleAddToCartClick()/onAddToCartSuccess() in hamman-widget.js).
+ * see handleAddToCartClick()/onAddToCartSuccess() in haman-widget.js).
  * conversation_id is client-supplied, so it's re-validated against this
  * chatbot's own conversations table before anything is logged — same
  * "never trust a client-side id blindly" posture as SyncService::

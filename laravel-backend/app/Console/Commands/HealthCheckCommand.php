@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
 use App\Services\AiGatewayService;
 class HealthCheckCommand extends Command {
-    protected $signature   = 'hamman:health-check';
+    protected $signature   = 'haman:health-check';
     protected $description = 'Check health of all platform services';
     public function handle(AiGatewayService $ai): int {
         $ok = true;

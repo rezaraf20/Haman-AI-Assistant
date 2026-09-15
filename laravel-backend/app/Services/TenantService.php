@@ -418,7 +418,7 @@ class TenantService
         // Revenue attribution (doc-04, prerequisite for Intent analytics) —
         // see createTenantTables()'s matching block and SyncService::
         // recordOrder(). conversation_id is nullable and only ever set when
-        // the WordPress plugin's order webhook found a real hamman_conv_id
+        // the WordPress plugin's order webhook found a real haman_conv_id
         // cookie from the SAME browser session that placed the order — a
         // real signal, never guessed. UNIQUE(chatbot_id, woo_order_id) makes
         // recordOrder() naturally idempotent against WooCommerce re-firing
@@ -652,7 +652,7 @@ class TenantService
                 -- Is this genuine? -- the most common customer question in
                 -- both real interviews this was built from. Seller-entered
                 -- data ONLY (synced from a WordPress admin-configured field
-                -- mapping -- see Hamman_Product_Sync::authenticity_fields()),
+                -- mapping -- see Haman_Product_Sync::authenticity_fields()),
                 -- never something the model infers; a NULL here must always
                 -- read as not-recorded, never as a genuine/not-genuine
                 -- verdict. See rag_service._authenticity_rule().
@@ -770,7 +770,7 @@ class TenantService
         ");
 
         // Written by AggregateAnalyticsJob (routes/console.php's
-        // hamman:aggregate-analytics, scheduled daily) — dashboard widgets
+        // haman:aggregate-analytics, scheduled daily) — dashboard widgets
         // read from here instead of aggregating raw messages/conversations
         // on every page load. unanswered_count backs the demand-gap /
         // product-health signal on both the admin and customer dashboards.

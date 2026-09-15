@@ -74,6 +74,24 @@
                         <a href="{{ $this->pluginDownloadUrl() }}" class="fi-link">{{ __('install_guide.step_download_cta') }}</a>
                     </p>
 
+                    {{-- Upgrading from 1.x: the folder name changed, so
+                         WordPress sees a different plugin and the old one has
+                         to be removed by hand. Settings survive that, but
+                         only if "delete data" is left unticked. --}}
+                    <div class="not-prose rounded-lg border border-warning-300 bg-warning-50 p-4 dark:border-warning-700 dark:bg-warning-950/40">
+                        <p class="font-semibold">{{ __('install_guide.upgrade_title') }}</p>
+                        <p class="text-sm mt-1">{{ __('install_guide.upgrade_intro') }}</p>
+                        <p class="text-sm mt-2 font-medium">{{ __('install_guide.upgrade_keeps_settings') }}</p>
+                        <ol class="text-sm mt-2 list-decimal ps-5 space-y-1">
+                            <li>{{ __('install_guide.upgrade_1') }}</li>
+                            <li>{{ __('install_guide.upgrade_2') }}</li>
+                            <li><strong>{{ __('install_guide.upgrade_3') }}</strong></li>
+                            <li>{{ __('install_guide.upgrade_4') }}</li>
+                        </ol>
+                        <p class="text-sm mt-2">{{ __('install_guide.upgrade_verify') }}</p>
+                        <p class="text-xs mt-2 text-gray-600 dark:text-gray-400">{{ __('install_guide.upgrade_why') }}</p>
+                    </div>
+
                 @elseif ($key === 'connect')
                     <p>{{ __('install_guide.step_connect_body') }}</p>
                     <table>

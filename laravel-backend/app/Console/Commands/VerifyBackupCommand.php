@@ -25,7 +25,7 @@ use Symfony\Component\Process\Process;
  */
 class VerifyBackupCommand extends Command
 {
-    protected $signature = 'hamman:verify-backup
+    protected $signature = 'haman:verify-backup
                             {--run= : Verify a specific backup_runs id (default: the newest successful one)}
                             {--keep : Leave the scratch database behind for inspection}';
 

@@ -1,6 +1,6 @@
 {
-  "name": "hamman/backend",
-  "description": "Hamman AI SaaS Chatbot Platform",
+  "name": "haman/backend",
+  "description": "Haman AI SaaS Chatbot Platform",
   "type": "project",
   "require": {
     "php": "^8.3",

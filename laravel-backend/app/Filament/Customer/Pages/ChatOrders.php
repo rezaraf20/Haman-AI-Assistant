@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
  * (created_by_bot=true only — an order that merely got cookie-attributed
  * after a normal checkout, doc-04's earlier Intent-analytics task, is a
  * different thing and stays out of this view). Status here is kept live
- * by Hamman_Sync_Manager::on_order_status_changed() on the plugin side,
+ * by Haman_Sync_Manager::on_order_status_changed() on the plugin side,
  * not by this page polling anything.
  */
 class ChatOrders extends Page {

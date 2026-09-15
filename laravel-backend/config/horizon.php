@@ -2,7 +2,7 @@
 return [
     'domain'  => null,
     'path'    => 'horizon',
-    'prefix'  => env('HORIZON_PREFIX','hamman_horizon'),
+    'prefix'  => env('HORIZON_PREFIX','haman_horizon'),
     'middleware'=> ['web'],
     'waits'   => ['redis' => 60],
     'trim'    => ['recent'=>60,'pending'=>60,'completed'=>60,'recent_failed'=>10080,'failed'=>10080,'monitored'=>10080],

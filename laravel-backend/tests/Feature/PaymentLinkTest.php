@@ -267,7 +267,7 @@ class PaymentLinkTest extends TestCase
     {
         ['chatbotId' => $chatbotId, 'conversationId' => $conversationId, 'schema' => $schema] = $this->makeChatbot();
         Http::fake([
-            'https://' . self::DOMAIN . '/wp-json/hamman/v1/live-query' => Http::response([], 500),
+            'https://' . self::DOMAIN . '/wp-json/haman/v1/live-query' => Http::response([], 500),
         ]);
 
         $response = $this->postJson('/api/v1/chat/payment-link', $this->payload($chatbotId, $conversationId), self::ORIGIN);

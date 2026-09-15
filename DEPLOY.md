@@ -1,4 +1,4 @@
-# 🚀 Hamman AI Platform — راهنمای نصب و راه‌اندازی
+# 🚀 Haman AI Platform — راهنمای نصب و راه‌اندازی
 ## Company: شرکت هامان فناوران پیشرو | Author: Reza Rafiei
 
 ---
@@ -28,9 +28,9 @@ docker --version
 
 ```bash
 # از local به سرور
-scp -r hamman-platform/ user@YOUR_SERVER_IP:/opt/hamman/
+scp -r haman-platform/ user@YOUR_SERVER_IP:/opt/haman/
 ssh user@YOUR_SERVER_IP
-cd /opt/hamman/hamman-platform
+cd /opt/haman/haman-platform
 ```
 
 ---
@@ -131,19 +131,19 @@ curl -X POST http://localhost/api/v1/chatbots \
 
 ```bash
 # پوشه plugin را در WordPress کپی کنید
-cp -r wordpress-plugin/hamman-ai-chatbot/ /path/to/wordpress/wp-content/plugins/
+cp -r wordpress-plugin/haman-ai-chatbot/ /path/to/wordpress/wp-content/plugins/
 
 # یا ZIP کنید و از پنل WordPress آپلود کنید
 cd wordpress-plugin
-zip -r hamman-ai-chatbot.zip hamman-ai-chatbot/
+zip -r haman-ai-chatbot.zip haman-ai-chatbot/
 ```
 
 سپس در WordPress:
-1. **Plugins → Activate** → Hamman AI Chatbot
-2. **Hamman AI → Settings**:
+1. **Plugins → Activate** → Haman AI Chatbot
+2. **Haman AI → Settings**:
    - API Key: کلیدی که در قدم ۶ دریافت کردید
    - Chatbot ID: UUID چت‌بات ساخته‌شده
-   - Webhook Secret: از داشبورد Hamman
+   - Webhook Secret: از داشبورد Haman
 3. **Run Full Sync Now** را بزنید
 
 ---
@@ -189,8 +189,8 @@ docker compose exec laravel php artisan config:cache
 
 # Backup database — شبانه خودکار اجرا می‌شود (۰۲:۳۰) و ۰۳:۴۵ واقعاً بازیابی
 # و بررسی می‌شود. این‌ها فقط برای اجرای دستی‌اند:
-docker compose exec laravel php artisan hamman:backup-database --kind=manual
-docker compose exec laravel php artisan hamman:verify-backup
+docker compose exec laravel php artisan haman:backup-database --kind=manual
+docker compose exec laravel php artisan haman:verify-backup
 ```
 
 ---
@@ -202,7 +202,7 @@ docker compose exec laravel php artisan hamman:verify-backup
 | Laravel 500 error | `docker compose exec laravel php artisan config:clear && php artisan cache:clear` |
 | 502 روی همه‌ی مسیرها بعد از دیپلوی | دیگر نباید پیش بیاید — nginx در هر درخواست دوباره resolve می‌کند. اگر دیدید، `docker compose exec nginx nginx -t` و بررسی کنید `resolver 127.0.0.11` هنوز در `nginx/conf.d/api.conf` هست |
 | AI service unavailable | `docker compose restart python_ai` + بررسی OPENAI_API_KEY |
-| Migration failed | بررسی اتصال postgres: `docker compose exec postgres psql -U hamman_user -d hamman_saas -c '\l'` |
+| Migration failed | بررسی اتصال postgres: `docker compose exec postgres psql -U haman_user -d haman_saas -c '\l'` |
 | Widget not showing | در WordPress: بررسی Chatbot ID + Domain whitelist در داشبورد |
 | Embeddings stuck | `docker compose logs horizon` برای مشاهده خطای job |
 
@@ -223,7 +223,7 @@ docker compose exec laravel php artisan hamman:verify-backup
 ## اجرای تست‌ها روی سرور
 
 `docker compose exec laravel php artisan test` را اجرا نکنید. آن دستور تست‌ها را روی
-دیتابیس **واقعی** (`hamman_saas`) اجرا می‌کند، نه روی دیتابیس تست. دو دلیل دارد:
+دیتابیس **واقعی** (`haman_saas`) اجرا می‌کند، نه روی دیتابیس تست. دو دلیل دارد:
 `docker-entrypoint.sh` دستور `config:cache` را اجرا می‌کند و بعد از آن مقادیر `env()`
 اصلاً خوانده نمی‌شوند؛ و حتی بدون کش، PHPUnit مقادیر `<env>` را در `$_ENV` می‌نویسد
 درحالی‌که Laravel اول `$_SERVER` را می‌خواند و متغیرهای داکر آنجا هستند. چون این
@@ -236,7 +236,7 @@ docker compose exec laravel php artisan hamman:verify-backup
 ```bash
 docker compose run --rm --no-deps \
   -e APP_ENV=testing \
-  -e DB_DATABASE=hamman_test -e DB_USERNAME=hamman_test -e DB_PASSWORD=hamman_test \
+  -e DB_DATABASE=haman_test -e DB_USERNAME=haman_test -e DB_PASSWORD=haman_test \
   -e CACHE_STORE=array -e SESSION_DRIVER=array -e QUEUE_CONNECTION=sync -e MAIL_MAILER=array \
   --entrypoint sh laravel -c "php artisan config:clear >/dev/null 2>&1; php artisan test"
 ```

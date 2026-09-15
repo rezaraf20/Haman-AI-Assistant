@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\DB;
  */
 class BackfillApiKeyUsageCommand extends Command
 {
-    protected $signature = 'hamman:backfill-api-key-usage {--dry-run : Show what would change without writing}';
+    protected $signature = 'haman:backfill-api-key-usage {--dry-run : Show what would change without writing}';
     protected $description = 'Reconstruct api_keys.last_used_at for keys already in use before it was recorded';
 
     public function handle(): int

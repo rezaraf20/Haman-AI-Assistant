@@ -230,7 +230,7 @@ class SuggestionEngine
     {
         // Reads the dedicated compared_pair event rather than digging the
         // pair back out of tool_called's arguments: tool_called payloads
-        // are nulled out after 90 days by hamman:prune-event-payloads, so
+        // are nulled out after 90 days by haman:prune-event-payloads, so
         // deriving from them would quietly lose the history this rule
         // exists to accumulate. Only explicit comparisons count here —
         // co_presented (options shown side by side) is a weaker signal and

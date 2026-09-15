@@ -191,7 +191,7 @@ class ChatController extends BaseApiController
         $maxMsgs   = $chatbot->widget_config['rate_limit_max_messages'] ?? null;
         $blockMins = $chatbot->widget_config['rate_limit_block_minutes'] ?? null;
         if ($maxMsgs && $blockMins) {
-            $key = 'hamman-chat:' . $conv->chatbot_id . ':' . $req->ip();
+            $key = 'haman-chat:' . $conv->chatbot_id . ':' . $req->ip();
             if (RateLimiter::tooManyAttempts($key, (int) $maxMsgs)) {
                 $rateLimitMessage = $chatbot->widget_config['rate_limit_message']
                     ?? ($chatbot->language === 'en'
@@ -224,7 +224,7 @@ class ChatController extends BaseApiController
             'is_fallback' => $msg->is_fallback,
             'sources'     => $r['result']['sources'] ?? [],
             // Product cards / comparison table (recommend_products,
-            // compare_products) — see hamman-widget.js's
+            // compare_products) — see haman-widget.js's
             // renderProductCards()/renderCompareTable(). Empty for every
             // response that didn't use one of those two tools.
             'widget_blocks' => $r['result']['widget_blocks'] ?? [],
@@ -339,7 +339,7 @@ class ChatController extends BaseApiController
      * The add_to_cart tool (doc-04) never adds anything itself — the real
      * WooCommerce Store API call happens in the customer's own browser,
      * same-origin with the shop, after they click a real "Add to cart"
-     * button (see hamman-widget.js's handleAddToCartClick()). This is the
+     * button (see haman-widget.js's handleAddToCartClick()). This is the
      * widget reporting back a REAL, CONFIRMED success so cart_add_succeeded
      * reflects an actual outcome, not merely an offer that was shown —
      * unlike cart_link_generated (build_cart_url), which logs at offer
@@ -382,7 +382,7 @@ class ChatController extends BaseApiController
      * create_payment_link (doc-04) — the ONE place a real WooCommerce
      * order is ever created from a chat conversation. Reached only after
      * a real customer click on a rendered "Confirm & Pay" button (see
-     * hamman-widget.js's handleConfirmPaymentLinkClick()) — the model-
+     * haman-widget.js's handleConfirmPaymentLinkClick()) — the model-
      * callable tool (product_tools.py's create_payment_link) only ever
      * returns a live PREVIEW, never creates anything itself. Every
      * security rule the task explicitly required is enforced HERE, in
@@ -439,7 +439,7 @@ class ChatController extends BaseApiController
         }
 
         // Rule: cap on draft orders per IP per day.
-        $ipKey = 'hamman-payment-link:' . $d['chatbot_id'] . ':' . $req->ip();
+        $ipKey = 'haman-payment-link:' . $d['chatbot_id'] . ':' . $req->ip();
         if (RateLimiter::tooManyAttempts($ipKey, $this->limit('payment_links_per_ip_per_day'))) {
             return $this->tooManyRequests('Too many payment links requested today.', RateLimiter::availableIn($ipKey));
         }
@@ -562,7 +562,7 @@ class ChatController extends BaseApiController
         // Bounds how often one visitor can make this store's database do
         // an order lookup at all — counted on every attempt, including the
         // ones that never result in an SMS.
-        $ipKey = 'hamman-order-status-ip:' . $req->ip();
+        $ipKey = 'haman-order-status-ip:' . $req->ip();
         if (RateLimiter::tooManyAttempts($ipKey, $this->limit('otp_requests_per_ip_per_day'))) {
             return $this->tooManyRequests('Too many requests today.', RateLimiter::availableIn($ipKey));
         }

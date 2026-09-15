@@ -95,7 +95,7 @@ Route::prefix('v1')->group(function () {
         // is registered second, its `GET chatbots` silently overwrote the
         // plugin's one in the route lookup. Every WordPress plugin install got
         // 401 from its own "test connection" button as a result, since
-        // Hamman_Api_Client::get_chatbots() calls exactly that endpoint.
+        // Haman_Api_Client::get_chatbots() calls exactly that endpoint.
         //
         // So: only the verbs this group actually needs, spelled out, and the
         // two GETs deliberately left to the API-key group. Param named {id}
