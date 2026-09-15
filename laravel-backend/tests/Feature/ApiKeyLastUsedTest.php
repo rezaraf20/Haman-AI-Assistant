@@ -145,7 +145,7 @@ class ApiKeyLastUsedTest extends TestCase
         // sees can lag their first successful plugin call by that much.
         // Acceptable for a checklist — but the cache has to be dropped here
         // or this test would only ever re-read its own precondition.
-        Cache::forget("onboarding_status:{$user->tenant->id}");
+        CustomerOnboarding::forget($user->tenant);
 
         $after = CustomerOnboarding::status($user->tenant->fresh());
         $this->assertTrue($after['plugin_installed'], 'A plugin that has authenticated is installed.');

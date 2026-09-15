@@ -13,12 +13,24 @@ use Illuminate\Support\Facades\{DB, Cache};
  * canView().
  */
 class CustomerOnboarding {
+    /**
+     * The key carries a version because this array is cached for five minutes
+     * in a store that outlives a deploy: without it, a release that adds a key
+     * to the array is read back by the new code from an entry the old code
+     * wrote, without it. Built here rather than spelled out at each call site
+     * so renaming it cannot leave a caller clearing a key nobody writes.
+     */
+    private static function cacheKey(Tenant $tenant): string {
+        return "onboarding_status:v2:{$tenant->id}";
+    }
+
+    /** Drop the cached status, for when a signal it derives has just changed. */
+    public static function forget(Tenant $tenant): void {
+        Cache::forget(self::cacheKey($tenant));
+    }
+
     public static function status(Tenant $tenant): array {
-        // The key carries a version because this array is cached for five
-        // minutes in a store that outlives a deploy: without it, a release
-        // that adds a key to the array is read back by the new code from an
-        // entry the old code wrote, which is missing it.
-        return Cache::remember("onboarding_status:v2:{$tenant->id}", 300, function () use ($tenant) {
+        return Cache::remember(self::cacheKey($tenant), 300, function () use ($tenant) {
             // Both public-schema existence checks in one query (two EXISTS
             // subqueries) instead of two — this gate runs on every customer
             // dashboard request that isn't cache-warm yet, and the dashboard
