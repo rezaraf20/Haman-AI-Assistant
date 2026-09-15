@@ -9,6 +9,7 @@ from sqlalchemy import text
 from app.core.config import settings
 from app.services import llm_provider_service
 from app.services.intent_classifier import classify_intent
+from app.services.claim_guard import verify_claims
 
 logger = logging.getLogger(__name__)
 
@@ -507,6 +508,24 @@ def _sku_row_to_dict(row) -> dict:
         "price": row.price, "currency": row.currency,
         "stock_status": row.stock_status, "permalink": row.permalink,
     }
+
+
+def _strip_unproven_claims(
+    db: Session, conversation_id: Optional[str], chatbot_id: str,
+    text_out: Optional[str], query: str,
+) -> tuple:
+    """Drop any claim of a completed action from an answer no tool backed.
+
+    Called on the paths where no tool ran at all, so the proven set is empty
+    by construction and any such claim is false.
+    """
+    cleaned, cut = verify_claims(text_out, (), is_fa=_looks_persian(query))
+    if cut:
+        logger.warning(f"Unproven claim(s) removed for chatbot {chatbot_id}: {sorted(set(cut))}")
+        _log_event(db, conversation_id, chatbot_id, "unproven_claim_removed", {
+            "actions": sorted(set(cut)),
+        })
+    return cleaned, cut
 
 
 def _lookup_by_sku(db: Session, chatbot_id: str, query: str) -> Optional[dict]:
@@ -1348,6 +1367,14 @@ async def run_rag_pipeline_stream(
             full_text = fallback_resp or _default_error_response(query)
             yield ("delta", full_text)
 
+    # Same check as the non-streaming path. The deltas have already gone out
+    # token by token, so this corrects what is stored and what the client
+    # renders as the final message, not what briefly appeared mid-stream --
+    # an answer that claims an action is not something streaming can take
+    # back. The tool path does not have this problem: it yields its whole
+    # answer as a single delta, already guarded.
+    full_text, cut = _strip_unproven_claims(db, conversation_id, chatbot_id, full_text, query)
+
     total_latency_ms = int((time.time() - start) * 1000)
     if not stream_failed:
         _log_event(db, conversation_id, chatbot_id, "response", {
@@ -1532,6 +1559,11 @@ async def run_rag_pipeline(
         # this regardless of what the model actually wrote.
         if m.get("page"): src["page"] = m["page"]
         if src: sources.append(src)
+
+    # No tool ran on this path (the tool pipeline returns before here), so
+    # there is nothing an "added to your cart" could rest on. This is the
+    # exact case that produced one: the tool was switched off entirely.
+    answer, cut = _strip_unproven_claims(db, conversation_id, chatbot_id, answer, query)
 
     total_latency_ms = int((time.time() - start) * 1000)
     if not llm_call_failed:

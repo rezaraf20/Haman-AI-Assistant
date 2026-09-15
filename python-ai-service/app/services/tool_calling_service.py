@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 from app.services import llm_provider_service, platform_settings_service
 from app.services.llm_provider_service import _redis
 from app.services.tools.registry import get_enabled_tools, to_openai_schema, Tool
+from app.services.claim_guard import proven_actions, verify_claims
 
 logger = logging.getLogger(__name__)
 
@@ -476,6 +477,7 @@ def run_tool_calling_pipeline(
     model_used = "n/a"
     executed = 0
     widget_blocks: List[dict] = []
+    tool_results: List[dict] = []
     # First signal wins: if a turn touched several products, the merchant
     # gets one callback offer about one thing, not a pile of them.
     lead_signal: Optional[dict] = None
@@ -510,8 +512,22 @@ def run_tool_calling_pipeline(
         tool_calls = message.get("tool_calls") if offer_tools else None
         if not tool_calls:
             latency_ms = int((time.time() - start) * 1000)
+            # Nothing the model says it did counts unless a tool result shows
+            # it -- see claim_guard. A claim survives only when this same turn
+            # produced the artefact behind it.
+            from app.services.rag_service import _log_event, _looks_persian
+            answer, cut = verify_claims(
+                message.get("content") or "",
+                proven_actions(widget_blocks, tool_results),
+                is_fa=_looks_persian(query),
+            )
+            if cut:
+                logger.warning(f"Unproven claim(s) removed for chatbot {chatbot_id}: {sorted(set(cut))}")
+                _log_event(db, conversation_id, chatbot_id, "unproven_claim_removed", {
+                    "actions": sorted(set(cut)),
+                })
             return {
-                "response": message.get("content") or "",
+                "response": answer,
                 "chunk_ids": [], "scores": [], "sources": [],
                 "prompt_tokens": total_usage["prompt_tokens"],
                 "completion_tokens": total_usage["completion_tokens"],
@@ -533,6 +549,7 @@ def run_tool_calling_pipeline(
                 continue
             executed += 1
             result = _execute_tool_call(db, chatbot_id, conversation_id, call, tools)
+            tool_results.append(result if isinstance(result, dict) else {})
             fn_name = call.get("function", {}).get("name", "")
 
             if lead_signal is None:
