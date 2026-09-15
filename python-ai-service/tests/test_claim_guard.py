@@ -92,6 +92,58 @@ class GuardWithoutProofTest(unittest.TestCase):
         self.assertIn("was not added to your cart", answer)
         self.assertIn("Let me know if you would like to add anything else", answer)
 
+    def test_the_persian_sentences_a_live_model_produced(self):
+        # Both verbatim from a real shop with the tools switched off. The
+        # first says "we added it" in the first person plural, which an
+        # earlier version of these patterns did not match; the second hands
+        # over a product page labelled as a payment link.
+        cases = [
+            (
+                "ما محصول «قمقمه مربع» را با قیمت 225,000 IRT به سبد خرید شما "
+                "اضافه کردیم. حالا سبد خرید شما شامل این قلم است.",
+                "cart_add",
+                "اضافه نشد",
+            ),
+            (
+                "ما می‌توانیم لینک خرید را برای شما فراهم کنیم. "
+                "لینک پرداخت: <http://woo_site/?p=11>",
+                "payment_link",
+                "ساخته نشد",
+            ),
+            (
+                # Second run, after the first fix: the label and the colon
+                # with the product name in between.
+                "لینک پرداخت برای قمقمه مربع:   [http://woo_site/?p=11](http://woo_site/?p=11)",
+                "payment_link",
+                "ساخته نشد",
+            ),
+        ]
+
+        for text, action, correction in cases:
+            answer, cut = verify_claims(text, proven_actions([], []), is_fa=True)
+
+            self.assertEqual(set(cut), {action}, text)
+            self.assertIn(correction, answer)
+
+    def test_asking_about_a_payment_link_is_not_providing_one(self):
+        for text in (
+            "برای گرفتن لینک پرداخت، لطفاً نام محصول را بفرستید.",
+            "آیا لینک پرداخت می‌خواهید؟",
+        ):
+            self.assertNotIn("payment_link", claims_in(text), text)
+
+    def test_a_refusal_to_add_is_not_a_claim_to_have_added(self):
+        # Also verbatim: the same shop declining, which must survive intact.
+        text = (
+            "متأسفانه تراول ماگ حروف رنگی در انبار موجود نیست. "
+            "به همین دلیل نمی‌توانیم آن را به سبد خرید اضافه کنیم."
+        )
+
+        answer, cut = verify_claims(text, proven_actions([], []), is_fa=True)
+
+        self.assertEqual(cut, [])
+        self.assertEqual(answer, text)
+
     def test_tool_ran_but_returned_an_error(self):
         # _build_widget_block returns None for a result carrying "error",
         # so an errored tool reaches the guard with nothing to show for it.

@@ -42,9 +42,15 @@ _SENTENCE_SPLIT = re.compile(r"(?<=[.!?؟…])\s+|\n+")
 # conditional ("shall I add it?", "to add it, say...") is not a claim, so the
 # patterns below are deliberately anchored on completion wording.
 _CLAIM_PATTERNS = {
+    # The verb forms matter more than the noun. A live model wrote "به سبد
+    # خرید شما اضافه کردیم" -- first person plural, which an earlier, narrower
+    # list missed entirely. (?!ن) keeps the negations out: "اضافه نشد" and
+    # "اضافه نکردیم" are the opposite claim.
     "cart_add": [
-        r"به\s+سبد\s*(خرید)?\s*(شما|تان|ت)?\s*اضاف[هه]\s*(شد|کردم|گردید)",
+        r"سبد\s*(خرید)?\s*(شما|تان|ت)?\s*اضافه\s*(?!ن)(شد|شده|گردید|کرد[یم]?[مد]?|نمود[یم]?[مد]?)",
         r"(در|توی|تو)\s+سبد\s*(خرید)?\s*(شما|تان)?\s*(قرار\s*گرفت|گذاشت[مه]|ثبت\s*شد)",
+        # "حالا سبد خرید شما شامل این قلم است" -- same assertion, no verb.
+        r"سبد\s*(خرید)?\s*(شما|تان)\s*(هم\s*)?شامل",
         r"\badded\s+(it\s+)?to\s+(your\s+)?(cart|basket)\b",
         r"\b(is|has been)\s+(now\s+)?in\s+your\s+(cart|basket)\b",
     ],
@@ -54,7 +60,12 @@ _CLAIM_PATTERNS = {
     ],
     "payment_link": [
         r"لینک\s+پرداخت\s*(شما|تان)?\s*(آماده|ساخته|ایجاد|صادر)\s*(شد|است|گردید)",
-        r"(لینک|درگاه)\s+پرداخت\s+را\s+(برای\s*(شما|تان)?\s*)?(ساختم|ایجاد\s*کردم|آماده\s*کردم|فرستادم)",
+        r"(لینک|درگاه)\s+پرداخت\s+را\s+(برای\s*(شما|تان)?\s*)?(ساختم|ساختیم|ایجاد\s*کرد[یم]?[مد]?|آماده\s*کرد[یم]?[مد]?|فرستاد[یم]?[مد]?)",
+        # Handing over a URL labelled as one is the claim, whatever the verb.
+        # A live model answered "لینک پرداخت: <http://shop/?p=11>" with the
+        # payment tool switched off -- and that address is a product page.
+        r"لینک\s+پرداخت\b[^\n:：]{0,40}[:：]",
+        r"\bpayment\s+link\b[^\n:：]{0,40}[:：]",
         r"\bpayment\s+link\s+(is\s+)?(ready|created|generated|prepared)\b",
         r"\b(created|generated|prepared)\s+(a\s+)?payment\s+link\b",
     ],

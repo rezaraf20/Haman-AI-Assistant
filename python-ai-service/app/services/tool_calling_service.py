@@ -331,6 +331,19 @@ def _openai_tool_chat(profile: dict, messages: List[dict], tools_schema: Optiona
 
     resp = post(messages)
 
+    # The mirror image of the retry below: a model told to call one specific
+    # tool may write prose instead, and the provider answers 400
+    # ("Tool choice is required, but model did not call a tool") rather than
+    # returning that prose. Routing is a strong opinion, not a guarantee, so
+    # it gives way here instead of taking the turn down with it -- one retry
+    # with the model free to choose, which is where this started.
+    if forced_tool and resp.status_code == 400 and _is_tool_use_failure(resp):
+        logger.info(
+            f"Model refused the routed tool '{forced_tool}'; retrying with a free choice."
+        )
+        forced_tool = None
+        resp = post(messages)
+
     # A reasoning model asked to answer without tools may emit a tool call
     # anyway; OpenAI-compatible providers reject that with a 400 rather than
     # returning text. One retry with the instruction spelled out fixes it in
@@ -468,7 +481,24 @@ _DECISION_SYSTEM = (
 )
 
 
-def _decision_messages(query: str, history: List[dict]) -> List[dict]:
+# When the intent has already picked the tool, the prompt above is actively
+# wrong: its last sentence invites the model not to call anything, which is
+# exactly what a named tool_choice forbids. Groq rejects that combination with
+# a 400 ("Tool choice is required, but model did not call a tool") rather than
+# returning text, so the contradiction killed the whole turn. Measured against
+# the live model: the prompt above forced to search_products returns 400, this
+# one returns the call.
+_FORCED_SYSTEM = (
+    "You extract tool arguments for a shop assistant. The tool to call has "
+    "already been chosen; call it, and take its arguments from the "
+    "conversation. Do not answer in prose and do not call a different tool. "
+    "Never invent an argument you were not given -- no product ids, no SKUs, "
+    "no phone numbers. If an argument is genuinely unavailable, pass only the "
+    "ones you have."
+)
+
+
+def _decision_messages(query: str, history: List[dict], forced: Optional[str] = None) -> List[dict]:
     """The decision turn's input: the conversation, and nothing else.
 
     Recent turns are kept even though only the last message is being routed,
@@ -476,7 +506,7 @@ def _decision_messages(query: str, history: List[dict]) -> List[dict]:
     cart" has no referent without the turn before it. What is left out is the
     retrieved CONTEXT and the grounding rules.
     """
-    messages = [{"role": "system", "content": _DECISION_SYSTEM}]
+    messages = [{"role": "system", "content": _FORCED_SYSTEM if forced else _DECISION_SYSTEM}]
     for h in history[-6:]:
         if h.get("role") in ("user", "assistant") and h.get("content"):
             messages.append({"role": h["role"], "content": h["content"]})
@@ -502,12 +532,12 @@ def run_tool_calling_pipeline(
         return None
 
     tools_schema = to_openai_schema(tools)
-    messages = _decision_messages(query, history)
 
     # The intent classifier, not the model, decides which tool runs. None
     # means it had no confident opinion, and the model chooses as before.
     plan = route(intent or "", enabled_tool_names, query, history)
     called_tools: List[str] = []
+    messages = _decision_messages(query, history, plan.forced_tool([]) if plan else None)
 
     start = time.time()
     total_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}

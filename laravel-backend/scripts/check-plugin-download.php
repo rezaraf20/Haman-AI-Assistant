@@ -32,4 +32,52 @@ if ($a !== $b) {
     exit(1);
 }
 
-echo 'OK — the plugin download matches the built archive (' . substr($a, 0, 12) . ").\n";
+/*
+ * The archive must also be installable, which is not implied by the two
+ * copies matching.
+ *
+ * Built on Windows with Compress-Archive, the entries come out as
+ * "hamman-ai-chatbot\hamman-ai-chatbot.php" -- the ZIP format requires a
+ * forward slash, and a backslash is an ordinary character in a file name. So
+ * WordPress sees no directory and no plugin header, and the download we hand
+ * every new customer cannot be installed at all. It shipped that way, and
+ * only installing it into a real WordPress showed it.
+ */
+$zip = new ZipArchive();
+
+if ($zip->open($canonical) !== true) {
+    fwrite(STDERR, "check-plugin-download: {$canonical} is not a readable zip.\n");
+    exit(1);
+}
+
+$backslashed = [];
+$hasHeader = false;
+
+for ($i = 0; $i < $zip->numFiles; $i++) {
+    $name = $zip->getNameIndex($i);
+    if (str_contains($name, '\\')) {
+        $backslashed[] = $name;
+    }
+    if ($name === 'hamman-ai-chatbot/hamman-ai-chatbot.php') {
+        $hasHeader = true;
+    }
+}
+
+$zip->close();
+
+if ($backslashed) {
+    fwrite(STDERR, "The plugin zip uses backslashes in its entry names, so WordPress cannot install it.\n");
+    fwrite(STDERR, '  e.g. ' . $backslashed[0] . "\n");
+    fwrite(STDERR, "  Cause: built on Windows with Compress-Archive.\n");
+    fwrite(STDERR, "  Fix: rebuild on Linux, from wordpress-plugin/:\n");
+    fwrite(STDERR, "       zip -rq -X hamman-ai-chatbot.zip hamman-ai-chatbot -x 'hamman-ai-chatbot/tests/*'\n");
+    exit(1);
+}
+
+if (!$hasHeader) {
+    fwrite(STDERR, "The plugin zip has no hamman-ai-chatbot/hamman-ai-chatbot.php at its root.\n");
+    fwrite(STDERR, "  WordPress finds a plugin by that header file; without it the archive installs into nothing.\n");
+    exit(1);
+}
+
+echo 'OK — the plugin download matches the built archive and is installable (' . substr($a, 0, 12) . ").\n";
