@@ -18,30 +18,42 @@
         </include>
     </source>
     <php>
-        <env name="APP_ENV" value="testing"/>
+        <env name="APP_ENV" value="testing" force="true"/>
         <!-- CI-only dummy key, 32 bytes, not used to protect anything real. -->
-        <env name="APP_KEY" value="base64:aGFtbWFuLWNpLXRlc3Qta2V5LTMyLWJ5dGVzLWxvbmc="/>
-        <env name="APP_DEBUG" value="false"/>
-        <env name="BCRYPT_ROUNDS" value="4"/>
-        <env name="CACHE_STORE" value="array"/>
-        <env name="DB_CONNECTION" value="pgsql"/>
+        <env name="APP_KEY" value="base64:aGFtbWFuLWNpLXRlc3Qta2V5LTMyLWJ5dGVzLWxvbmc=" force="true"/>
+        <env name="APP_DEBUG" value="false" force="true"/>
+        <env name="BCRYPT_ROUNDS" value="4" force="true"/>
+        <env name="CACHE_STORE" value="array" force="true"/>
+        <!-- force="true" on every entry below, DB_HOST included by omission
+             only because it must differ per environment (127.0.0.1 in CI, the
+             "postgres" service inside a container). PHPUnit defaults to
+             force="false", which means an <env> is skipped whenever the
+             surrounding process already defines it — so running this suite
+             inside a deployed container silently pointed it at the real
+             application database, and the only thing that stopped
+             RefreshDatabase from dropping every table was migrate:fresh
+             refusing to run while APP_ENV=production. The credentials below
+             belong to a role that owns hamman_test and has no rights on the
+             application database, so a mistake here fails instead of
+             destroying anything. TestCase re-checks this at runtime. -->
+        <env name="DB_CONNECTION" value="pgsql" force="true"/>
         <env name="DB_HOST" value="127.0.0.1"/>
-        <env name="DB_PORT" value="5432"/>
-        <env name="DB_DATABASE" value="hamman_test"/>
-        <env name="DB_USERNAME" value="hamman_test"/>
-        <env name="DB_PASSWORD" value="hamman_test"/>
-        <env name="MAIL_MAILER" value="array"/>
-        <env name="QUEUE_CONNECTION" value="sync"/>
-        <env name="SESSION_DRIVER" value="array"/>
+        <env name="DB_PORT" value="5432" force="true"/>
+        <env name="DB_DATABASE" value="hamman_test" force="true"/>
+        <env name="DB_USERNAME" value="hamman_test" force="true"/>
+        <env name="DB_PASSWORD" value="hamman_test" force="true"/>
+        <env name="MAIL_MAILER" value="array" force="true"/>
+        <env name="QUEUE_CONNECTION" value="sync" force="true"/>
+        <env name="SESSION_DRIVER" value="array" force="true"/>
         <!-- Telescope is a declared dev dependency but its own migrations
              are never published in this app (no telescope_entries table
              anywhere) — leaving it enabled in tests makes it try to log to
              a table that doesn't exist and mask the real failure underneath. -->
-        <env name="TELESCOPE_ENABLED" value="false"/>
+        <env name="TELESCOPE_ENABLED" value="false" force="true"/>
         <!-- Never actually called — tests mock the AI Gateway HTTP call via
              Http::fake() — but AiGatewayService::$secret is a non-nullable
              string property, so config('hamman.ai_service.secret') must
              resolve to *something* for the service to even construct. -->
-        <env name="AI_SERVICE_SECRET" value="test-secret"/>
+        <env name="AI_SERVICE_SECRET" value="test-secret" force="true"/>
     </php>
 </phpunit>

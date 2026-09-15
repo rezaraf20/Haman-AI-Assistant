@@ -66,5 +66,11 @@ if ! php laravel-backend/scripts/check-tool-catalogue.php; then
     exit 1
 fi
 
+echo "== Preflight: the plugin download matches the built archive =="
+if ! php laravel-backend/scripts/check-plugin-download.php; then
+    echo "FAIL: the zip offered in the setup guide differs from the one we build."
+    exit 1
+fi
+
 echo ""
 echo "All preflight checks passed."

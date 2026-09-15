@@ -38,7 +38,7 @@ class PlatformActivity
         'operations' => ['cache_cleared', 'webhook_secret_rotated', 'sync_triggered'],
         'tickets' => ['ticket_replied', 'ticket_status_changed'],
         'staff' => ['staff_created', 'staff_updated', 'staff_activated', 'staff_deactivated'],
-        'platform' => ['platform_settings_changed'],
+        'platform' => ['platform_settings_changed', 'plan_changed'],
     ];
 
     public static function allActions(): array

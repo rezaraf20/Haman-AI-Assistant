@@ -61,6 +61,13 @@ mkdir -p /shared-assets/css /shared-assets/js
 cp -a public/css/. /shared-assets/css/ 2>/dev/null || true
 cp -a public/js/.  /shared-assets/js/  2>/dev/null || true
 
+# The WordPress plugin the setup guide links to. Same reasoning as the assets
+# above: nginx serves /downloads/ straight from the volume, and it has no
+# other way to see this container's filesystem. Without this the download link
+# falls through to index.php and answers 404.
+mkdir -p /shared-assets/downloads
+cp -a public/downloads/. /shared-assets/downloads/ 2>/dev/null || true
+
 echo "=== Hamman AI Ready ==="
 
 if [ "$#" -gt 0 ]; then

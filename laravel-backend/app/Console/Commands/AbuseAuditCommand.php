@@ -51,6 +51,10 @@ class AbuseAuditCommand extends Command
         'api/v1/chat/order-status/request-code'       => ['sms', "Sends an OTP, billed to the MERCHANT's wallet"],
         'api/v1/chat/order-status/verify'             => ['outbound', 'Live query to the merchant shop'],
         'payments/zarinpal/callback'                  => ['outbound', 'Server-to-server verify call to Zarinpal'],
+        '/'                                           => ['none', 'Public landing page; reads published plans'],
+        'signup'                                      => ['db-write', 'Creates a tenant AND a Postgres schema, same as the API register'],
+        'verify-email/{id}/{hash}'                    => ['none', 'Signed, expiring link; marks one address verified'],
+        'verify-email/resend'                         => ['none', 'Sends one email to the signed-in user own address'],
         'portal/login'                                => ['none', 'Renders the form; both Livewire actions behind it are capped (OtpLogin, EmailLogin)'],
         // Filament rate-limits the attempt itself inside the Livewire
         // action (Login::authenticate() calls rateLimit(5)), so the GET

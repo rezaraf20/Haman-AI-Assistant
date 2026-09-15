@@ -5,9 +5,35 @@
 // middleware stack that Filament (and any future browser-facing page) needs.
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\LandingController;
+use App\Http\Controllers\LandingSignupController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Middleware\SetLocale;
 use App\Services\TrendsService;
+
+// The public site. Until this existed there was nowhere to send someone who
+// became interested: the only public pages were a login form and a payment
+// callback.
+Route::get('/', [LandingController::class, 'index'])
+    ->middleware([SetLocale::class, 'throttle:public-read'])
+    ->name('landing');
+
+// Email + password signup, the second way in. OtpLogin only accepts an
+// Iranian mobile number, which is a hard stop for anyone outside Iran.
+// Throttled with the same limiter as the API's register, since this creates
+// a tenant and a Postgres schema exactly as that one does.
+Route::post('/signup', [LandingSignupController::class, 'register'])
+    ->middleware([SetLocale::class, 'throttle:register'])
+    ->name('landing.register');
+
+// Signed and expiring; the hash covers the address the link was issued for.
+Route::get('/verify-email/{id}/{hash}', [LandingSignupController::class, 'verify'])
+    ->middleware([SetLocale::class, 'signed', 'throttle:public-read'])
+    ->name('verify.email');
+
+Route::post('/verify-email/resend', [LandingSignupController::class, 'resend'])
+    ->middleware([SetLocale::class, 'auth', 'throttle:public-read'])
+    ->name('verify.email.resend');
 
 // Zarinpal redirects the end user's browser here after payment — deliberately
 // outside any auth guard (see PaymentController for why that's safe).

@@ -217,3 +217,30 @@ docker compose exec laravel php artisan hamman:verify-backup
 | Python AI | 8001 | داخلی |
 | PostgreSQL | 5432 | دیتابیس |
 | Redis | 6379 | صف و کش |
+
+---
+
+## اجرای تست‌ها روی سرور
+
+`docker compose exec laravel php artisan test` را اجرا نکنید. آن دستور تست‌ها را روی
+دیتابیس **واقعی** (`hamman_saas`) اجرا می‌کند، نه روی دیتابیس تست. دو دلیل دارد:
+`docker-entrypoint.sh` دستور `config:cache` را اجرا می‌کند و بعد از آن مقادیر `env()`
+اصلاً خوانده نمی‌شوند؛ و حتی بدون کش، PHPUnit مقادیر `<env>` را در `$_ENV` می‌نویسد
+درحالی‌که Laravel اول `$_SERVER` را می‌خواند و متغیرهای داکر آنجا هستند. چون این
+مجموعه از `RefreshDatabase` استفاده می‌کند، یعنی خطر پاک شدن همه‌ی جدول‌ها.
+(`tests/TestCase.php` حالا قبل از هر تست بررسی می‌کند نام دیتابیس به `_test` ختم شود
+و در غیر این صورت اجرا نمی‌شود.)
+
+روش درست — یک کانتینر یک‌بارمصرف با دیتابیس تست:
+
+```bash
+docker compose run --rm --no-deps \
+  -e APP_ENV=testing \
+  -e DB_DATABASE=hamman_test -e DB_USERNAME=hamman_test -e DB_PASSWORD=hamman_test \
+  -e CACHE_STORE=array -e SESSION_DRIVER=array -e QUEUE_CONNECTION=sync -e MAIL_MAILER=array \
+  --entrypoint sh laravel -c "php artisan config:clear >/dev/null 2>&1; php artisan test"
+```
+
+یک تست روی سرور همیشه رد می‌شود و ایراد کد نیست: `zarinpal reports configured once it
+has a merchant id`. چون `ZARINPAL_MERCHANT_ID` واقعی در `.env` سرور هست، آن تنظیم از
+قبل «پیکربندی‌شده» دیده می‌شود. در CI این متغیر وجود ندارد و تست سبز است.
