@@ -376,7 +376,7 @@ class RunToolCallingPipelineTest(unittest.TestCase):
             (final_message, {"prompt_tokens": 80, "completion_tokens": 15, "total_tokens": 95}),
         ]
 
-        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature):
+        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature, forced_tool=None):
             message, usage = call_sequence.pop(0)
             return message, "groq/test-tool-model", usage, 0.0
 
@@ -414,7 +414,7 @@ class RunToolCallingPipelineTest(unittest.TestCase):
 
         offered_tools_log = []
 
-        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature):
+        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature, forced_tool=None):
             offered_tools_log.append(tools_schema is not None)
             if tools_schema is not None:
                 return (
@@ -595,7 +595,7 @@ class WidgetBlockTest(unittest.TestCase):
             (final_message, {"prompt_tokens": 20, "completion_tokens": 8, "total_tokens": 28}),
         ]
 
-        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature):
+        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature, forced_tool=None):
             message, usage = call_sequence.pop(0)
             return message, "groq/test-tool-model", usage, 0.0
 
@@ -638,7 +638,7 @@ class WidgetBlockTest(unittest.TestCase):
             (final_message, {"prompt_tokens": 20, "completion_tokens": 8, "total_tokens": 28}),
         ]
 
-        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature):
+        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature, forced_tool=None):
             message, usage = call_sequence.pop(0)
             return message, "groq/test-tool-model", usage, 0.0
 
@@ -687,7 +687,7 @@ class WidgetBlockTest(unittest.TestCase):
             (final_message, {"prompt_tokens": 20, "completion_tokens": 8, "total_tokens": 28}),
         ]
 
-        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature):
+        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature, forced_tool=None):
             message, usage = call_sequence.pop(0)
             return message, "groq/test-tool-model", usage, 0.0
 
@@ -735,7 +735,7 @@ class WidgetBlockTest(unittest.TestCase):
             (final_message, {"prompt_tokens": 20, "completion_tokens": 8, "total_tokens": 28}),
         ]
 
-        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature):
+        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature, forced_tool=None):
             message, usage = call_sequence.pop(0)
             return message, "groq/test-tool-model", usage, 0.0
 
@@ -781,7 +781,7 @@ class WidgetBlockTest(unittest.TestCase):
             (final_message, {"prompt_tokens": 20, "completion_tokens": 8, "total_tokens": 28}),
         ]
 
-        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature):
+        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature, forced_tool=None):
             message, usage = call_sequence.pop(0)
             return message, "groq/test-tool-model", usage, 0.0
 

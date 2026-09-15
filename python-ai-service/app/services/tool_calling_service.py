@@ -31,6 +31,7 @@ from app.services import llm_provider_service, platform_settings_service
 from app.services.llm_provider_service import _redis
 from app.services.tools.registry import get_enabled_tools, to_openai_schema, Tool
 from app.services.claim_guard import proven_actions, verify_claims
+from app.services.tool_router import route
 
 logger = logging.getLogger(__name__)
 
@@ -301,7 +302,7 @@ _ANSWER_NOW = {
 }
 
 
-def _openai_tool_chat(profile: dict, messages: List[dict], tools_schema: Optional[List[dict]], max_tokens: int, temperature: float) -> tuple[dict, dict]:
+def _openai_tool_chat(profile: dict, messages: List[dict], tools_schema: Optional[List[dict]], max_tokens: int, temperature: float, forced_tool: Optional[str] = None) -> tuple[dict, dict]:
     def post(payload_messages: List[dict]) -> "_requests.Response":
         body = {
             "model": profile["model_name"],
@@ -311,7 +312,13 @@ def _openai_tool_chat(profile: dict, messages: List[dict], tools_schema: Optiona
         }
         if tools_schema:
             body["tools"] = tools_schema
-            body["tool_choice"] = "auto"
+            # Naming a function leaves the model no choice about which tool
+            # runs, only about the arguments -- which is the point of routing
+            # from the intent instead of from the model's own judgement.
+            body["tool_choice"] = (
+                {"type": "function", "function": {"name": forced_tool}}
+                if forced_tool else "auto"
+            )
         return _requests.post(
             f"{profile['base_url'].rstrip('/')}/chat/completions",
             headers={
@@ -354,7 +361,7 @@ def _is_tool_use_failure(resp) -> bool:
         return False
 
 
-def _tool_calling_chat(db: Session, messages: List[dict], tools_schema: Optional[List[dict]], max_tokens: int, temperature: float) -> tuple[dict, str, dict, float]:
+def _tool_calling_chat(db: Session, messages: List[dict], tools_schema: Optional[List[dict]], max_tokens: int, temperature: float, forced_tool: Optional[str] = None) -> tuple[dict, str, dict, float]:
     # Local import — avoids a circular import at module load time (rag_service
     # imports this module too, from inside a function, at call time, by
     # which point rag_service is already fully loaded).
@@ -367,7 +374,7 @@ def _tool_calling_chat(db: Session, messages: List[dict], tools_schema: Optional
     last_error = None
     for profile in profiles:
         try:
-            message, usage = _openai_tool_chat(profile, messages, tools_schema, max_tokens, temperature)
+            message, usage = _openai_tool_chat(profile, messages, tools_schema, max_tokens, temperature, forced_tool)
             cost_toman = _compute_cost_toman(profile, usage)
             llm_provider_service.record_outcome(db, profile["name"], success=True)
             return message, f"{profile['provider']}/{profile['model_name']}", usage, cost_toman
@@ -447,10 +454,40 @@ def _execute_tool_call(db: Session, chatbot_id: str, conversation_id: Optional[s
     return result
 
 
+# The whole system prompt for the turn that only decides on a tool. No
+# retrieved CONTEXT and no grounding rules: both belong to writing an answer,
+# and putting them here is what let the model read a passage, decide it
+# already knew enough, and never call anything. Deciding and answering are now
+# two separate calls with two different prompts.
+_DECISION_SYSTEM = (
+    "You select tools for a shop assistant. Decide which tool answers the "
+    "customer's last message and call it with arguments taken from the "
+    "conversation. Never invent an argument you were not given -- no product "
+    "ids, no SKUs, no phone numbers. If no tool fits, answer with a short "
+    "plain-text note and call nothing."
+)
+
+
+def _decision_messages(query: str, history: List[dict]) -> List[dict]:
+    """The decision turn's input: the conversation, and nothing else.
+
+    Recent turns are kept even though only the last message is being routed,
+    because Persian shopping questions lean on them -- "put this one in my
+    cart" has no referent without the turn before it. What is left out is the
+    retrieved CONTEXT and the grounding rules.
+    """
+    messages = [{"role": "system", "content": _DECISION_SYSTEM}]
+    for h in history[-6:]:
+        if h.get("role") in ("user", "assistant") and h.get("content"):
+            messages.append({"role": h["role"], "content": h["content"]})
+    messages.append({"role": "user", "content": query})
+    return messages
+
+
 def run_tool_calling_pipeline(
     db: Session, chatbot_id: str, conversation_id: Optional[str], query: str,
     history: List[dict], system_prompt_text: str, max_tokens: int, temperature: float,
-    enabled_tool_names: List[str],
+    enabled_tool_names: List[str], intent: Optional[str] = None,
 ) -> Optional[dict]:
     tools = get_enabled_tools(enabled_tool_names)
     if not tools:
@@ -465,11 +502,12 @@ def run_tool_calling_pipeline(
         return None
 
     tools_schema = to_openai_schema(tools)
-    messages = [{"role": "system", "content": system_prompt_text}]
-    for h in history[-12:]:
-        if h.get("role") in ("user", "assistant") and h.get("content"):
-            messages.append({"role": h["role"], "content": h["content"]})
-    messages.append({"role": "user", "content": query})
+    messages = _decision_messages(query, history)
+
+    # The intent classifier, not the model, decides which tool runs. None
+    # means it had no confident opinion, and the model chooses as before.
+    plan = route(intent or "", enabled_tool_names, query, history)
+    called_tools: List[str] = []
 
     start = time.time()
     total_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
@@ -496,9 +534,11 @@ def run_tool_calling_pipeline(
             return None
 
         offer_tools = executed < max_tool_calls
+        forced = plan.forced_tool(called_tools) if (plan and offer_tools) else None
         try:
             message, model_used, usage, cost = _tool_calling_chat(
-                db, messages, tools_schema if offer_tools else None, max_tokens, temperature
+                db, messages, tools_schema if offer_tools else None, max_tokens, temperature,
+                forced_tool=forced,
             )
         except Exception as e:
             logger.error(f"Tool-calling LLM call failed, falling back to normal pipeline: {e}")
@@ -510,6 +550,17 @@ def run_tool_calling_pipeline(
         total_cost += cost
 
         tool_calls = message.get("tool_calls") if offer_tools else None
+        if not tool_calls and not executed:
+            # Nothing was called, so this turn only ever saw the decision
+            # prompt -- no CONTEXT, no grounding rules. Whatever it wrote is
+            # not an answer this pipeline is allowed to hand to a customer.
+            # None sends the caller to the normal retrieval path, which has
+            # both. That costs one extra model call on a message that turned
+            # out to need no tool, and buys an answer that is actually
+            # grounded rather than one written from an empty prompt.
+            logger.info(f"No tool selected for chatbot {chatbot_id}; falling through to retrieval")
+            return None
+
         if not tool_calls:
             latency_ms = int((time.time() - start) * 1000)
             # Nothing the model says it did counts unless a tool result shows
@@ -539,6 +590,13 @@ def run_tool_calling_pipeline(
                 "lead_signal": lead_signal,
             }
 
+        if not executed:
+            # Second turn onwards is answer-writing, so swap the bare
+            # decision prompt for the real one -- retrieved CONTEXT, grounding
+            # rules and all. The tool results are appended below and the model
+            # writes the reply from both.
+            messages[0] = {"role": "system", "content": system_prompt_text}
+
         messages.append({"role": "assistant", "content": message.get("content"), "tool_calls": tool_calls})
         for call in tool_calls:
             if executed >= max_tool_calls:
@@ -551,6 +609,7 @@ def run_tool_calling_pipeline(
             result = _execute_tool_call(db, chatbot_id, conversation_id, call, tools)
             tool_results.append(result if isinstance(result, dict) else {})
             fn_name = call.get("function", {}).get("name", "")
+            called_tools.append(fn_name)
 
             if lead_signal is None:
                 try:

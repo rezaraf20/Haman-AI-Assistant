@@ -69,9 +69,18 @@ _PATTERNS = [
         "shipping cost", "free shipping", "how long to arrive", "delivery time", "when will it arrive",
         "how many days to ship",
     )),
-    ("comparison", _P(
-        "مقایسه", "کدوم بهتره", "فرقش چیه", "تفاوتشون", "کدومو بگیرم بهتره",
-        " vs ", "compare", "comparison", "difference between", "which is better", "better than",
+    ("comparison", _P_RAW(
+        *[re.escape(x) for x in (
+            "مقایسه", "کدوم بهتره", "فرقش چیه", "تفاوتشون", "کدومو بگیرم بهتره",
+            " vs ", "compare", "comparison", "difference between", "which is better", "better than",
+        )],
+        # The fixed phrase "فرقش چیه" only catches the form with nothing
+        # between the two words. Real questions name the products in the
+        # middle -- "فرق تراول ماگ حروف رنگی با فنجون دسته اردک چیه؟" -- and
+        # fell through to "other". Matched on the word itself instead, minus
+        # "فرقی نداره"/"فرقی نمیکنه", which mean the opposite.
+        r"فرق(?!ی\s*ن)",
+        r"تفاوت",
     )),
     ("consultation", _P(
         "پیشنهاد میدی", "چی بگیرم", "مناسب منه", "راهنمایی کن", "کدوم مناسبه",
@@ -83,6 +92,13 @@ _PATTERNS = [
         "مشاوره", "دنبال", "میگردم", "می‌گردم",
         "what do you recommend", "which one should i", "recommend for", "suggest a", "advice on",
         "best for my", "what's good for", "looking for a", "i need something",
+    )),
+    ("consultation", _P_RAW(
+        # "پیشنهاد میدی" above is one spelling of many: "پیشنهاد می‌دید",
+        # "پیشنهاد میدین", "پیشنهاد بدید" all ask the same thing and all
+        # landed in "other". The verb is required so that "پیشنهاد ویژه"
+        # (a promotion) is not mistaken for asking for advice.
+        r"پیشنهاد\s*(می‌?د|بد)",
     )),
     ("availability", _P_RAW(
         *[re.escape(x) for x in (

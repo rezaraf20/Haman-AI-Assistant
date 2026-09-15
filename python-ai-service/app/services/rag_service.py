@@ -1233,7 +1233,8 @@ async def run_rag_pipeline_stream(
     # answered (SKU shortcut, embedding failure, fallback, tool call, or a
     # normal completion) — a message's intent is a property of what the
     # customer asked, not of how well the pipeline could answer it.
-    _log_event(db, conversation_id, chatbot_id, "intent_classified", {"intent": classify_intent(query)})
+    intent = classify_intent(query)
+    _log_event(db, conversation_id, chatbot_id, "intent_classified", {"intent": intent})
 
     sku_result = _try_sku_shortcut(db, chatbot_id, conversation_id, query, start)
     if sku_result is not None:
@@ -1309,6 +1310,7 @@ async def run_rag_pipeline_stream(
         from app.services.tool_calling_service import run_tool_calling_pipeline
         tool_result = run_tool_calling_pipeline(
             db, chatbot_id, conversation_id, query, history, sys_p, max_tokens, temperature, enabled_tools,
+            intent=intent,
         )
         if tool_result is not None:
             tool_result["chunk_ids"] = [c["id"] for c in chunks]
@@ -1421,7 +1423,8 @@ async def run_rag_pipeline(
     # answered (SKU shortcut, embedding failure, fallback, tool call, or a
     # normal completion) — a message's intent is a property of what the
     # customer asked, not of how well the pipeline could answer it.
-    _log_event(db, conversation_id, chatbot_id, "intent_classified", {"intent": classify_intent(query)})
+    intent = classify_intent(query)
+    _log_event(db, conversation_id, chatbot_id, "intent_classified", {"intent": intent})
 
     sku_result = _try_sku_shortcut(db, chatbot_id, conversation_id, query, start)
     if sku_result is not None:
@@ -1515,6 +1518,7 @@ async def run_rag_pipeline(
         from app.services.tool_calling_service import run_tool_calling_pipeline
         tool_result = run_tool_calling_pipeline(
             db, chatbot_id, conversation_id, query, history, sys_p, max_tokens, temperature, enabled_tools,
+            intent=intent,
         )
         if tool_result is not None:
             tool_result["chunk_ids"] = [c["id"] for c in chunks]

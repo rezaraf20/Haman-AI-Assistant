@@ -77,6 +77,21 @@ class GuardWithoutProofTest(unittest.TestCase):
         # The sentence that made no claim survives.
         self.assertIn("برای تکمیل خرید اقدام کنید.", answer)
 
+    def test_the_exact_sentence_a_live_model_produced(self):
+        # Verbatim from a probe run against the real model: asked to put a
+        # product in the cart it called no tool at all, then said it had.
+        real = (
+            "Got it! Your Travell mug with colored letters is now in your cart. "
+            "Let me know if you would like to add anything else or proceed to checkout."
+        )
+
+        answer, cut = verify_claims(real, proven_actions([], []), is_fa=False)
+
+        self.assertEqual(cut, ["cart_add"])
+        self.assertNotIn("in your cart", answer)
+        self.assertIn("was not added to your cart", answer)
+        self.assertIn("Let me know if you would like to add anything else", answer)
+
     def test_tool_ran_but_returned_an_error(self):
         # _build_widget_block returns None for a result carrying "error",
         # so an errored tool reaches the guard with nothing to show for it.
