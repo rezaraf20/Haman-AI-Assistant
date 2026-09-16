@@ -205,6 +205,7 @@ docker compose exec laravel php artisan haman:verify-backup
 | Migration failed | بررسی اتصال postgres: `docker compose exec postgres psql -U haman_user -d haman_saas -c '\l'` |
 | Widget not showing | در WordPress: بررسی Chatbot ID + Domain whitelist در داشبورد |
 | Embeddings stuck | `docker compose logs horizon` برای مشاهده خطای job |
+| ایمیج postgres build نمی‌شود | دیگر build نمی‌شود و نباید بشود — از ایمیج رسمی `pgvector/pgvector` با digest ثابت استفاده می‌کنیم. اگر `docker compose up --build` روی postgres خطا داد، یعنی جایی `build:` برگشته؛ به docker-compose.yml نگاه کنید |
 
 ---
 
@@ -217,6 +218,90 @@ docker compose exec laravel php artisan haman:verify-backup
 | Python AI | 8001 | داخلی |
 | PostgreSQL | 5432 | دیتابیس |
 | Redis | 6379 | صف و کش |
+
+---
+
+## تغییرات پرریسک (High-risk changes)
+
+هر تغییری که «منبع اتصال» را عوض می‌کند — نام دیتابیس، نقش، رمز، آدرس Redis،
+نام شبکه‌ی داکر — از این الگو پیروی کند. این از یک قطعی ده‌دقیقه‌ای واقعی
+درآمده، نه از احتیاط تئوریک.
+
+### ۱) اول بکاپ، و **تأیید restore**
+
+```bash
+docker compose exec laravel php artisan haman:backup-database
+docker compose exec laravel php artisan haman:verify-backup
+```
+
+تا وقتی `VERIFIED:` را ندیده‌اید شروع نکنید. بکاپ تست‌نشده بکاپ نیست.
+
+### ۲) ترتیب درست: **اول `.env`، بعد خود منبع**
+
+این مهم‌ترین درس است و برعکسش سایت را پایین می‌آورد.
+
+`docker-entrypoint.sh` قبل از هر چیز منتظر دیتابیس می‌ماند و **بعد** از آن
+`config:cache` را اجرا می‌کند. یعنی حلقه‌ی انتظار با **کانفیگ کش‌شده‌ی قبلی**
+کار می‌کند. اگر اسم دیتابیس را عوض کنید ولی `.env` هنوز اسم قدیم را داشته
+باشد — یا برعکس، کش هنوز قدیمی باشد — کانتینر تا ابد
+`Waiting for database...` چاپ می‌کند و nginx روی همه‌ی مسیرها ۵۰۲ می‌دهد.
+
+ترتیب درست:
+
+```bash
+# ۱. .env ها را به مقدار جدید تغییر دهید (هنوز چیزی در دیتابیس عوض نشده)
+# ۲. اپ را متوقف کنید، منبع را تغییر دهید
+docker compose stop laravel horizon scheduler python_ai nginx
+docker compose exec postgres psql -U <role> -d postgres -c "ALTER DATABASE ... RENAME TO ...;"
+# ۳. کانتینرها را **بازسازی** کنید، نه فقط start
+docker compose up -d --force-recreate laravel horizon scheduler python_ai
+```
+
+### ۳) `docker compose start` کافی نیست — `--force-recreate` لازم است
+
+`start` همان کانتینر قبلی را با همان لایه‌ی نوشتنی برمی‌گرداند، و کش کانفیگ
+در `bootstrap/cache` همان‌جاست. کانتینر دوباره با مقدار قدیمی بالا می‌آید.
+`--force-recreate` کانتینر را از ایمیج می‌سازد، بدون هیچ کش قدیمی.
+
+### ۴) راه برگشت
+
+قبل از شروع بنویسید که دقیقاً چطور برمی‌گردید:
+
+- **تغییر نام دیتابیس/نقش:** با همان دستور معکوس برگردد
+  (`ALTER DATABASE haman_saas RENAME TO ...`)، بعد `.env` را به عقب برگردانید،
+  بعد `--force-recreate`.
+- **اگر خود دیتابیس آسیب دید:** بکاپ تأییدشده‌ی مرحله‌ی ۱ را restore کنید.
+- **همیشه:** یک ترمینال باز نگه دارید که در آن دیتابیس هنوز در دسترس است،
+  تا اگر اتصال شکست بتوانید تشخیص دهید مشکل از دیتابیس است یا از اپ.
+
+### ۵) بعدش سلامت را واقعاً چک کنید
+
+```bash
+docker compose ps
+for p in / /admin/login /portal/login; do curl -sS -o /dev/null -w "$p %{http_code}\n" https://api.arshanweb.ir$p; done
+```
+
+---
+
+## چرا این سه اسم عمداً «Hamman» مانده‌اند
+
+برند «Haman» با یک «م» است و کل کد در تاریخ ۲۰۲۶-۰۹-۱۵ تغییر نام داد. سه چیز
+عمداً دست‌نخورده ماند، چون ریسکشان واقعی است و ارزششان صفر:
+
+| چه چیزی | مقدار فعلی | چرا نه |
+|---|---|---|
+| نقش دیتابیس | `hamman_user` | هیچ مشتری و هیچ APIای این را نمی‌بیند. Postgres اجازه نمی‌دهد نقشی که با آن وصل شده‌اید تغییر نام دهد، پس یک superuser موقت لازم است؛ و rename رمز md5 را باطل می‌کند چون نام نقش نمکِ آن است. یعنی همان دسته‌ای از تغییر که بالا باعث قطعی شد. |
+| پوشه‌ی سرور | `/opt/hamman-platform` | نام پروژه‌ی compose از نام پوشه می‌آید، و نام volumeها از نام پروژه. تغییرش یعنی `hamman-platform_postgres_data` دیگر پیدا نمی‌شود و یک volume **خالی** ساخته می‌شود. |
+| نام volumeها | `hamman-platform_*` | همان دلیل بالا. کپی کردن volume دیتابیس پروداکشن فقط برای زیبایی اسم، معامله‌ی بدی است. |
+
+چیزهایی که **تغییر کردند:** نام دیتابیس (`haman_saas`)، دیتابیس تست
+(`haman_test`) و نقشش، همه‌ی کانتینرها (`haman_laravel` و بقیه)، شبکه
+(`haman_net`)، رمز Redis، همه‌ی کامندهای artisan (`haman:*`)، و کل کد.
+
+اسم قدیمی فقط در سه فایل سازگاری باقی است — `Haman_Legacy` در افزونه،
+`PluginLegacy` در Laravel، `plugin_legacy` در سرویس پایتون — که کلیدهای
+option و namespace نسخه‌ی ۱.x را تطبیق می‌دهند و هر سه `TODO(2027-03-01)`
+دارند.
 
 ---
 

@@ -77,9 +77,27 @@ services:
     restart: unless-stopped
 
   postgres:
-    build:
-      context: ./postgres
-      dockerfile: Dockerfile
+    # The official pgvector image, pinned by digest, instead of building the
+    # extension from source.
+    #
+    # The build had stopped working: it installed clang19 and llvm19-dev from
+    # Alpine, and those packages no longer exist in the repository, so the
+    # image could not be rebuilt at all. The running container survived only
+    # because its image was already on the host -- one `docker system prune`
+    # away from a database that could not be started.
+    #
+    # The Dockerfile had also drifted from what was actually deployed. It said
+    # Alpine with pgvector 0.7.4; the running image was Debian with 0.8.3. The
+    # data directory was initialised by the Debian build, so Alpine would have
+    # meant musl collations over a glibc-ordered volume. This image is the
+    # same Debian lineage, Postgres 16 (a patch-level move, no pg_upgrade) and
+    # pgvector 0.8.6, which reads the installed 0.8.3 extension unchanged.
+    #
+    # To move to a newer one: pull the tag, read its digest with
+    #   docker inspect pgvector/pgvector:pg16 --format '{{index .RepoDigests 0}}'
+    # and replace the line below. Never unpin it -- an unpinned tag means the
+    # database silently changes version on some unrelated deploy.
+    image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
     container_name: haman_postgres
     environment:
       POSTGRES_DB: haman_saas
