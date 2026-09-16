@@ -68,6 +68,11 @@ cp -a public/js/.  /shared-assets/js/  2>/dev/null || true
 mkdir -p /shared-assets/downloads
 cp -a public/downloads/. /shared-assets/downloads/ 2>/dev/null || true
 
+# The link-preview card. Same reasoning as the download above: nginx serves
+# /og/ straight from the volume and has no other view of this filesystem.
+mkdir -p /shared-assets/og
+cp -a public/og/. /shared-assets/og/ 2>/dev/null || true
+
 echo "=== Haman AI Ready ==="
 
 if [ "$#" -gt 0 ]; then

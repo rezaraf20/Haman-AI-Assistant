@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The link preview card, 1200x630 (the size Telegram, WhatsApp, X and
+  Facebook all crop to).
+
+  Source of truth for laravel-backend/public/og/og-image.png. Edit this file,
+  then re-render with scripts/render-og-image.sh — the PNG is committed
+  because it has to be served, but it is generated, not hand-made.
+
+  Persian, because that is who reads the site; the Latin wordmark carries the
+  brand for everyone else. The copy is the same promise the page opens with,
+  shortened to what stays readable at thumbnail size.
+
+  TODO(design): replace with real artwork when there is a brand identity.
+  Until then this is deliberately plain — a flat card with the brand colour
+  reads better in a chat app than a stock illustration.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1f6feb"/>
+      <stop offset="100%" stop-color="#1552b8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Card -->
+  <rect width="1200" height="630" fill="#ffffff"/>
+
+  <!-- Brand bar down the inline-start edge. Right side, because the card
+       reads right-to-left like the page it represents. -->
+  <rect x="1160" y="0" width="40" height="630" fill="url(#accent)"/>
+
+  <!-- Wordmark -->
+  <text x="1104" y="150"
+        font-family="Vazirmatn, DejaVu Sans, sans-serif" font-size="76" font-weight="700"
+        fill="#14181f" text-anchor="start" direction="rtl">هامان</text>
+
+  <text x="1104" y="206"
+        font-family="DejaVu Sans, sans-serif" font-size="30" font-weight="400"
+        fill="#5d6673" text-anchor="end" letter-spacing="6">HAMAN</text>
+
+  <!-- Rule -->
+  <rect x="820" y="248" width="284" height="4" rx="2" fill="url(#accent)"/>
+
+  <!-- The promise, in two lines so it survives being shrunk to a thumbnail -->
+  <text x="1104" y="344"
+        font-family="Vazirmatn, DejaVu Sans, sans-serif" font-size="52" font-weight="700"
+        fill="#14181f" text-anchor="start" direction="rtl">دستیار فروشگاه شما،</text>
+  <text x="1104" y="412"
+        font-family="Vazirmatn, DejaVu Sans, sans-serif" font-size="52" font-weight="700"
+        fill="#14181f" text-anchor="start" direction="rtl">که کاتالوگ خودتان را بلد است</text>
+
+  <text x="1104" y="492"
+        font-family="Vazirmatn, DejaVu Sans, sans-serif" font-size="32" font-weight="400"
+        fill="#5d6673" text-anchor="start" direction="rtl">از روی محصولات و صفحه‌های خودتان جواب می‌دهد، نه از روی حدس</text>
+
+  <!-- One concrete thing it does, kept short enough to read at any size -->
+  <text x="1104" y="566"
+        font-family="Vazirmatn, DejaVu Sans, sans-serif" font-size="28" font-weight="400"
+        fill="#1f6feb" text-anchor="start" direction="rtl">افزونه‌ی ووکامرس · موجودی و قیمت زنده</text>
+</svg>

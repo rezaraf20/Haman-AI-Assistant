@@ -177,6 +177,43 @@ class PublicSiteTest extends TestCase
         $this->assertStringContainsString('rel="canonical"', $html);
     }
 
+    public function test_the_link_preview_card_is_declared_and_really_exists(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $this->assertStringContainsString('og:image', $html);
+        // summary, not summary_large_image, would crop a 1200x630 card to a
+        // square thumbnail.
+        $this->assertStringContainsString('summary_large_image', $html);
+
+        // A declared card that 404s is worse than none: the preview shows a
+        // broken image rather than falling back to text.
+        $png = public_path('og/og-image.png');
+        $this->assertFileExists($png, 'og:image is declared but not in the image');
+
+        [$width, $height] = getimagesize($png);
+        $this->assertSame(1200, $width);
+        $this->assertSame(630, $height);
+    }
+
+    public function test_the_card_is_what_the_source_svg_renders_to(): void
+    {
+        // The PNG is committed because it has to be served, but it is
+        // generated. Losing the source would leave an image nobody can edit.
+        $svg = base_path('resources/og/og-image.svg');
+
+        $this->assertFileExists($svg);
+        $this->assertStringContainsString('1200', file_get_contents($svg));
+
+        // scripts/ is repo tooling and is deliberately not copied into the
+        // image, so this half only runs where the checkout is.
+        if (!is_dir(base_path('scripts'))) {
+            return;
+        }
+
+        $this->assertFileExists(base_path('scripts/render-og-image.sh'));
+    }
+
     public function test_og_locale_follows_the_rendered_language(): void
     {
         $this->assertStringContainsString(

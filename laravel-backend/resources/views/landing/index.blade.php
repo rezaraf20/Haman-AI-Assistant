@@ -12,16 +12,25 @@
 
     {{-- What a shared link looks like in a chat app or a search result.
          og:locale follows the rendered language, since the same URL serves
-         both. No image is declared: a broken or placeholder og:image looks
-         worse than none, and there is no brand asset for it yet.
-         TODO(business): add og:image once there is artwork to point at. --}}
+         both. The card is one image for both languages: it is generated from
+         resources/og/og-image.svg, and duplicating it per locale would mean
+         two things to keep in step for one line of text.
+         TODO(design): replace the card with real artwork when there is a
+         brand identity; the source SVG is the only thing to change. --}}
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="{{ __('landing.brand') }}">
     <meta property="og:title" content="{{ __('landing.brand') }} — {{ __('landing.hero_title') }}">
     <meta property="og:description" content="{{ __('landing.hero_subtitle') }}">
     <meta property="og:url" content="{{ url('/') }}">
     <meta property="og:locale" content="{{ $rtl ? 'fa_IR' : 'en_US' }}">
-    <meta name="twitter:card" content="summary">
+    <meta property="og:image" content="{{ url('/og/og-image.png') }}">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="{{ __('landing.brand') }} — {{ __('landing.hero_title') }}">
+    {{-- summary_large_image, not summary: the card is 1200x630 and the small
+         variant would crop it to a square thumbnail. --}}
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:image" content="{{ url('/og/og-image.png') }}">
     <meta name="twitter:title" content="{{ __('landing.brand') }} — {{ __('landing.hero_title') }}">
     <meta name="twitter:description" content="{{ __('landing.hero_subtitle') }}">
     <style>
