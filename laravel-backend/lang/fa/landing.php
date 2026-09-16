@@ -125,4 +125,9 @@ return [
     'footer_contact' => 'تماس',
     'footer_login' => 'ورود به پنل',
     'footer_rights' => 'همه‌ی حقوق محفوظ است.',
+
+    // ── what a chatbot itself costs ─────────────────────
+    'types_title' => 'هزینه‌ی خود چت‌بات',
+    'types_subtitle' => 'پلن، اشتراک ماهانه است. این مبلغ، هزینه‌ی یک‌باره‌ی خود چت‌بات است.',
+    'toman' => 'تومان',
 ];

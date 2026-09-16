@@ -151,7 +151,7 @@
         <x-slot name="description">{{ __('install_guide.trouble_intro') }}</x-slot>
 
         <div class="space-y-5">
-            @foreach (['404', 'firewall', 'outdated', 'nowoo', 'secret'] as $case)
+            @foreach (['404', 'firewall', 'badzip', 'outdated', 'nowoo', 'secret'] as $case)
                 <div>
                     <p class="font-semibold">{{ __("install_guide.trouble_{$case}_symptom") }}</p>
                     <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">{{ __("install_guide.trouble_{$case}_cause") }}</p>

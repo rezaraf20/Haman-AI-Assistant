@@ -1,7 +1,7 @@
 <?php
 namespace App\Http\Controllers;
 
-use App\Models\Plan;
+use App\Models\{ChatbotTypePrice, Plan};
 use App\Support\{MailSettings, Settings};
 use Illuminate\Http\Request;
 
@@ -17,14 +17,44 @@ use Illuminate\Http\Request;
  */
 class LandingController extends Controller
 {
+    /**
+     * Cached briefly at the edge and in the browser.
+     *
+     * The page is the same for every visitor within a locale, and its only
+     * moving parts are prices an admin edits. A minute is short enough that
+     * a price change shows up while someone is still looking at the panel,
+     * and long enough that the page is not rebuilt per visitor.
+     */
+    private const CACHE_SECONDS = 60;
+
     public function index(Request $request)
     {
-        return view('landing.index', [
+        $response = response()->view('landing.index', [
             'plans'        => $this->publicPlans(),
+            'chatbotTypes' => $this->chatbotTypePrices(),
             'currency'     => (string) Settings::get('pricing.default_currency'),
             'emailSignup'  => MailSettings::isUsable(),
             'faq'          => $this->faq(),
         ]);
+
+        // Vary on the language header: the same URL serves Persian and
+        // English, and a shared cache must not hand one to the other.
+        return $response
+            ->header('Cache-Control', 'public, max-age=' . self::CACHE_SECONDS)
+            ->header('Vary', 'Accept-Language');
+    }
+
+    /**
+     * What a chatbot itself costs, as the portal charges for it.
+     *
+     * Separate from the plans above and read from the same table the panel
+     * edits, so the two cannot disagree. A plan is the monthly subscription;
+     * this is the one-off price per chatbot type, and a visitor comparing
+     * the site against a quote needs to see both.
+     */
+    private function chatbotTypePrices()
+    {
+        return ChatbotTypePrice::active()->orderBy('price_toman')->get();
     }
 
     /**

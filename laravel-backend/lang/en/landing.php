@@ -128,4 +128,9 @@ return [
     'footer_contact' => 'Contact',
     'footer_login' => 'Sign in',
     'footer_rights' => 'All rights reserved.',
+
+    // ── what a chatbot itself costs ─────────────────────
+    'types_title' => 'What a chatbot costs',
+    'types_subtitle' => 'A plan is the monthly subscription. This is the one-off price for the chatbot itself.',
+    'toman' => 'Toman',
 ];

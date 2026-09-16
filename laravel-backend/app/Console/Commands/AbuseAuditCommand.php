@@ -38,6 +38,8 @@ class AbuseAuditCommand extends Command
      * none      — reads or cheap writes
      */
     private const COSTS = [
+        'robots.txt'                                  => ['none', 'Static text, built from a constant list'],
+        'sitemap.xml'                                 => ['none', 'Static XML, built from a constant list'],
         'api/v1/auth/register'                        => ['db-write', 'Creates a tenant AND a Postgres schema full of tables'],
         'api/v1/auth/login'                           => ['none', 'Password check; brute-force target rather than a cost'],
         'api/v1/wp-plugin/latest-version'             => ['none', 'Static version string'],

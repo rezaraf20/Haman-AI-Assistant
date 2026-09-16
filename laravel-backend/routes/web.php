@@ -6,6 +6,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\LandingController;
+use App\Http\Controllers\SeoController;
 use App\Http\Controllers\LandingSignupController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Middleware\SetLocale;
@@ -17,6 +18,14 @@ use App\Services\TrendsService;
 Route::get('/', [LandingController::class, 'index'])
     ->middleware([SetLocale::class, 'throttle:public-read'])
     ->name('landing');
+
+// Served from routes, not public/, so they name whichever host the site is
+// running on -- which is about to change. Same public-read limiter as the
+// landing page itself.
+Route::get('/robots.txt', [SeoController::class, 'robots'])
+    ->middleware('throttle:public-read')->name('robots');
+Route::get('/sitemap.xml', [SeoController::class, 'sitemap'])
+    ->middleware('throttle:public-read')->name('sitemap');
 
 // Email + password signup, the second way in. OtpLogin only accepts an
 // Iranian mobile number, which is a hard stop for anyone outside Iran.

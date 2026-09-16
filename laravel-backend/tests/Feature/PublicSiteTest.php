@@ -2,7 +2,7 @@
 namespace Tests\Feature;
 
 use App\Mail\VerifyEmail;
-use App\Models\{Plan, User};
+use App\Models\{ChatbotTypePrice, Plan, User};
 use App\Support\Settings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\{Cache, Mail};
@@ -105,6 +105,128 @@ class PublicSiteTest extends TestCase
         ]);
 
         $this->get('/')->assertOk()->assertSee('ShownPlan')->assertDontSee('HiddenPlan');
+    }
+
+    public function test_the_price_of_a_chatbot_comes_from_the_table_the_panel_charges_from(): void
+    {
+        // A plan is the monthly subscription; this is the one-off price per
+        // chatbot. Both are shown, and both have to match the panel.
+        ChatbotTypePrice::create([
+            'type' => 'support', 'name' => 'SupportBotType',
+            'price_toman' => 4650000, 'is_active' => true,
+        ]);
+
+        $this->get('/')->assertOk()
+            ->assertSee('SupportBotType')
+            ->assertSee(number_format(4650000));
+    }
+
+    public function test_an_inactive_chatbot_type_is_not_advertised(): void
+    {
+        ChatbotTypePrice::create([
+            'type' => 'faq', 'name' => 'RetiredBotType',
+            'price_toman' => 999000, 'is_active' => false,
+        ]);
+
+        $this->get('/')->assertOk()->assertDontSee('RetiredBotType');
+    }
+
+    public function test_editing_a_price_in_the_panel_shows_on_the_page_at_once(): void
+    {
+        // The acceptance criterion: the page reads the tables the panel
+        // writes, with nothing in between that could hold a stale number.
+        $plan = $this->publishedPlan(['name' => 'LivePricePlan', 'price_monthly' => 120]);
+        $type = ChatbotTypePrice::create([
+            'type' => 'sales', 'name' => 'LiveTypePrice',
+            'price_toman' => 1000000, 'is_active' => true,
+        ]);
+
+        $this->get('/')->assertOk()
+            ->assertSee('120')
+            ->assertSee(number_format(1000000));
+
+        $plan->update(['price_monthly' => 340]);
+        $type->update(['price_toman' => 2500000]);
+
+        $this->get('/')->assertOk()
+            ->assertSee('340')
+            ->assertSee(number_format(2500000))
+            ->assertDontSee('>120<', false);
+    }
+
+    public function test_the_page_is_cached_briefly_and_varies_on_language(): void
+    {
+        $response = $this->get('/');
+
+        // Public and short: the same for every visitor, but a price edit has
+        // to appear while the admin is still looking at the panel.
+        $this->assertStringContainsString('public', $response->headers->get('Cache-Control'));
+        $this->assertStringContainsString('max-age=60', $response->headers->get('Cache-Control'));
+        // One URL serves both languages, so a shared cache must not hand a
+        // Persian page to an English reader.
+        $this->assertStringContainsString('Accept-Language', (string) $response->headers->get('Vary'));
+    }
+
+    public function test_it_tells_a_link_preview_what_the_page_is(): void
+    {
+        $html = $this->get('/')->assertOk()->getContent();
+
+        foreach (['og:title', 'og:description', 'og:url', 'og:site_name', 'twitter:card'] as $tag) {
+            $this->assertStringContainsString($tag, $html, $tag);
+        }
+        $this->assertStringContainsString('rel="canonical"', $html);
+    }
+
+    public function test_og_locale_follows_the_rendered_language(): void
+    {
+        $this->assertStringContainsString(
+            'content="fa_IR"',
+            $this->withHeader('Accept-Language', 'fa')->get('/')->getContent(),
+        );
+        $this->assertStringContainsString(
+            'content="en_US"',
+            $this->withHeader('Accept-Language', 'en')->get('/')->getContent(),
+        );
+    }
+
+    // ── robots and sitemap ──────────────────────────────────────────────
+
+    public function test_robots_points_at_the_sitemap_and_keeps_crawlers_out_of_the_panels(): void
+    {
+        $response = $this->get('/robots.txt');
+
+        $response->assertOk();
+        $this->assertStringContainsString('text/plain', $response->headers->get('Content-Type'));
+
+        $body = $response->getContent();
+        $this->assertStringContainsString('Sitemap: ' . url('/sitemap.xml'), $body);
+        foreach (['/admin', '/portal', '/api'] as $path) {
+            $this->assertStringContainsString('Disallow: ' . $path, $body, $path);
+        }
+    }
+
+    public function test_the_sitemap_lists_the_public_page_on_this_host(): void
+    {
+        $response = $this->get('/sitemap.xml');
+
+        $response->assertOk();
+        $this->assertStringContainsString('xml', $response->headers->get('Content-Type'));
+
+        $body = $response->getContent();
+        $this->assertStringContainsString('<loc>' . url('/') . '</loc>', $body);
+        // Nothing behind a login belongs in a sitemap.
+        foreach (['/admin', '/portal'] as $path) {
+            $this->assertStringNotContainsString($path, $body, $path);
+        }
+    }
+
+    public function test_both_files_name_whichever_host_serves_them(): void
+    {
+        // They are routes rather than files in public/ precisely so that the
+        // move to the final domain needs no edit.
+        $this->assertStringContainsString(
+            url('/sitemap.xml'), $this->get('/robots.txt')->getContent()
+        );
     }
 
     public function test_the_currency_comes_from_settings(): void

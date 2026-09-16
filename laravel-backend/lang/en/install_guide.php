@@ -83,4 +83,8 @@ return [
     'trouble_secret_symptom' => '"Invalid signature", or a 403 during sync.',
     'trouble_secret_cause' => 'The secret on the site does not match the one recorded here — usually after it was regenerated and the new value was never pasted back.',
     'trouble_secret_fix' => 'Open a ticket so we can regenerate it, then paste the new value into the plugin settings. We never see the old or new value.',
+
+    'trouble_badzip_symptom' => 'WordPress refuses the zip: "The package could not be installed. No valid plugins were found." or the plugin installs into a folder with an odd name and never appears in the list.',
+    'trouble_badzip_cause' => 'The downloaded file is damaged, or the download was interrupted and saved half a file. A zip built on Windows with the wrong tool also does this: the paths inside it are separated the wrong way, so WordPress finds no plugin folder at all.',
+    'trouble_badzip_fix' => 'Download the file again from this page and do not rename it. If it still fails, check the size matches what the download shows, and install it from Plugins -> Add New -> Upload rather than by unzipping it yourself. If you did unzip it by hand, upload the folder so that haman-ai-chatbot/haman-ai-chatbot.php sits directly inside wp-content/plugins/.',
 ];

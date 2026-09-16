@@ -8,6 +8,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ __('landing.brand') }} — {{ __('landing.hero_title') }}</title>
     <meta name="description" content="{{ __('landing.hero_subtitle') }}">
+    <link rel="canonical" href="{{ url('/') }}">
+
+    {{-- What a shared link looks like in a chat app or a search result.
+         og:locale follows the rendered language, since the same URL serves
+         both. No image is declared: a broken or placeholder og:image looks
+         worse than none, and there is no brand asset for it yet.
+         TODO(business): add og:image once there is artwork to point at. --}}
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="{{ __('landing.brand') }}">
+    <meta property="og:title" content="{{ __('landing.brand') }} — {{ __('landing.hero_title') }}">
+    <meta property="og:description" content="{{ __('landing.hero_subtitle') }}">
+    <meta property="og:url" content="{{ url('/') }}">
+    <meta property="og:locale" content="{{ $rtl ? 'fa_IR' : 'en_US' }}">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="{{ __('landing.brand') }} — {{ __('landing.hero_title') }}">
+    <meta name="twitter:description" content="{{ __('landing.hero_subtitle') }}">
     <style>
         :root {
             --ink: #14181f; --muted: #5d6673; --line: #e4e7ec;
@@ -33,6 +49,10 @@
         nav { display: flex; gap: 20px; margin-inline-start: auto; align-items: center; flex-wrap: wrap; }
         nav a { color: var(--muted); font-size: .95rem; }
         nav a:hover { color: var(--ink); }
+
+        .type-list { list-style: none; margin: 14px 0 0; padding: 0; max-width: 520px; }
+        .type-list li { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+        .type-list li:last-child { border-bottom: 0; }
 
         .btn { display: inline-block; padding: 11px 20px; border-radius: 8px; font-weight: 600; font-size: .95rem; border: 1px solid transparent; cursor: pointer; }
         .btn-primary { background: var(--brand); color: #fff; }
@@ -233,7 +253,31 @@
                     </div>
                 @endforeach
             </div>
+
             <p class="muted" style="margin-top:20px;font-size:.9rem">{{ __('landing.pricing_enterprise_note') }}</p>
+        @endif
+
+        {{-- What a chatbot itself costs, read from the same table the panel
+             charges from. A plan is the monthly subscription; this is the
+             one-off per chatbot, and someone comparing the site against a
+             quote needs both or the page looks like it is hiding one.
+             Outside the plans branch above on purpose: a shop with no
+             published plan still has a price per chatbot. --}}
+        @if ($chatbotTypes->isNotEmpty())
+            <div class="types" style="margin-top:40px">
+                <h3 style="font-size:1.1rem">{{ __('landing.types_title') }}</h3>
+                <p class="muted" style="font-size:.92rem">{{ __('landing.types_subtitle') }}</p>
+                <ul class="type-list">
+                    @foreach ($chatbotTypes as $type)
+                        <li>
+                            <span>{{ $type->name }}</span>
+                            <strong>{{ number_format((int) $type->price_toman) }}
+                                <span class="muted" style="font-weight:400;font-size:.85rem">{{ __('landing.toman') }}</span>
+                            </strong>
+                        </li>
+                    @endforeach
+                </ul>
+            </div>
         @endif
     </div>
 </section>
