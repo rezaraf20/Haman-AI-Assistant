@@ -279,9 +279,15 @@ class PublicSiteTest extends TestCase
         $this->publishedPlan();
         $html = $this->get('/')->getContent();
 
+        // The visible copy, not the markup. Scanning raw HTML also scans the
+        // CSRF token in the signup form, and a random token containing "3x"
+        // failed this in CI while passing everywhere else -- a claim the page
+        // never made. Claims live in prose, so the prose is what is checked.
+        $text = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
         // No numeric performance claims, and no platform we do not support.
         foreach (['Shopify', 'Magento', 'PrestaShop', 'BigCommerce', '3x', '×۳', '٪۳۰', '30%'] as $forbidden) {
-            $this->assertStringNotContainsString($forbidden, $html, "landing page claims: {$forbidden}");
+            $this->assertStringNotContainsString($forbidden, $text, "landing page claims: {$forbidden}");
         }
     }
 
