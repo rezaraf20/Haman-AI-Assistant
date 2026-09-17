@@ -185,7 +185,7 @@ class LeadCaptureTest extends TestCase
 
         $response = $this->postJson('/api/v1/chat/message', [
             'chatbot_id' => $chatbotId, 'conversation_id' => $conversationId,
-            'message' => 'just call me sometime', 'session_id' => 'sess-1',
+            'message' => '0912123', 'session_id' => 'sess-1',
         ], ['Origin' => 'https://example.test']);
 
         $response->assertStatus(200);
@@ -198,6 +198,124 @@ class LeadCaptureTest extends TestCase
 
         $this->assertFalse($leadExists, 'A lead was created from an invalid contact string.');
         $this->assertEquals('Do you carry the XR-9000 capacitor?', $pending, 'pending_lead_question was cleared despite an invalid attempt.');
+    }
+
+    public function test_a_new_question_ends_the_ask_instead_of_looping(): void
+    {
+        // The reported conversation: the bot asked for a phone number, the
+        // visitor carried on asking things, and every message came back
+        // "that doesn't look like a valid phone number or email" because
+        // nothing ever cleared the pending state.
+        ['chatbotId' => $chatbotId, 'conversationId' => $conversationId, 'schema' => $schema] =
+            $this->makeChatbot(['lead_capture_enabled' => true]);
+        $this->fakeUnansweredResponse();
+
+        $this->postJson('/api/v1/chat/message', [
+            'chatbot_id' => $chatbotId, 'conversation_id' => $conversationId,
+            'message' => 'خدمات uiux هم ارائه می‌دید؟', 'session_id' => 'sess-1',
+        ], ['Origin' => 'https://example.test'])->assertStatus(200);
+
+        $response = $this->postJson('/api/v1/chat/message', [
+            'chatbot_id' => $chatbotId, 'conversation_id' => $conversationId,
+            'message' => 'خدماتتون چیا هست؟', 'session_id' => 'sess-1',
+        ], ['Origin' => 'https://example.test']);
+
+        $response->assertStatus(200);
+        $this->assertStringNotContainsString(
+            "doesn't look like a valid",
+            (string) $response->json('data.response'),
+            'a question was answered as though it were a mistyped phone number',
+        );
+
+        DB::statement("SET search_path TO {$schema}, public");
+        $pending = DB::table('conversations')->where('id', $conversationId)->value('pending_lead_question');
+        DB::statement('SET search_path TO public');
+
+        $this->assertNull($pending, 'the conversation is still waiting for a phone number, so the loop remains');
+    }
+
+    public function test_it_asks_for_contact_once_and_not_after_every_message(): void
+    {
+        // The other half of the reported loop: with the ask re-armed on each
+        // unanswered answer, the visitor was asked for a number over and
+        // over. Once per conversation is enough; after that the ordinary
+        // fallback is the honest reply.
+        ['chatbotId' => $chatbotId, 'conversationId' => $conversationId] =
+            $this->makeChatbot(['lead_capture_enabled' => true]);
+        $this->fakeUnansweredResponse();
+
+        $first = $this->postJson('/api/v1/chat/message', [
+            'chatbot_id' => $chatbotId, 'conversation_id' => $conversationId,
+            'message' => 'خدمات uiux هم ارائه می‌دید؟', 'session_id' => 'sess-1',
+        ], ['Origin' => 'https://example.test']);
+        $this->assertStringContainsString('phone number or email', (string) $first->json('data.response'));
+
+        // Carry on asking questions rather than answering with a number.
+        $asks = 0;
+        foreach (['خدماتتون چیا هست؟', 'خدماتتون رو بگو', 'خدمات'] as $message) {
+            $response = $this->postJson('/api/v1/chat/message', [
+                'chatbot_id' => $chatbotId, 'conversation_id' => $conversationId,
+                'message' => $message, 'session_id' => 'sess-1',
+            ], ['Origin' => 'https://example.test']);
+
+            if (str_contains((string) $response->json('data.response'), 'phone number or email')) {
+                $asks++;
+            }
+        }
+
+        $this->assertSame(0, $asks, 'the visitor was asked for their number again after declining once');
+    }
+
+    public function test_every_message_from_the_reported_conversation_escapes(): void
+    {
+        // Verbatim from the transcript, in order. None of these is a phone
+        // number, so none of them should be judged as one.
+        ['chatbotId' => $chatbotId, 'conversationId' => $conversationId] =
+            $this->makeChatbot(['lead_capture_enabled' => true]);
+        $this->fakeUnansweredResponse();
+
+        $this->postJson('/api/v1/chat/message', [
+            'chatbot_id' => $chatbotId, 'conversation_id' => $conversationId,
+            'message' => 'خدمات', 'session_id' => 'sess-1',
+        ], ['Origin' => 'https://example.test'])->assertStatus(200);
+
+        foreach (['الو', 'قیمت میدی؟', 'خدماتتون رو بگو'] as $message) {
+            $response = $this->postJson('/api/v1/chat/message', [
+                'chatbot_id' => $chatbotId, 'conversation_id' => $conversationId,
+                'message' => $message, 'session_id' => 'sess-1',
+            ], ['Origin' => 'https://example.test']);
+
+            $this->assertStringNotContainsString(
+                "doesn't look like a valid",
+                (string) $response->json('data.response'),
+                "\"{$message}\" was treated as a failed contact attempt",
+            );
+        }
+    }
+
+    public function test_a_volunteered_number_is_still_captured_after_the_ask(): void
+    {
+        // The escape hatch must not cost the thing this feature is for.
+        ['chatbotId' => $chatbotId, 'conversationId' => $conversationId, 'schema' => $schema] =
+            $this->makeChatbot(['lead_capture_enabled' => true]);
+        $this->fakeUnansweredResponse();
+
+        $this->postJson('/api/v1/chat/message', [
+            'chatbot_id' => $chatbotId, 'conversation_id' => $conversationId,
+            'message' => 'Do you carry the XR-9000 capacitor?', 'session_id' => 'sess-1',
+        ], ['Origin' => 'https://example.test'])->assertStatus(200);
+
+        $this->postJson('/api/v1/chat/message', [
+            'chatbot_id' => $chatbotId, 'conversation_id' => $conversationId,
+            'message' => '09376808058', 'session_id' => 'sess-1',
+        ], ['Origin' => 'https://example.test'])->assertStatus(200);
+
+        DB::statement("SET search_path TO {$schema}, public");
+        $lead = DB::table('leads')->where('conversation_id', $conversationId)->first();
+        DB::statement('SET search_path TO public');
+
+        $this->assertNotNull($lead, 'a real phone number given after the ask was not captured');
+        $this->assertEquals('09376808058', $lead->contact);
     }
 
     public function test_lead_capture_disabled_by_default_keeps_plain_fallback(): void

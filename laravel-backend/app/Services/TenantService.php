@@ -381,6 +381,10 @@ class TenantService
         } catch (\Throwable $e) {}
         try {
             DB::statement("ALTER TABLE {$schemaName}.conversations ADD COLUMN IF NOT EXISTS pending_lead_question TEXT");
+            // Asked-once marker. Without it the bot asks for a phone number
+            // after every unanswered message, which a real visitor
+            // experienced as being nagged for their number over and over.
+            DB::statement("ALTER TABLE {$schemaName}.conversations ADD COLUMN IF NOT EXISTS lead_capture_asked_at TIMESTAMPTZ");
         } catch (\Throwable $e) {}
         try {
             DB::statement("
@@ -710,6 +714,9 @@ class TenantService
                 -- Cleared once resolved (lead captured or an invalid
                 -- attempt exhausted the flow).
                 pending_lead_question TEXT,
+                -- Set the first time this conversation is asked for contact
+                -- details, so it is never asked twice. See LeadCaptureService.
+                lead_capture_asked_at TIMESTAMPTZ,
                 -- Which flow armed the pending question, and what the
                 -- customer asked for — both have to survive to the next
                 -- turn, since that is when the lead row is written.

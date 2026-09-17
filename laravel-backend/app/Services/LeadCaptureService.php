@@ -31,6 +31,24 @@ class LeadCaptureService {
         $parsed = $this->parseContact($message);
 
         if (!$parsed) {
+            // A visitor who answers the contact request with another
+            // question has not mistyped a phone number; they have moved on.
+            // Telling them their question "doesn't look like a valid phone
+            // number" and staying armed made every later message get the
+            // same reply, because nothing here ever cleared the pending
+            // state -- a real conversation went round that loop until the
+            // visitor gave up. So: give up asking, and let the question be
+            // answered.
+            if (!$this->looksLikeContactAttempt($message)) {
+                $this->clearPending($conv);
+
+                return [
+                    'response'      => null,
+                    'finish_reason' => 'lead_capture_abandoned',
+                    'lead'          => null,
+                ];
+            }
+
             return [
                 'response'      => $texts['lead_capture_invalid'],
                 'finish_reason' => 'lead_capture_invalid',
@@ -50,12 +68,7 @@ class LeadCaptureService {
             'status'          => 'new',
         ]);
 
-        $conv->update([
-            'pending_lead_question'   => null,
-            'pending_lead_type'       => null,
-            'pending_lead_item'       => null,
-            'pending_lead_product_id' => null,
-        ]);
+        $this->clearPending($conv);
 
         // The thank-you differs by mode: promising to text someone when a
         // product is restocked is a commitment the shop can keep, and the
@@ -118,9 +131,20 @@ class LeadCaptureService {
      * is_unanswered=true and the chatbot has lead capture enabled — swaps
      * the plain fallback text for a contact-info request and arms the
      * conversation's pending_lead_question for the next turn. */
-    public function promptForContact(Conversation $conv, Chatbot $chatbot, string $question): string {
+    public function promptForContact(Conversation $conv, Chatbot $chatbot, string $question): ?string {
+        // Once per conversation. A visitor who was asked and carried on
+        // asking questions has declined; asking again after every unanswered
+        // message is what one of them described as being nagged for their
+        // number. Null means "say the ordinary fallback instead".
+        if ($conv->lead_capture_asked_at !== null) {
+            return null;
+        }
+
         $texts = array_merge(WidgetDefaults::forLanguage($chatbot->language), $chatbot->widget_config ?? []);
-        $conv->update(['pending_lead_question' => $question]);
+        $conv->update([
+            'pending_lead_question' => $question,
+            'lead_capture_asked_at' => now(),
+        ]);
         return $texts['lead_capture_prompt'];
     }
 
@@ -140,6 +164,36 @@ class LeadCaptureService {
      * is expected to be contact info — see extractContact() for scanning a
      * free-form message that merely contains one.
      */
+    /**
+     * Whether this message is someone trying to give contact details at all.
+     *
+     * Deliberately generous: anything with an "@" or a run of digits long
+     * enough to be a phone number counts as an attempt, so a genuine typo
+     * still gets the "that doesn't look right" reply and another chance.
+     * Everything else -- "خدماتتون چیه؟", "الو", "قیمت میدی؟" -- is a
+     * question, and answering it beats correcting it.
+     */
+    private function looksLikeContactAttempt(string $message): bool {
+        if (str_contains($message, '@')) {
+            return true;
+        }
+
+        $digits = preg_replace('/\D/', '', $message) ?? '';
+
+        // Shorter than this and it is a word with a number in it, not a
+        // phone number someone fumbled.
+        return mb_strlen($digits) >= 7;
+    }
+
+    private function clearPending(Conversation $conv): void {
+        $conv->update([
+            'pending_lead_question'   => null,
+            'pending_lead_type'       => null,
+            'pending_lead_item'       => null,
+            'pending_lead_product_id' => null,
+        ]);
+    }
+
     public function parseContact(string $input): ?array {
         $input = trim($input);
         if ($input === '') return null;

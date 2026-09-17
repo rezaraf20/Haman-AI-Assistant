@@ -27,9 +27,15 @@ class ChatService {
         // costs nothing.
         if ($this->leadCapture->isAwaitingContact($conv)) {
             $lead = $this->leadCapture->handleContactAttempt($conv, $chatbot, $msg);
-            $result = $this->leadResultShape($lead);
-            $this->onLeadCaptureOutcome($conv, $chatbot, $lead);
-            return $this->finish($conv, $chatbot, $tenant, $result);
+
+            // A null response means the visitor asked something new instead
+            // of giving contact details. Capture has been abandoned; fall
+            // through and answer the question like any other.
+            if ($lead['response'] !== null) {
+                $result = $this->leadResultShape($lead);
+                $this->onLeadCaptureOutcome($conv, $chatbot, $lead);
+                return $this->finish($conv, $chatbot, $tenant, $result);
+            }
         }
 
         // A customer volunteering their number/email unprompted — "ثبت کن،
@@ -84,10 +90,15 @@ class ChatService {
 
         if ($this->leadCapture->isAwaitingContact($conv)) {
             $lead = $this->leadCapture->handleContactAttempt($conv, $chatbot, $msg);
-            $onDelta($lead['response']);
-            $result = $this->leadResultShape($lead);
-            $this->onLeadCaptureOutcome($conv, $chatbot, $lead);
-            return $this->finish($conv, $chatbot, $tenant, $result);
+
+            // See the non-streaming path: a null response means this was a
+            // new question, not a contact attempt, so it gets answered.
+            if ($lead['response'] !== null) {
+                $onDelta($lead['response']);
+                $result = $this->leadResultShape($lead);
+                $this->onLeadCaptureOutcome($conv, $chatbot, $lead);
+                return $this->finish($conv, $chatbot, $tenant, $result);
+            }
         }
 
         if (($volunteered = $this->leadCaptureVolunteeredIfApplicable($conv, $chatbot, $msg, $history))) {
