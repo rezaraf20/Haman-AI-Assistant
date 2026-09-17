@@ -37,7 +37,45 @@ class WidgetDefaults {
         $merged = array_merge(self::forLanguage($chatbot->language), $chatbot->widget_config ?? []);
         if (filled($chatbot->welcome_message)) $merged['welcome_message'] = $chatbot->welcome_message;
         if (filled($chatbot->system_prompt)) $merged['system_instruction'] = $chatbot->system_prompt;
+
+        $merged['welcome_message'] = self::fillPlaceholders($merged['welcome_message'] ?? '', $chatbot, $merged);
+
         return $merged;
+    }
+
+    /**
+     * Let the greeting name the business and the assistant.
+     *
+     * A visitor opening the widget sees a greeting that says who is talking
+     * and where they are, or it says neither -- and the merchant had no way
+     * to write the first without retyping their own company name into every
+     * chatbot and keeping it in step by hand. Both names are already stored:
+     * chatbots.business_name and the widget's ai_name.
+     *
+     *   :business  the company, e.g. "هامان تک"
+     *   :name      the assistant, e.g. "هامان بات"
+     *
+     * A placeholder with nothing behind it is removed rather than printed
+     * raw, and the spacing is closed up, so a chatbot with no business_name
+     * still reads as a sentence instead of showing ":business" to a
+     * customer.
+     */
+    private static function fillPlaceholders(string $text, Chatbot $chatbot, array $merged): string {
+        if ($text === '') return $text;
+
+        $replacements = [
+            ':business' => (string) ($chatbot->business_name ?? ''),
+            ':name'     => (string) ($merged['ai_name'] ?? ''),
+        ];
+
+        $filled = strtr($text, $replacements);
+
+        // Tidy what an empty replacement left: doubled spaces, and a space
+        // stranded in front of punctuation.
+        $filled = preg_replace('/[ \t]{2,}/u', ' ', $filled);
+        $filled = preg_replace('/[ \t]+([.،,!?؟:؛])/u', '$1', $filled);
+
+        return trim($filled);
     }
 
     // Language-independent — not fa/en text, so both branches merge the same

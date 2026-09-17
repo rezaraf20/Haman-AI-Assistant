@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 from app.services import llm_provider_service, platform_settings_service
 from app.services.llm_provider_service import _redis
 from app.services.tools.registry import get_enabled_tools, to_openai_schema, Tool
+from app.services.answer_format import strip_source_labels
 from app.services.claim_guard import proven_actions, verify_claims
 from app.lang.tool_results import PHRASED_TOOLS, tool_result_phrase
 from app.services.tool_router import route
@@ -632,8 +633,11 @@ def run_tool_calling_pipeline(
             # it -- see claim_guard. A claim survives only when this same turn
             # produced the artefact behind it.
             from app.services.rag_service import _log_event, _looks_persian
+            answer, labels = strip_source_labels(message.get("content") or "")
+            if labels:
+                logger.info(f"Removed {labels} internal source label(s) for chatbot {chatbot_id}")
             answer, cut = verify_claims(
-                message.get("content") or "",
+                answer,
                 proven_actions(widget_blocks, tool_results),
                 is_fa=_looks_persian(query),
             )

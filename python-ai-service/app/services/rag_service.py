@@ -9,6 +9,7 @@ from sqlalchemy import text
 from app.core.config import settings
 from app.services import llm_provider_service
 from app.services.intent_classifier import classify_intent
+from app.services.answer_format import strip_source_labels
 from app.services.claim_guard import verify_claims
 from app.services.tool_router import is_tool_candidate
 
@@ -40,11 +41,15 @@ GROUNDING_RULES = (
     "never invent or guess one — say you don't know its exact name rather than naming "
     "any company, including anything that merely looks like a name in the context "
     "(a theme, template, or internal system label is not the business's name).\n\n"
+    "The '[Source N]' labels on the context are for you, not for the customer. "
+    "Never copy one into your reply, in any form — not '[Source 1]', not "
+    "'[Source 1, Source 4]', not 'source 1'. The customer cannot see the "
+    "numbered list they refer to, so a label tells them nothing.\n\n"
     "When a source is marked with a page number (e.g. '[Source 2] Datasheet.pdf "
     "(page 4)'), this is a technical document — for questions answered from it, name "
     "the source file and page number in your answer (e.g. 'according to Datasheet.pdf, "
-    "page 4, ...'). For this kind of question, citing exactly where the answer came "
-    "from matters as much as the answer itself.\n\n"
+    "page 4, ...'). Write it that way, in words: the file name and page are useful to "
+    "a customer, the bracketed label is not.\n\n"
     "Never invent specific capabilities, integrations, or supported third-party "
     "platforms/tools/software (e.g. claiming compatibility with a named e-commerce "
     "platform, CRM, or app) unless that exact name appears in the context — a generic "
@@ -96,10 +101,13 @@ GROUNDING_RULES_FA = (
     "اگر نام دقیق این کسب‌وکار در ادامه یا در زمینه مشخص نشده، هرگز نام هیچ شرکتی را نساز — حتی اگر "
     "چیزی در زمینه شبیه یک اسم به نظر برسد (نام یک قالب، افزونه یا برچسب داخلی سیستم، نام این "
     "کسب‌وکار نیست) — به‌جای آن صادقانه بگو نام دقیق آن را نمی‌دانی.\n\n"
+    "برچسب‌های «[Source N]» روی زمینه برای تو هستند، نه برای مشتری. هرگز هیچ‌کدام را در پاسخت "
+    "کپی نکن — نه «[Source 1]»، نه «[Source 1, Source 4]»، نه «منبع ۱». مشتری آن فهرست "
+    "شماره‌دار را نمی‌بیند، پس این برچسب برای او هیچ معنایی ندارد.\n\n"
     "اگر یک منبع شماره صفحه داشته باشد (مثلاً «[Source 2] Datasheet.pdf (page 4)»)، یعنی یک سند "
-    "فنی است — برای سوالاتی که از آن پاسخ داده می‌شود، نام فایل و شماره صفحه را در پاسخ خودت بیاور "
-    "(مثلاً «طبق Datasheet.pdf، صفحه ۴، ...»). برای این نوع سوال، ارجاع دقیق به منبع به‌اندازه‌ی "
-    "خود پاسخ اهمیت دارد.\n\n"
+    "فنی است — برای سوالاتی که از آن پاسخ داده می‌شود، نام فایل و شماره صفحه را با کلمات در پاسخت "
+    "بیاور (مثلاً «طبق Datasheet.pdf، صفحه ۴، ...»). نام فایل و صفحه برای مشتری مفید است؛ "
+    "برچسب داخل کروشه نه.\n\n"
     "هرگز قابلیت، یکپارچه‌سازی یا پلتفرم/نرم‌افزار شخص ثالثی (مثلاً ادعای سازگاری با یک پلتفرم "
     "فروشگاهی، CRM یا اپلیکیشن خاص با نام) را از خودت نساز، مگر این‌که همان نام دقیقاً در زمینه آمده "
     "باشد — جمله‌ی کلی‌ای مثل «با فروشگاه‌های آنلاین کار می‌کند» اجازه نمی‌دهد خودت اسم پلتفرم‌های "
@@ -569,7 +577,11 @@ def _strip_unproven_claims(
     Called on the paths where no tool ran at all, so the proven set is empty
     by construction and any such claim is false.
     """
-    cleaned, cut = verify_claims(text_out, (), is_fa=_looks_persian(query))
+    cleaned, labels = strip_source_labels(text_out or "")
+    if labels:
+        logger.info(f"Removed {labels} internal source label(s) from an answer for chatbot {chatbot_id}")
+
+    cleaned, cut = verify_claims(cleaned, (), is_fa=_looks_persian(query))
     if cut:
         logger.warning(f"Unproven claim(s) removed for chatbot {chatbot_id}: {sorted(set(cut))}")
         _log_event(db, conversation_id, chatbot_id, "unproven_claim_removed", {
