@@ -102,10 +102,18 @@ services:
     environment:
       POSTGRES_DB: haman_saas
       POSTGRES_USER: haman_user
-      POSTGRES_PASSWORD: HamanSecret2025
+      # ${VAR:?message} makes compose refuse to start when the variable is
+      # missing or empty, rather than quietly bringing the database up with
+      # no password at all. An empty password is worse than a leaked one.
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required - copy .env.example to .env and fill it in}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports: ["5432:5432"]
+    # Bound to loopback, not every interface. Nothing outside Docker needs
+    # this: every service reaches the database as "postgres" on haman_net.
+    # Published on 0.0.0.0 it was reachable from the public internet, which
+    # is what turned a password in the repository into remote access to the
+    # database. Admin access goes through an SSH tunnel instead.
+    ports: ["127.0.0.1:5432:5432"]
     networks: [haman_net]
     healthcheck:
       test: ["CMD-SHELL","pg_isready -U haman_user -d haman_saas"]
@@ -117,12 +125,19 @@ services:
   redis:
     image: redis:7.2-alpine
     container_name: haman_redis
-    command: redis-server --requirepass RedisHaman2025 --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required - copy .env.example to .env and fill it in} --maxmemory 256mb --maxmemory-policy allkeys-lru
+    # The healthcheck below runs inside the container and needs the password
+    # too. Passed as an environment variable so it is not repeated as a
+    # literal in two places, which is how the old one stayed wrong after the
+    # rename.
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required - copy .env.example to .env and fill it in}
     volumes: [redis_data:/data]
-    ports: ["6379:6379"]
+    # Loopback only, for the same reason as the database above.
+    ports: ["127.0.0.1:6379:6379"]
     networks: [haman_net]
     healthcheck:
-      test: ["CMD","redis-cli","-a","RedisHaman2025","ping"]
+      test: ["CMD-SHELL","redis-cli -a \"$$REDIS_PASSWORD\" ping"]
       interval: 10s
       timeout: 5s
       retries: 5

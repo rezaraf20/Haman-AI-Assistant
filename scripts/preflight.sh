@@ -72,6 +72,12 @@ if ! php laravel-backend/scripts/check-plugin-download.php; then
     exit 1
 fi
 
+echo "== Preflight: no hardcoded credentials in tracked files =="
+if ! bash scripts/check-secrets.sh; then
+    echo "FAIL: a credential is committed. Rotate it, then move it to an env var."
+    exit 1
+fi
+
 echo "== Preflight: the advertised plugin version matches the shipped one =="
 if ! php laravel-backend/scripts/check-plugin-version.php; then
     echo "FAIL: customers would not be told about the plugin version we ship."
