@@ -483,6 +483,30 @@ class Settings extends Page implements HasForms
             return $result['status'] ?? __('settings.health_ok');
         });
 
+        // Read off the wire rather than from the certificate files, because
+        // the failure worth catching is a renewal that wrote a new file and
+        // never got Apache to serve it. See CertificateExpiry.
+        $checks['certificates'] = $this->check(function () {
+            $certs = \App\Support\CertificateExpiry::all();
+
+            if (!$certs) throw new \RuntimeException(__('settings.health_unreachable'));
+
+            $problems = array_filter($certs, fn ($c) => !$c['ok']);
+
+            if ($problems) {
+                throw new \RuntimeException(implode(' · ', array_map(
+                    fn ($c) => $c['error']
+                        ? "{$c['host']}: {$c['error']}"
+                        : __('settings.cert_days_short', ['host' => $c['host'], 'days' => $c['days']]),
+                    $problems,
+                )));
+            }
+
+            $soonest = min(array_column($certs, 'days'));
+
+            return __('settings.cert_all_valid', ['count' => count($certs), 'days' => $soonest]);
+        });
+
         return $checks;
     }
 

@@ -47,3 +47,8 @@ Schedule::command('haman:send-notification-digests')->dailyAt('08:00');
 // opening the portal in the morning sees suggestions consistent with the
 // numbers on the Trends page.
 Schedule::command('haman:generate-suggestions')->dailyAt('04:00');
+
+// Certificates expire on a schedule rather than in response to anything, so
+// the only way to find a renewal that stopped working is to look. Early, so a
+// warning is waiting at the start of the day rather than arriving during it.
+Schedule::command('haman:check-certificates')->dailyAt('06:15');
