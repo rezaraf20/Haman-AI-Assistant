@@ -56,7 +56,7 @@ class PublicSiteTest extends TestCase
      * test that skips the middleware would not notice if the route ever left
      * the web group.
      */
-    private function submitSignup(string $email, string $name = 'A')
+    private function submitSignup(string $email, string $name = 'A', string $host = 'hamanai.com')
     {
         // Signup puts the new tenant on the free plan, by slug. It is seeded
         // in every real environment but not created by these tests, and its
@@ -67,7 +67,12 @@ class PublicSiteTest extends TestCase
             'is_public' => false, 'sort_order' => 0,
         ]);
 
-        return $this->withSession(['_token' => 'test-token'])->post('/signup', [
+        // An explicit host, because where signup redirects to now depends on
+        // it: from a hamanai.com host it hands the new account to the panel
+        // host, and the assertions below say so. Left relative, this test
+        // would read APP_URL instead -- passing in CI, where it is unset, and
+        // failing on the server, where it names the landing domain.
+        return $this->withSession(['_token' => 'test-token'])->post("https://{$host}/signup", [
             '_token' => 'test-token',
             'name' => $name, 'email' => $email,
             'password' => 'password123', 'password_confirmation' => 'password123',
@@ -326,7 +331,7 @@ class PublicSiteTest extends TestCase
         $this->configureSmtp();
         Mail::fake();
 
-        $this->submitSignup('new@example.test', 'New Shop')->assertRedirect('/portal');
+        $this->submitSignup('new@example.test', 'New Shop')->assertRedirect('https://app.hamanai.com/portal');
 
         $user = User::where('email', 'new@example.test')->first();
 
@@ -374,14 +379,27 @@ class PublicSiteTest extends TestCase
         $this->assertNull($user->fresh()->email_verified_at);
     }
 
+    public function test_signup_from_the_permanent_api_host_stays_on_that_host(): void
+    {
+        // api.arshanweb.ir is a different registrable domain, so its session
+        // cookie cannot follow a visitor to app.hamanai.com. Sending them
+        // there would land them on a login page having just chosen a
+        // password. That host stays self-contained.
+        $this->configureSmtp();
+        Mail::fake();
+
+        $this->submitSignup('old-host@example.test', 'Old Host', 'api.arshanweb.ir')
+            ->assertRedirect('https://api.arshanweb.ir/portal');
+    }
+
     public function test_signup_stops_accepting_once_the_daily_limit_is_reached(): void
     {
         $this->configureSmtp();
         Mail::fake();
         Settings::set('limits.register_per_ip_per_day', 2);
 
-        $this->submitSignup('one@example.test')->assertRedirect('/portal');
-        $this->submitSignup('two@example.test')->assertRedirect('/portal');
+        $this->submitSignup('one@example.test')->assertRedirect('https://app.hamanai.com/portal');
+        $this->submitSignup('two@example.test')->assertRedirect('https://app.hamanai.com/portal');
 
         // Signup creates a tenant AND a Postgres schema, so it carries the
         // same daily limiter the API's register does.
