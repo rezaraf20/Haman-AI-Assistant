@@ -8,7 +8,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ __('landing.brand') }} — {{ __('landing.hero_title') }}</title>
     <meta name="description" content="{{ __('landing.hero_subtitle') }}">
-    <link rel="canonical" href="{{ url('/') }}">
+    <link rel="canonical" href="{{ \App\Support\BrandDomains::landingUrl('/') }}">
 
     {{-- What a shared link looks like in a chat app or a search result.
          og:locale follows the rendered language, since the same URL serves
@@ -21,9 +21,9 @@
     <meta property="og:site_name" content="{{ __('landing.brand') }}">
     <meta property="og:title" content="{{ __('landing.brand') }} — {{ __('landing.hero_title') }}">
     <meta property="og:description" content="{{ __('landing.hero_subtitle') }}">
-    <meta property="og:url" content="{{ url('/') }}">
+    <meta property="og:url" content="{{ \App\Support\BrandDomains::landingUrl('/') }}">
     <meta property="og:locale" content="{{ $rtl ? 'fa_IR' : 'en_US' }}">
-    <meta property="og:image" content="{{ url('/og/og-image.png') }}">
+    <meta property="og:image" content="{{ \App\Support\BrandDomains::landingUrl('/og/og-image.png') }}">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta property="og:image:alt" content="{{ __('landing.brand') }} — {{ __('landing.hero_title') }}">
@@ -125,7 +125,7 @@
             <a href="#reports">{{ __('landing.nav_reports') }}</a>
             <a href="#pricing">{{ __('landing.nav_pricing') }}</a>
             <a href="#faq">{{ __('landing.nav_faq') }}</a>
-            <a href="{{ url('/portal/login') }}">{{ __('landing.nav_login') }}</a>
+            <a href="{{ \App\Support\BrandDomains::appUrl('/portal/login') }}">{{ __('landing.nav_login') }}</a>
             <a class="btn btn-primary" href="#signup">{{ __('landing.nav_cta') }}</a>
         </nav>
     </div>
@@ -306,7 +306,7 @@
                  account has to be verifiable. Shown as unavailable with the
                  reason, rather than failing after the form is submitted. --}}
             <p class="notice">{{ __('landing.signup_email_disabled') }}</p>
-            <p><a class="btn btn-primary" href="{{ url('/portal/login?method=phone') }}">{{ __('landing.signup_phone_alternative') }}</a></p>
+            <p><a class="btn btn-primary" href="{{ \App\Support\BrandDomains::appUrl('/portal/login?method=phone') }}">{{ __('landing.signup_phone_alternative') }}</a></p>
         @else
             <form method="POST" action="{{ route('landing.register') }}" style="margin-top:24px">
                 @csrf
@@ -329,9 +329,9 @@
             </form>
 
             <p class="muted" style="font-size:.9rem;margin-top:16px">
-                <a href="{{ url('/portal/login?method=phone') }}">{{ __('landing.signup_phone_alternative') }}</a>
+                <a href="{{ \App\Support\BrandDomains::appUrl('/portal/login?method=phone') }}">{{ __('landing.signup_phone_alternative') }}</a>
                 &nbsp;·&nbsp;
-                <a href="{{ url('/portal/login') }}">{{ __('landing.signup_have_account') }}</a>
+                <a href="{{ \App\Support\BrandDomains::appUrl('/portal/login') }}">{{ __('landing.signup_have_account') }}</a>
             </p>
         @endif
     </div>
@@ -355,7 +355,7 @@
         <strong>{{ __('landing.brand') }}</strong>
         <span class="muted">{{ __('landing.footer_tagline') }}</span>
         <span style="margin-inline-start:auto">
-            <a href="{{ url('/portal/login') }}">{{ __('landing.footer_login') }}</a>
+            <a href="{{ \App\Support\BrandDomains::appUrl('/portal/login') }}">{{ __('landing.footer_login') }}</a>
         </span>
         <span class="muted">© {{ date('Y') }} — {{ __('landing.footer_rights') }}</span>
     </div>

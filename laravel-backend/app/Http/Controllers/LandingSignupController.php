@@ -1,6 +1,7 @@
 <?php
 namespace App\Http\Controllers;
 
+use App\Support\BrandDomains;
 use App\Mail\VerifyEmail;
 use App\Models\User;
 use App\Services\TenantService;
@@ -45,7 +46,7 @@ class LandingSignupController extends Controller
 
         Auth::guard('web')->login($user, remember: true);
 
-        return redirect('/portal')->with('landing_status', __('auth_email.verification_sent', ['email' => $user->email]));
+        return redirect(BrandDomains::appUrl('/portal'))->with('landing_status', __('auth_email.verification_sent', ['email' => $user->email]));
     }
 
     /** Signed, expiring, and tied to the user's current address. */
@@ -76,7 +77,7 @@ class LandingSignupController extends Controller
         // The hash is over the address the link was issued for, so a link
         // stops working once the address changes.
         if (!$user || !hash_equals(sha1($user->email), $hash)) {
-            return redirect('/portal')->with('landing_status', __('auth_email.verify_invalid'));
+            return redirect(BrandDomains::appUrl('/portal'))->with('landing_status', __('auth_email.verify_invalid'));
         }
 
         if (!$user->email_verified_at) {
@@ -87,7 +88,7 @@ class LandingSignupController extends Controller
             Auth::guard('web')->login($user, remember: true);
         }
 
-        return redirect('/portal')->with('landing_status', __('auth_email.verify_done'));
+        return redirect(BrandDomains::appUrl('/portal'))->with('landing_status', __('auth_email.verify_done'));
     }
 
     public function resend(Request $request)
@@ -95,7 +96,7 @@ class LandingSignupController extends Controller
         $user = $request->user();
 
         if (!$user) {
-            return redirect('/portal/login');
+            return redirect(BrandDomains::appUrl('/portal/login'));
         }
         if ($user->email_verified_at) {
             return back()->with('landing_status', __('auth_email.already_verified'));

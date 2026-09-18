@@ -1,16 +1,22 @@
 <?php
 namespace App\Http\Controllers;
 
+use App\Support\BrandDomains;
 use Illuminate\Http\Response;
 
 /**
  * robots.txt and sitemap.xml.
  *
- * Routes rather than files in public/, because both have to name the domain
- * they are served from and that domain is about to change: the site runs on
- * the API host today and moves to its own later. A static file would have to
- * be rewritten by hand at that moment, and would be wrong in the meantime on
- * whichever host it was not written for.
+ * Routes rather than files in public/, because both have to name a domain and
+ * the platform answers on four of them. A static file would name one and be
+ * wrong on the other three.
+ *
+ * Only the landing host invites indexing. The same application serves the
+ * panels on app.hamanai.com and the API on two more hostnames, and every one
+ * of them can render the landing page -- so without this, one site would be
+ * offered to search engines four times over as four sets of duplicate pages.
+ * Those hosts disallow everything instead, and the canonical link in the
+ * layout names the landing host regardless of who served the page.
  *
  * Only the public pages are listed. The panels and the API are disallowed --
  * not as a security measure, since robots.txt is only a request, but because
@@ -38,13 +44,21 @@ class SeoController extends Controller
     {
         $lines = ['User-agent: *'];
 
+        if (!BrandDomains::onLandingHost()) {
+            // A panel host or an API host. Nothing here is for a search
+            // engine, and everything here is a copy of something that is.
+            $lines[] = 'Disallow: /';
+
+            return $this->text(implode(PHP_EOL, $lines) . PHP_EOL, 'text/plain');
+        }
+
         foreach (self::DISALLOWED as $path) {
             $lines[] = 'Disallow: ' . $path;
         }
 
         $lines[] = 'Allow: /$';
         $lines[] = '';
-        $lines[] = 'Sitemap: ' . url('/sitemap.xml');
+        $lines[] = 'Sitemap: ' . BrandDomains::landingUrl('/sitemap.xml');
 
         return $this->text(implode("\n", $lines) . "\n", 'text/plain');
     }
@@ -56,7 +70,7 @@ class SeoController extends Controller
 
         foreach (self::PUBLIC_PATHS as $path => $frequency) {
             $xml[] = '  <url>';
-            $xml[] = '    <loc>' . e(url($path)) . '</loc>';
+            $xml[] = '    <loc>' . e(BrandDomains::landingUrl($path)) . '</loc>';
             $xml[] = '    <changefreq>' . $frequency . '</changefreq>';
             $xml[] = '  </url>';
         }

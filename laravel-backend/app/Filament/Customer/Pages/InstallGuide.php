@@ -1,6 +1,7 @@
 <?php
 namespace App\Filament\Customer\Pages;
 
+use App\Support\BrandDomains;
 use App\Models\ApiKey;
 use App\Models\ChatbotIndexEntry;
 use App\Support\CustomerOnboarding;
@@ -99,8 +100,19 @@ class InstallGuide extends Page
         return url('/downloads/haman-ai-chatbot.zip');
     }
 
+    /**
+     * The API address the customer pastes into their own site.
+     *
+     * Not derived from app.url, which follows whichever hostname the panel
+     * was opened on -- a customer who reached the panel through
+     * app.hamanai.com would otherwise be handed app.hamanai.com as their API
+     * base, which is not the address this platform wants embedded in other
+     * people's websites for the next several years. It comes from
+     * haman.domains.api_public instead, a value that changes deliberately and
+     * on its own schedule.
+     */
     public function apiBaseUrl(): string
     {
-        return rtrim(config('app.url'), '/') . '/api/v1';
+        return BrandDomains::publicApiUrl('/api/v1');
     }
 }

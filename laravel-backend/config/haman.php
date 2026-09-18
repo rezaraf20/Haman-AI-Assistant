@@ -23,6 +23,34 @@ return [
         'default_threshold' => 0.60,
         'memory_window'     => 6,
     ],
+    // The hostnames the platform answers on. One application, four names:
+    //
+    //   landing  hamanai.com       the public site and signup
+    //   app      app.hamanai.com   the customer and admin panels
+    //   api      api.hamanai.com   the API and the chat widget
+    //   api_public                 the API address handed to customers
+    //
+    // 'api_public' is deliberately separate from 'api'. Every plugin already
+    // installed on a customer's site has api.arshanweb.ir baked into its
+    // options, that address stays live permanently, and new installs keep
+    // pointing at it until api.hamanai.com has proven itself over months of
+    // traffic. When that day comes this one value moves and nothing else does.
+    //
+    // 'session' is the cookie domain shared between the hamanai.com hosts, so
+    // that signing up on the landing page arrives at the panel already logged
+    // in. It is applied per request rather than through SESSION_DOMAIN,
+    // because a single static value would scope the cookie to .hamanai.com on
+    // every host -- including api.arshanweb.ir, whose browser would then drop
+    // the cookie and break every session-backed page it serves. See
+    // ShareSessionAcrossBrandDomains.
+    'domains' => [
+        'landing'    => env('HAMAN_DOMAIN_LANDING', 'hamanai.com'),
+        'app'        => env('HAMAN_DOMAIN_APP', 'app.hamanai.com'),
+        'api'        => env('HAMAN_DOMAIN_API', 'api.hamanai.com'),
+        'api_public' => env('HAMAN_API_PUBLIC_URL', 'https://api.arshanweb.ir'),
+        'session'    => env('HAMAN_SESSION_DOMAIN', '.hamanai.com'),
+    ],
+
     'zarinpal' => [
         'merchant_id' => env('ZARINPAL_MERCHANT_ID'),
         'sandbox'     => env('ZARINPAL_SANDBOX', true),

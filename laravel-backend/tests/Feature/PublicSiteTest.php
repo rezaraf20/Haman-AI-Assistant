@@ -230,40 +230,44 @@ class PublicSiteTest extends TestCase
 
     public function test_robots_points_at_the_sitemap_and_keeps_crawlers_out_of_the_panels(): void
     {
-        $response = $this->get('/robots.txt');
+        $response = $this->get('https://hamanai.com/robots.txt');
 
         $response->assertOk();
         $this->assertStringContainsString('text/plain', $response->headers->get('Content-Type'));
 
         $body = $response->getContent();
-        $this->assertStringContainsString('Sitemap: ' . url('/sitemap.xml'), $body);
+        $this->assertStringContainsString('Sitemap: https://hamanai.com/sitemap.xml', $body);
         foreach (['/admin', '/portal', '/api'] as $path) {
             $this->assertStringContainsString('Disallow: ' . $path, $body, $path);
         }
     }
 
-    public function test_the_sitemap_lists_the_public_page_on_this_host(): void
+    public function test_the_sitemap_lists_the_public_page(): void
     {
-        $response = $this->get('/sitemap.xml');
+        $response = $this->get('https://hamanai.com/sitemap.xml');
 
         $response->assertOk();
         $this->assertStringContainsString('xml', $response->headers->get('Content-Type'));
 
         $body = $response->getContent();
-        $this->assertStringContainsString('<loc>' . url('/') . '</loc>', $body);
+        $this->assertStringContainsString('<loc>https://hamanai.com/</loc>', $body);
         // Nothing behind a login belongs in a sitemap.
         foreach (['/admin', '/portal'] as $path) {
             $this->assertStringNotContainsString($path, $body, $path);
         }
     }
 
-    public function test_both_files_name_whichever_host_serves_them(): void
+    public function test_both_files_name_the_landing_host_not_the_one_serving_them(): void
     {
-        // They are routes rather than files in public/ precisely so that the
-        // move to the final domain needs no edit.
-        $this->assertStringContainsString(
-            url('/sitemap.xml'), $this->get('/robots.txt')->getContent()
-        );
+        // They are routes rather than files in public/ so that one deployment
+        // can answer on four hostnames. The earlier rule was that each named
+        // whichever host served it; that became wrong the moment the panels
+        // and the API got hostnames of their own, because the landing page
+        // renders on all of them and search engines would have been offered
+        // the same site four times. BrandDomainsTest covers the rest.
+        $body = $this->get('https://app.hamanai.com/robots.txt')->getContent();
+
+        $this->assertStringNotContainsString('app.hamanai.com', $body);
     }
 
     public function test_the_currency_comes_from_settings(): void

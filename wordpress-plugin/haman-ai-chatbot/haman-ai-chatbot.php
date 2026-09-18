@@ -18,6 +18,13 @@ if ( ! defined( 'ABSPATH' ) ) exit;
 define( 'HAMAN_VERSION',    '2.0.0' );
 define( 'HAMAN_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'HAMAN_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
+// The default for a fresh install. Deliberately still api.arshanweb.ir and
+// not api.hamanai.com: this string ends up in the options table of every site
+// that installs the plugin, and a site that is never updated keeps whatever
+// it was given for as long as it runs. api.arshanweb.ir is therefore kept
+// alive permanently, and the newer hostname takes over here only once it has
+// carried real traffic for months. Changing it is a one-line change on both
+// sides -- here, and haman.domains.api_public in the platform.
 define( 'HAMAN_API_BASE',   'https://api.arshanweb.ir/api/v1' );
 
 // Autoloader

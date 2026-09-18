@@ -23,6 +23,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // methods (sendCode/verifyCode/completeProfile) run through the former,
         // not the page's own initial GET request.
         $middleware->web(append: [\App\Http\Middleware\SetLocale::class]);
+        // prepend, not append: this decides the session cookie's domain, and
+        // StartSession reads that value when it starts the session. Anywhere
+        // later in the group is too late to have any effect.
+        $middleware->web(prepend: [\App\Http\Middleware\ShareSessionAcrossBrandDomains::class]);
         $middleware->alias([
             'auth.apikey'    => \App\Http\Middleware\AuthenticateTenantApiKey::class,
             'tenant.schema'  => \App\Http\Middleware\SetTenantSchema::class,
