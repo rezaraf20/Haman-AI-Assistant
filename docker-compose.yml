@@ -101,7 +101,15 @@ services:
     container_name: haman_postgres
     environment:
       POSTGRES_DB: haman_saas
-      POSTGRES_USER: haman_user
+      # hamman_user, with two m's, is not a typo and must not be "corrected".
+      # The role predates the Haman rename and was deliberately left alone:
+      # no customer and no API ever sees a role name, so renaming it buys
+      # nothing and risks the one credential every service depends on. What
+      # WAS a typo is what stood here before -- haman_user, one m -- which
+      # matches no role that exists. It is ignored on an existing volume, so
+      # nothing broke, but a fresh install would have created a role none of
+      # the .env files name, and nothing would have been able to connect.
+      POSTGRES_USER: hamman_user
       # ${VAR:?message} makes compose refuse to start when the variable is
       # missing or empty, rather than quietly bringing the database up with
       # no password at all. An empty password is worse than a leaked one.
