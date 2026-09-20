@@ -56,7 +56,11 @@ echo "  at commit $(git rev-parse --short HEAD)"
 # ── The three .env files, from .env.example ──────────────────────────
 # Real generated values, because the point is to prove the documented set of
 # variables is sufficient, not that a hand-tuned config works.
-secret() { tr -dc 'A-Za-z0-9' < /dev/urandom | head -c "${1:-32}"; }
+# The trailing "|| true" is load-bearing. Under `set -o pipefail`, tr is killed
+# by SIGPIPE the moment head has taken its bytes, and that non-zero status
+# propagates and kills the script -- silently, between the clone and the first
+# echo, which is exactly how this failed the first time it ran.
+secret() { LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom 2>/dev/null | head -c "${1:-32}" || true; }
 DB_PASS=$(secret 32)
 REDIS_PASS=$(secret 32)
 AI_SECRET=$(secret 40)
