@@ -157,12 +157,26 @@ compose exec -T postgres psql -U hamman_user -d haman_saas -t -A \
   -c "select 'v' || extversion from pg_extension where extname='vector';" 2>/dev/null | tr -d ' \r'
 echo
 
-echo -n "  landing page through nginx: "
-curl -s -o /dev/null -w '%{http_code}\n' --max-time 20 http://127.0.0.1:58080/ || echo "no response"
-echo -n "  /up: "
-curl -s -o /dev/null -w '%{http_code}\n' --max-time 20 http://127.0.0.1:58080/up || echo "no response"
-echo -n "  /portal/login: "
-curl -s -o /dev/null -w '%{http_code}\n' --max-time 20 http://127.0.0.1:58080/portal/login || echo "no response"
+# Wait for the web tier before asking it anything. The laravel entrypoint
+# caches config and routes before it starts php-fpm, which takes the better
+# part of half a minute on a cold image -- curling straight after the seeder
+# reported 502 for all three URLs and looked like a broken install when the
+# stack was merely still starting.
+echo -n "  waiting for php-fpm to accept requests"
+ready=0
+for _ in $(seq 1 45); do
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:58080/up 2>/dev/null || true)
+    if [ "$code" = "200" ]; then ready=1; break; fi
+    echo -n "."
+    sleep 2
+done
+echo
+[ "$ready" = "1" ] || echo "  WARNING: never became ready -- the codes below are a real failure, not a race"
+
+for path in / /up /portal/login; do
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "http://127.0.0.1:58080${path}" || true)
+    echo "  $path -> ${code:-no response}"
+done
 
 echo
 echo "== Done =="
