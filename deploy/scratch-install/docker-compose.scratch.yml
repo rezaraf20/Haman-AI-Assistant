@@ -1,0 +1,39 @@
+# Overrides that let a second, throwaway copy of the stack run beside the
+# real one on the same host.
+#
+# Two things in docker-compose.yml are absolute rather than per-project, so a
+# different `-p` name is not enough on its own:
+#
+#   container_name  is a host-wide name. Without overriding it, bringing this
+#                   copy up would collide with haman_laravel and friends, and
+#                   docker would refuse -- or worse, attach to them.
+#   ports           are host bindings. 8080, 5432 and 6379 are already taken
+#                   by the live stack.
+#
+# Volumes and networks are already namespaced by the project name, so this
+# copy gets its own empty postgres_data -- which is the whole point: a
+# database that has never been migrated.
+services:
+  nginx:
+    container_name: haman_scratch_nginx
+    ports: ["127.0.0.1:58080:80"]
+
+  laravel:
+    container_name: haman_scratch_laravel
+
+  horizon:
+    container_name: haman_scratch_horizon
+
+  scheduler:
+    container_name: haman_scratch_scheduler
+
+  python_ai:
+    container_name: haman_scratch_python_ai
+
+  postgres:
+    container_name: haman_scratch_postgres
+    ports: ["127.0.0.1:55432:5432"]
+
+  redis:
+    container_name: haman_scratch_redis
+    ports: ["127.0.0.1:56379:6379"]
