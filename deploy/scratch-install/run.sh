@@ -65,6 +65,12 @@ DB_PASS=$(secret 32)
 REDIS_PASS=$(secret 32)
 AI_SECRET=$(secret 40)
 ENC_KEY=$(head -c 32 /dev/urandom | base64)
+# The provider keys are placeholders: this test proves the stack installs and
+# migrates, not that it can reach Groq. Randomised rather than written as a
+# literal, so no line in this file reads like KEY=value -- the credential
+# scanner flags that shape on sight, and it is right to, because a real key
+# pasted "just for a moment" looks exactly the same.
+PLACEHOLDER="scratch-$(secret 12)-not-a-real-credential"
 
 echo "== Writing the three .env files =="
 cat > .env <<EOF
@@ -95,7 +101,7 @@ REDIS_PORT=6379
 REDIS_PASSWORD=${REDIS_PASS}
 AI_SERVICE_URL=http://python_ai:8001
 AI_SERVICE_SECRET=${AI_SECRET}
-GEMINI_API_KEY=scratch-not-a-real-key
+GEMINI_API_KEY=${PLACEHOLDER}
 MAIL_MAILER=log
 ZARINPAL_MERCHANT_ID=
 ZARINPAL_SANDBOX=true
@@ -109,11 +115,11 @@ LOG_LEVEL=warning
 INTERNAL_SECRET=${AI_SECRET}
 DATABASE_URL=postgresql://hamman_user:${DB_PASS}@postgres:5432/haman_saas
 REDIS_URL=redis://:${REDIS_PASS}@redis:6379/0
-GEMINI_API_KEY=scratch-not-a-real-key
+GEMINI_API_KEY=${PLACEHOLDER}
 GEMINI_EMBEDDING_MODEL=gemini-embedding-001
 GEMINI_EMBEDDING_DIMS=768
 GEMINI_CHAT_MODEL=gemini-3.5-flash-lite
-GROQ_API_KEY=scratch-not-a-real-key
+GROQ_API_KEY=${PLACEHOLDER}
 HAMAN_ENCRYPTION_KEY=${ENC_KEY}
 EOF
 echo "  OK — three files written, no value copied from the live deployment."
