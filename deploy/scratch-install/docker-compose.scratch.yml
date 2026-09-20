@@ -8,7 +8,12 @@
 #                   copy up would collide with haman_laravel and friends, and
 #                   docker would refuse -- or worse, attach to them.
 #   ports           are host bindings. 8080, 5432 and 6379 are already taken
-#                   by the live stack.
+#                   by the live stack. Note the !override tag: compose MERGES
+#                   list-valued keys across files, so without it the service
+#                   ends up publishing both the original port and the new one,
+#                   and startup fails with "port is already allocated" --
+#                   which is exactly what happened the first time this ran.
+#                   !override needs compose v2.24+; this host runs v2.27.
 #
 # Volumes and networks are already namespaced by the project name, so this
 # copy gets its own empty postgres_data -- which is the whole point: a
@@ -16,7 +21,7 @@
 services:
   nginx:
     container_name: haman_scratch_nginx
-    ports: ["127.0.0.1:58080:80"]
+    ports: !override ["127.0.0.1:58080:80"]
 
   laravel:
     container_name: haman_scratch_laravel
@@ -32,8 +37,8 @@ services:
 
   postgres:
     container_name: haman_scratch_postgres
-    ports: ["127.0.0.1:55432:5432"]
+    ports: !override ["127.0.0.1:55432:5432"]
 
   redis:
     container_name: haman_scratch_redis
-    ports: ["127.0.0.1:56379:6379"]
+    ports: !override ["127.0.0.1:56379:6379"]
