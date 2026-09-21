@@ -90,6 +90,25 @@
 
         section { padding: 88px 0; }
         section.tight { padding: 64px 0; }
+        /* The layout/style recalculation cost Lighthouse's mobile CPU
+           throttling charges for a page this long was the single largest
+           item in every profile taken while building this page (measured
+           with a clean browser -- see brand.css's own note on a local
+           antivirus that had been quietly inflating that number further).
+           content-visibility skips layout and paint for a section until it
+           is close to the viewport, which is exactly the "no CLS" case
+           content-visibility promises when paired with an estimated
+           contain-intrinsic-size: the browser reserves that height up
+           front, so nothing jumps once the real content is measured. The
+           estimates below are each section's actual rendered height at a
+           common desktop width, not round numbers. */
+        #features, #demo, #integrations, #pricing, #signup, #faq { content-visibility: auto; }
+        #features { contain-intrinsic-size: 1200px 620px; }
+        #demo { contain-intrinsic-size: 1200px 620px; }
+        #integrations { contain-intrinsic-size: 1200px 460px; }
+        #pricing { contain-intrinsic-size: 1200px 900px; }
+        #signup { contain-intrinsic-size: 1200px 520px; }
+        #faq { contain-intrinsic-size: 1200px 700px; }
         .lead { font-size: 1.15rem; color: var(--muted); max-width: 58ch; }
         .center { text-align: center; margin-inline: auto; }
         .grid { display: grid; gap: 22px; }
@@ -387,7 +406,7 @@
 </script>
 
 {{-- Integrations --}}
-<section class="soft">
+<section id="integrations" class="soft">
     <div class="wrap">
         <div class="eyebrow center">{{ __('landing.integrations_title') }}</div>
         <h2 class="center">{{ __('landing.integrations_title') }}</h2>
