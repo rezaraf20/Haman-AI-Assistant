@@ -6,7 +6,7 @@
     $isRtl = app()->getLocale() === 'fa';
     $dir = $isRtl ? 'rtl' : 'ltr';
     $fontFamily = $isRtl ? "'Vazirmatn','Tahoma',sans-serif" : "'Inter','Segoe UI',sans-serif";
-    $primary = '#1B3A6B';
+    $primary = config('haman.brand.primary_color');
     $inputStyle = "width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #CBD5E1;border-radius:8px;font-size:14px;background:#fff;color:#0F172A;font-family:{$fontFamily};";
     $labelStyle = "display:block;font-size:13px;margin-bottom:6px;color:#334155;";
     $btnStyle = "width:100%;padding:10px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;background:{$primary};color:#ffffff;font-family:{$fontFamily};";

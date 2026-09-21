@@ -28,6 +28,10 @@ class CustomerPanelProvider extends PanelProvider {
             ->id('customer')
             ->path('portal')
             ->brandName(fn () => config('haman.brand.name') . ' — ' . __('common.customer_portal'))
+            ->brandLogo(fn () => view('partials.brand-logo', ['height' => 28]))
+            ->darkModeBrandLogo(fn () => view('partials.brand-logo', ['height' => 28, 'variant' => 'light']))
+            ->brandLogoHeight('1.75rem')
+            ->favicon('/favicon.ico')
             // No ->login() — auth is phone+SMS-OTP via the plain Livewire flow
             // at routes/web.php's /portal/login (app/Livewire/OtpLogin.php),
             // not Filament's built-in email/password login page. It still
@@ -42,11 +46,11 @@ class CustomerPanelProvider extends PanelProvider {
             // `--font-family` custom property rather than body/.fi-body's
             // font-family — Filament's compiled CSS reads fonts from that
             // variable on every utility class, not from inheritance.
+            // See AdminPanelProvider for why one self-hosted stylesheet now
+            // serves both languages instead of a link swapped by locale.
             ->renderHook(
                 PanelsRenderHook::HEAD_END,
-                fn () => new HtmlString(app()->getLocale() === 'fa'
-                    ? '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=vazirmatn:400,500,600,700"><style>:root{--font-family:"Vazirmatn"}</style>'
-                    : '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=inter:400,500,600,700"><style>:root{--font-family:"Inter"}</style>'),
+                fn () => new HtmlString('<link rel="stylesheet" href="/css/brand.css"><style>:root{--font-family:"Roboto","Vazirmatn",sans-serif}</style>'),
             )
             // App\Filament\Customer\Pages\Dashboard (extends Filament's own)
             // now lives inside the discoverPages() directory below, so it's

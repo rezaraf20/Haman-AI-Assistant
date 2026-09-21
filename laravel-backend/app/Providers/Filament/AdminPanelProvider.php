@@ -24,6 +24,10 @@ class AdminPanelProvider extends PanelProvider {
             ->id('admin')
             ->path('admin')
             ->brandName(config('haman.brand.name'))
+            ->brandLogo(fn () => view('partials.brand-logo', ['height' => 28]))
+            ->darkModeBrandLogo(fn () => view('partials.brand-logo', ['height' => 28, 'variant' => 'light']))
+            ->brandLogoHeight('1.75rem')
+            ->favicon('/favicon.ico')
             ->login()
             ->colors(['primary' => config('haman.brand.primary_color')])
             // Bell icon + dropdown in the topbar, backed by the notifications
@@ -49,11 +53,17 @@ class AdminPanelProvider extends PanelProvider {
             // 'Inter';...}</style>` block earlier in <head>. This render hook
             // runs at HEAD_END (after that block), so redefining the same
             // custom property on :root here wins by source order.
+            // brand.css carries the @font-face rules for the self-hosted
+            // Poppins/Roboto/Vazirmatn files — one stylesheet for both
+            // languages now, because font-family fallback is what splits
+            // Latin from Persian per character (see brand.css's own
+            // comment), not a link swapped by locale. Roboto first: this is
+            // Filament's general UI font, not a page of headings, so the
+            // body typeface leads and Vazirmatn is what a Persian character
+            // falls through to.
             ->renderHook(
                 PanelsRenderHook::HEAD_END,
-                fn () => new HtmlString(app()->getLocale() === 'fa'
-                    ? '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=vazirmatn:400,500,600,700"><style>:root{--font-family:"Vazirmatn"}</style>'
-                    : '<link rel="stylesheet" href="https://fonts.bunny.net/css?family=inter:400,500,600,700"><style>:root{--font-family:"Inter"}</style>'),
+                fn () => new HtmlString('<link rel="stylesheet" href="/css/brand.css"><style>:root{--font-family:"Roboto","Vazirmatn",sans-serif}</style>'),
             )
             // App\Filament\Pages\Dashboard (extends Filament's own) now lives
             // inside the discoverPages() directory below, so it's picked up

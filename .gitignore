@@ -42,3 +42,9 @@ node_modules/
 # contains what looks like a live API key, never commit it
 New Text Document.txt
 VECTOR_DIM_PATCH.txt
+
+# Local scratch space used to build and visually check the brand assets
+# (Playwright screenshots, draft SVGs, downloaded font sources) — the
+# finished files it produced live under laravel-backend/{resources,public}/,
+# this directory is the workbench, not a deliverable.
+.tools/

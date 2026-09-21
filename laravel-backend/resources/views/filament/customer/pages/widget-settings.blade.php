@@ -1,6 +1,6 @@
 @php
     $d = $this->data;
-    $color = $d['primary_color'] ?? '#1B3A6B';
+    $color = $d['primary_color'] ?? config('haman.brand.primary_color');
     $position = $d['position'] ?? 'bottom-right';
 @endphp
 <x-filament-panels::page>

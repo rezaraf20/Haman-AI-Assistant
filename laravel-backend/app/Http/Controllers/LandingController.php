@@ -31,6 +31,7 @@ class LandingController extends Controller
     {
         $response = response()->view('landing.index', [
             'plans'        => $this->publicPlans(),
+            'popularSlug'  => (string) Settings::get('pricing.popular_plan_slug'),
             'chatbotTypes' => $this->chatbotTypePrices(),
             'currency'     => (string) Settings::get('pricing.default_currency'),
             'emailSignup'  => MailSettings::isUsable(),

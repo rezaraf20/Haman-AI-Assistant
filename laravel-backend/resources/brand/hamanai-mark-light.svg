@@ -1,0 +1,27 @@
+<!--
+  Same mark, solid white: for a dark background where the full gradient
+  would fight the surface rather than sit on it (dark-mode nav, the gradient
+  CTA band's own logo mention, a dark footer). Not a lighter gradient: a flat
+  white keeps it legible at the small sizes this variant is actually used
+  at, where a second gradient would just look muddy.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 112 131" role="img" aria-label="Haman AI">
+  <path d="M 44 9 L 11 34 L 11 116 C 11 120, 13 122, 17 121
+           C 26 112, 39 98, 46 84 L 46 40 C 46 30, 45 18, 44 9 Z"
+        fill="#FFFFFF"/>
+  <path d="M 68 9 L 101 34 L 101 116 C 101 120, 99 122, 95 121
+           C 86 112, 73 98, 66 84 L 66 40 C 66 30, 67 18, 68 9 Z"
+        fill="#FFFFFF" fill-opacity="0.82"/>
+
+  <path d="M 27 47 h 58 a 15 15 0 0 1 15 15 v 5 a 15 15 0 0 1 -15 15 h -33
+           q -9 7, -13 7 q -3 0, -2 -3 q 1 -2, 2 -4 h -12
+           a 15 15 0 0 1 -15 -15 v -5 a 15 15 0 0 1 15 -15 Z"
+        fill="none" stroke="#001030" stroke-width="5.5"/>
+  <path d="M 27 47 h 58 a 15 15 0 0 1 15 15 v 5 a 15 15 0 0 1 -15 15 h -33
+           q -9 7, -13 7 q -3 0, -2 -3 q 1 -2, 2 -4 h -12
+           a 15 15 0 0 1 -15 -15 v -5 a 15 15 0 0 1 15 -15 Z"
+        fill="#001030"/>
+  <circle cx="46" cy="62" r="3.2" fill="#fff"/>
+  <circle cx="56" cy="62" r="3.2" fill="#fff"/>
+  <circle cx="66" cy="62" r="3.2" fill="#fff"/>
+</svg>

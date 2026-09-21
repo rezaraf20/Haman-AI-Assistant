@@ -1,0 +1,83 @@
+/*
+ * Haman AI brand tokens: colors, gradient, and typefaces.
+ *
+ * Every color used anywhere in the public site or the panels should read
+ * one of these variables rather than a literal hex value — that is what
+ * keeps a future palette change a one-file edit instead of a grep-and-hope.
+ * The five values below were sampled directly from resources/brand/
+ * hamanai-logo-source.png and cross-checked against the reference file
+ * (darkest wordmark pixel #000212, brightest mark blue #06C5FD, tagline
+ * gray averaging #6F7C98) before being rounded to the values below.
+ *
+ * Self-hosted, not linked from Google Fonts or fonts.bunny.net: this
+ * platform is used from Iran, where a CDN being unreachable is routine, not
+ * an edge case, and a font request that hangs is worse than a font that
+ * never arrives at all -- the page waits on it instead of falling straight
+ * back to the next stack entry.
+ *
+ * Font stack order does the language split, not unicode-range: Poppins and
+ * Roboto carry no Persian glyphs, so a Persian character in a Latin-first
+ * stack falls through to Vazirmatn automatically, per character, exactly as
+ * a Latin word inside a Persian sentence falls through to Poppins/Roboto.
+ * One stack, both directions, no server-side or template-side branching on
+ * language.
+ */
+
+:root {
+    --brand-navy: #001030;
+    --brand-blue: #0098F8;
+    --brand-indigo: #4870F8;
+    --brand-violet: #7050F8;
+    --brand-muted: #707898;
+    --brand-gradient: linear-gradient(135deg, #0098F8, #4870F8, #7050F8);
+
+    /* Poppins only carries 500/600/700 here -- nothing in this design sets
+       body text in Poppins, and a 400 weight would be dead bytes. */
+    --font-heading: 'Poppins', 'Vazirmatn', sans-serif;
+    --font-body: 'Roboto', 'Vazirmatn', sans-serif;
+}
+
+@font-face {
+    font-family: 'Poppins';
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url('/fonts/poppins-500.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Poppins';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('/fonts/poppins-600.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Poppins';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('/fonts/poppins-700.woff2') format('woff2');
+}
+
+/* One variable-font file serving the whole weight axis, exactly as Google's
+   own CSS does for this Roboto build -- there is no separate 400/500/700
+   file to fetch three times over. */
+@font-face {
+    font-family: 'Roboto';
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url('/fonts/roboto-variable.woff2') format('woff2-variations'), url('/fonts/roboto-variable.woff2') format('woff2');
+}
+
+/* Same idea for Vazirmatn -- rastikerdar/vazirmatn ships a single variable
+   file, the same one render-og-image.sh already fetches for the link-preview
+   card, just self-hosted here for the page itself instead of a one-off
+   render container. */
+@font-face {
+    font-family: 'Vazirmatn';
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url('/fonts/vazirmatn-variable.woff2') format('woff2-variations'), url('/fonts/vazirmatn-variable.woff2') format('woff2');
+}

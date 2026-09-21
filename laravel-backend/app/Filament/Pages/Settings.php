@@ -1,7 +1,7 @@
 <?php
 namespace App\Filament\Pages;
 
-use App\Models\LlmProviderProfile;
+use App\Models\{LlmProviderProfile, Plan};
 use App\Services\Payments\PaymentGatewayManager;
 use App\Support\{MailSettings, PlatformAccess, PlatformActivity, Settings as Config, SettingsRegistry};
 use Filament\Forms\Components\{Actions, Grid, Placeholder, Section, Select, Tabs, TextInput, Toggle};
@@ -190,6 +190,24 @@ class Settings extends Page implements HasForms
                     $this->field('pricing.default_margin_multiplier'),
                     $this->field('pricing.embedding_cost_per_1m_toman'),
                 ])->columns(3),
+
+            Section::make(__('settings.pricing_popular_plan'))
+                ->description(__('settings.pricing_popular_plan_desc'))
+                ->schema([
+                    // Not $this->field(): the choices are published plans, a
+                    // dynamic list of rows, not the fixed enum that helper's
+                    // 'select' branch expects. Same submitted field name
+                    // (pricing__popular_plan_slug) though, so save() — which
+                    // just walks SettingsRegistry keys generically — picks
+                    // this up with no changes of its own.
+                    Select::make($this->fieldName('pricing.popular_plan_slug'))
+                        ->label(__('settings.field_pricing_popular_plan_slug'))
+                        ->options(fn () => Plan::where('is_public', true)
+                            ->orderBy('sort_order')
+                            ->pluck('name', 'slug'))
+                        ->placeholder(__('settings.pricing_popular_plan_none'))
+                        ->native(false),
+                ]),
 
             // Token prices live on each LLM profile and are edited there.
             // Shown here read-only because "what does a million tokens cost"

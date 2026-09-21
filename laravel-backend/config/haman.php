@@ -57,14 +57,21 @@ return [
     ],
     // Single source of truth for the brand identity — previously '#1B3A6B'
     // was hardcoded separately in AdminPanelProvider, CustomerPanelProvider,
-    // and WidgetDefaults::common() (the chat widget's own default), and the
-    // admin panel's brandName() said "Haman AI" while the actual product/
-    // domain/chat-widget branding is "HamanTech" / hamantech.ir — one name,
-    // one color, read from here everywhere.
+    // and WidgetDefaults::common() (the chat widget's own default). One
+    // name, one color, read from here everywhere.
+    //
+    // "Haman AI" and the hamanai.com domain replaced "HamanTech"/
+    // hamantech.ir once a real logo and palette existed to design around —
+    // see resources/brand/ for the source file and public/css/brand.css for
+    // the full --brand-* token set this single color is one entry from.
+    // primary_color is the mark's brightest gradient stop (#0098F8), used
+    // as-is rather than the gradient itself: Filament's colors() and the
+    // chat widget's primary_color both expect one hex value they can derive
+    // a shade scale from, not a gradient.
     'brand' => [
-        'name'          => 'HamanTech',
-        'url'           => 'https://hamantech.ir',
-        'primary_color' => '#1B3A6B',
+        'name'          => 'Haman AI',
+        'url'           => 'https://hamanai.com',
+        'primary_color' => '#0098F8',
     ],
     // What the WordPress plugin's Advanced tab compares its own HAMAN_VERSION
     // against to show an "update available" notice — bump this by hand

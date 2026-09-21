@@ -155,6 +155,14 @@ class SettingsRegistry
             'pricing.default_margin_multiplier' => [
                 'tab' => 'pricing', 'group' => 'cost', 'type' => 'float', 'default' => 1.5,
             ],
+            // Which published plan the landing page marks "Popular". A slug,
+            // not a select with fixed options here — the choices are plans,
+            // which are dynamic rows, not an enum this registry can list
+            // ahead of time. Settings.php builds the actual dropdown itself
+            // and just writes to this same field name. Empty means none.
+            'pricing.popular_plan_slug' => [
+                'tab' => 'pricing', 'group' => 'currency', 'type' => 'string', 'default' => '',
+            ],
 
             // ── Tab 5: limits ────────────────────────────────────────────
             // Defaults below are the values these were hardcoded to before

@@ -3,59 +3,75 @@
   The link preview card, 1200x630 (the size Telegram, WhatsApp, X and
   Facebook all crop to).
 
-  Source of truth for laravel-backend/public/og/og-image.png. Edit this file,
-  then re-render with scripts/render-og-image.sh — the PNG is committed
-  because it has to be served, but it is generated, not hand-made.
+  Source of truth for laravel-backend/public/og/og-image.png. Edit this
+  file, then re-render with scripts/render-og-image.sh; the PNG is
+  committed because it has to be served, but it is generated, not
+  hand-made.
 
-  Persian, because that is who reads the site; the Latin wordmark carries the
-  brand for everyone else. The copy is the same promise the page opens with,
-  shortened to what stays readable at thumbnail size.
+  Persian, because that is who reads the site; the Latin wordmark carries
+  the brand for everyone else. The copy is the same promise landing.
+  hero_title/hero_subtitle open with, shortened to what stays readable at
+  thumbnail size — keep the two in step by hand, since this is a rendered
+  PNG and cannot read the lang file at request time the way the page does.
 
-  TODO(design): replace with real artwork when there is a brand identity.
-  Until then this is deliberately plain — a flat card with the brand colour
-  reads better in a chat app than a stock illustration.
+  RTL note, kept from the previous version of this file because it cost
+  real time to get right once already: direction="rtl" makes text-anchor
+  "start" mean the visual right edge, not the left. Every Persian line below
+  anchors "start" at x=1104, which is deliberate: with direction="rtl" that
+  puts the text's right edge at x=1104 and lets it grow leftward, away from
+  the brand bar on the right — exactly what a right-to-left card needs. Do
+  not "simplify" this to text-anchor="end" while assuming direction="ltr";
+  that reads correctly in an editor's default preview and wrong in every
+  real renderer.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <defs>
-    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#1f6feb"/>
-      <stop offset="100%" stop-color="#1552b8"/>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0098F8"/>
+      <stop offset="50%" stop-color="#4870F8"/>
+      <stop offset="100%" stop-color="#7050F8"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="0" y1="0" x2="112" y2="131" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0098F8"/>
+      <stop offset="0.5" stop-color="#4870F8"/>
+      <stop offset="1" stop-color="#7050F8"/>
+    </linearGradient>
+    <linearGradient id="bubble" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0098F8"/>
+      <stop offset="1" stop-color="#4870F8"/>
     </linearGradient>
   </defs>
 
-  <!-- Card -->
   <rect width="1200" height="630" fill="#ffffff"/>
 
   <!-- Brand bar down the inline-start edge. Right side, because the card
        reads right-to-left like the page it represents. -->
-  <rect x="1160" y="0" width="40" height="630" fill="url(#accent)"/>
+  <rect x="1160" y="0" width="40" height="630" fill="url(#brand)"/>
 
-  <!-- Wordmark -->
-  <text x="1104" y="150"
-        font-family="Vazirmatn, DejaVu Sans, sans-serif" font-size="76" font-weight="700"
-        fill="#14181f" text-anchor="start" direction="rtl">هامان</text>
+  <!-- The mark, scaled up and placed top-right beside the wordmark. -->
+  <g transform="translate(1024, 56) scale(0.62)">
+    <path d="M 44 9 L 11 34 L 11 116 C 11 120, 13 122, 17 121 C 26 112, 39 98, 46 84 L 46 40 C 46 30, 45 18, 44 9 Z" fill="url(#mark)"/>
+    <path d="M 68 9 L 101 34 L 101 116 C 101 120, 99 122, 95 121 C 86 112, 73 98, 66 84 L 66 40 C 66 30, 67 18, 68 9 Z" fill="url(#mark)"/>
+    <path d="M 27 47 h 58 a 15 15 0 0 1 15 15 v 5 a 15 15 0 0 1 -15 15 h -33 q -9 7, -13 7 q -3 0, -2 -3 q 1 -2, 2 -4 h -12 a 15 15 0 0 1 -15 -15 v -5 a 15 15 0 0 1 15 -15 Z" fill="none" stroke="#FFFFFF" stroke-width="8"/>
+    <path d="M 27 47 h 58 a 15 15 0 0 1 15 15 v 5 a 15 15 0 0 1 -15 15 h -33 q -9 7, -13 7 q -3 0, -2 -3 q 1 -2, 2 -4 h -12 a 15 15 0 0 1 -15 -15 v -5 a 15 15 0 0 1 15 -15 Z" fill="url(#bubble)"/>
+    <circle cx="46" cy="62" r="4.4" fill="#fff"/>
+    <circle cx="56" cy="62" r="4.4" fill="#fff"/>
+    <circle cx="66" cy="62" r="4.4" fill="#fff"/>
+  </g>
 
-  <text x="1104" y="206"
-        font-family="DejaVu Sans, sans-serif" font-size="30" font-weight="400"
-        fill="#5d6673" text-anchor="end" letter-spacing="6">HAMAN</text>
+  <!-- Wordmark, Latin, small -->
+  <text x="1000" y="152" font-family="Poppins, DejaVu Sans, sans-serif" font-size="34" font-weight="700" fill="#001030" text-anchor="end">Haman <tspan fill="#4870F8">AI</tspan></text>
 
   <!-- Rule -->
-  <rect x="820" y="248" width="284" height="4" rx="2" fill="url(#accent)"/>
+  <rect x="820" y="184" width="284" height="4" rx="2" fill="url(#brand)"/>
 
-  <!-- The promise, in two lines so it survives being shrunk to a thumbnail -->
-  <text x="1104" y="344"
-        font-family="Vazirmatn, DejaVu Sans, sans-serif" font-size="52" font-weight="700"
-        fill="#14181f" text-anchor="start" direction="rtl">دستیار فروشگاه شما،</text>
-  <text x="1104" y="412"
-        font-family="Vazirmatn, DejaVu Sans, sans-serif" font-size="52" font-weight="700"
-        fill="#14181f" text-anchor="start" direction="rtl">که کاتالوگ خودتان را بلد است</text>
+  <!-- The promise, in two lines so it survives being shrunk to a thumbnail.
+       Same copy as landing.hero_title (fa) — see the note above. -->
+  <text x="1104" y="292" font-family="Vazirmatn, DejaVu Sans, sans-serif" font-size="52" font-weight="700" fill="#001030" text-anchor="start" direction="rtl">دستیار فروشگاه شما،</text>
+  <text x="1104" y="360" font-family="Vazirmatn, DejaVu Sans, sans-serif" font-size="52" font-weight="700" fill="#001030" text-anchor="start" direction="rtl">که کاتالوگ خودتان را بلد است</text>
 
-  <text x="1104" y="492"
-        font-family="Vazirmatn, DejaVu Sans, sans-serif" font-size="32" font-weight="400"
-        fill="#5d6673" text-anchor="start" direction="rtl">از روی محصولات و صفحه‌های خودتان جواب می‌دهد، نه از روی حدس</text>
+  <text x="1104" y="440" font-family="Vazirmatn, DejaVu Sans, sans-serif" font-size="32" font-weight="400" fill="#707898" text-anchor="start" direction="rtl">از روی محصولات و صفحه‌های خودتان جواب می‌دهد، نه از روی حدس</text>
 
   <!-- One concrete thing it does, kept short enough to read at any size -->
-  <text x="1104" y="566"
-        font-family="Vazirmatn, DejaVu Sans, sans-serif" font-size="28" font-weight="400"
-        fill="#1f6feb" text-anchor="start" direction="rtl">افزونه‌ی ووکامرس · موجودی و قیمت زنده</text>
+  <text x="1104" y="514" font-family="Vazirmatn, DejaVu Sans, sans-serif" font-size="28" font-weight="500" fill="#0098F8" text-anchor="start" direction="rtl">افزونه‌ی ووکامرس · موجودی و قیمت زنده</text>
 </svg>

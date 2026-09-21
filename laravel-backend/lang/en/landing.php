@@ -1,64 +1,98 @@
 <?php
 
 /*
- * Draft copy for the public site.
+ * Copy for the public site.
  *
- * Rule applied throughout: no numeric claims — no multipliers, no
- * percentages, and no named integration the product does not support.
- * WooCommerce is the only one mentioned, because it is the only one that
- * actually works.
+ * Rule applied throughout: no numeric claims, no percentages, no named
+ * model, no customer count, no certification the product does not hold.
+ * WooCommerce is the only integration named, because it is the only one
+ * that actually works.
  *
  * Every TODO(business) marks a commercial decision that is still open; the
  * wording there is a placeholder.
  */
 
 return [
-    'brand' => 'Haman',
-    'nav_features' => 'Features',
-    'nav_reports' => 'Reports',
-    'nav_pricing' => 'Pricing',
-    'nav_faq' => 'FAQ',
-    'nav_login' => 'Sign in',
-    'nav_cta' => 'Get started',
+    'brand' => 'Haman AI',
+    'tagline' => 'Chat. Agents. Sales. Growth.',
 
-    // ── headline and value proposition ──────────────────────────────────
+    'nav_features' => 'Features',
+    'nav_pricing' => 'Pricing',
+    'nav_guide' => 'Guide',
+    'nav_login' => 'Sign in',
+    'nav_cta' => 'Start free',
+    'nav_lang_fa' => 'فارسی',
+    'nav_lang_en' => 'English',
+
+    // ── hero ─────────────────────────────────────────────────────────────
     'hero_title' => 'A shop assistant that knows your catalogue',
     'hero_subtitle' => 'Install one WooCommerce plugin. Your products, pages and FAQs sync across, and the assistant answers from those — not from guesswork.',
     'hero_cta' => 'Start free',
-    'hero_cta_secondary' => 'Request a demo',
+    'hero_cta_secondary' => 'See a demo',
     'hero_note' => 'Persian and English. Built for WooCommerce shops.',
 
-    // ── the three things that actually work ─────────────────────────────
-    'features_title' => 'Three things it does',
-    'features_subtitle' => 'The list is short because it only names what has been built.',
+    // Live-typing chat mockup beside the hero — a real conversation shape,
+    // not a screenshot, so it stays crisp at any width and needs no image
+    // to keep in sync with the product.
+    'hero_demo_customer' => 'Do you have this water bottle in stock?',
+    'hero_demo_bot_intro' => 'Yes — here it is:',
+    'hero_demo_product_name' => 'Rabbit Travel Mug, 650ml',
+    'hero_demo_product_price' => '165,000 Toman',
+    'hero_demo_product_stock' => 'In stock',
+    'hero_demo_add_to_cart' => 'Add to cart',
+    'hero_demo_typing' => 'Assistant is typing',
+
+    // ── six things it does ──────────────────────────────────────────────
+    'features_title' => 'What it actually does',
+    'features_subtitle' => 'The list is exact because it only names what has been built.',
 
     'feature1_title' => 'Answers from your own content',
-    'feature1_body' => 'Your products, pages and FAQs are indexed, and answers are built from them. When something is not in your content the assistant says it does not know, and that question is recorded for you as unanswered.',
+    'feature1_body' => 'Products, pages and FAQs are indexed, and answers are built from them. When something is not in your content the assistant says it does not know — it never guesses.',
 
-    'feature2_title' => 'Acts on the cart and on payment',
-    'feature2_body' => 'It reads stock and price from your site at that moment, puts a product in the cart, and creates a payment link when asked. Order status is shown only after the customer confirms with an SMS code.',
+    'feature2_title' => 'Live stock and price',
+    'feature2_body' => 'Every answer about stock or price is read from your site at that moment, not from a cached copy that can go stale.',
 
-    'feature3_title' => 'Demand reports',
-    'feature3_body' => 'What customers asked for that you do not stock, which products get compared against each other, and which questions went unanswered — drawn from real conversations on your shop.',
+    'feature3_title' => 'Comparison and recommendations',
+    'feature3_body' => 'It can weigh two products against each other and suggest one, grounded in what is actually in your catalogue.',
 
-    // ── report showcase ─────────────────────────────────────────────────
-    'reports_title' => 'What you get after the first sync',
-    'reports_subtitle' => 'Everyone has seen a chat window. This is the part that makes the difference: what your customers wanted and you did not have.',
+    'feature4_title' => 'Cart and payment link',
+    'feature4_body' => 'It can put a product in the cart and create a payment link when asked. Order status is shown only after the customer confirms with an SMS code.',
 
-    'report_trends_title' => 'Trends',
-    'report_trends_body' => 'The topics that keep coming up, over thirty days to a year, and whether each one is rising or falling against the period before.',
+    'feature5_title' => 'Leads for what is out of stock',
+    'feature5_body' => 'When a customer asks for something you do not have, it can capture their contact so you can follow up instead of losing the interest entirely.',
 
-    'report_gap_title' => 'Demand gap',
-    'report_gap_body' => 'Things customers asked for that are not in your catalogue, beside things that were asked about but did not sell.',
+    'feature6_title' => 'Demand and trend reports',
+    'feature6_body' => 'What customers asked for that you do not stock, which products get compared, and which topics are rising — drawn from real conversations on your shop.',
 
-    'report_compared_title' => 'Most compared',
-    'report_compared_body' => 'Which two products get weighed against each other, and which of them more often reaches the cart afterwards.',
+    // ── "see how it works" tabs ─────────────────────────────────────────
+    'demo_title' => 'See how it works',
+    'demo_subtitle' => 'Three real shapes of conversation, and the report behind them.',
 
-    'report_unanswered_title' => 'Unanswered questions',
-    'report_unanswered_body' => 'Every time the assistant could not answer, with similar questions grouped together so you can see which content gap keeps repeating.',
+    'demo_tab_sales' => 'Sales conversation',
+    'demo_tab_compare' => 'Product comparison',
+    'demo_tab_gap' => 'Demand-gap report',
 
-    'report_demo_label' => 'Illustration',
-    'report_demo_note' => 'The figures shown here are sample data and only illustrate the shape of the report.',
+    'demo_sales_customer' => 'Do you carry a 12-cup French press?',
+    'demo_sales_bot' => 'We do — the Steel French Press, 12 cups, currently 890,000 Toman and in stock. Want me to add it to your cart?',
+
+    'demo_compare_customer' => 'What is the difference between the ceramic mug and the steel one?',
+    'demo_compare_bot' => 'The ceramic mug keeps a drink hot for about half as long as the steel one, and costs less. The steel one is the one people usually add to the cart after asking.',
+
+    'demo_gap_title' => 'Demand gap',
+    'demo_gap_subtitle' => 'Illustration — sample data, shown to demonstrate the shape of the report.',
+    'demo_gap_note' => 'Things customers asked for that are not in your catalogue, beside things that were asked about but did not sell.',
+
+    // ── integrations ─────────────────────────────────────────────────────
+    'integrations_title' => 'Where it runs',
+    'integrations_subtitle' => 'One platform today, done properly, rather than a dozen done halfway.',
+    'integrations_wp' => 'WordPress',
+    'integrations_woo' => 'WooCommerce',
+    'integrations_step1_title' => 'Install the plugin',
+    'integrations_step1_body' => 'Add the Haman AI plugin to your WordPress site from your panel.',
+    'integrations_step2_title' => 'Paste your key',
+    'integrations_step2_body' => 'Connect the plugin to your account with the key from your panel.',
+    'integrations_step3_title' => 'Run the first sync',
+    'integrations_step3_body' => 'Products, pages and FAQs sync across, and the assistant is live on your site.',
 
     // ── pricing ─────────────────────────────────────────────────────────
     'pricing_title' => 'Pricing',
@@ -68,6 +102,7 @@ return [
     'pricing_per_month' => 'per month',
     'pricing_cta' => 'Choose',
     'pricing_empty' => 'No plans have been published yet.',
+    'pricing_popular' => 'Popular',
     'pricing_chatbots' => ':count chatbots',
     'pricing_tokens' => ':count tokens per month',
     'pricing_documents' => ':count documents',
@@ -76,11 +111,14 @@ return [
     // "contact us".
     'pricing_enterprise_note' => 'Talk to us about larger requirements.',
 
+    // ── what a chatbot itself costs ─────────────────────────────────────
+    'types_title' => 'What a chatbot costs',
+    'types_subtitle' => 'A plan is the monthly subscription. This is the one-off price for the chatbot itself.',
+    'toman' => 'Toman',
+
     // ── form ────────────────────────────────────────────────────────────
     'signup_title' => 'Get started',
-    'signup_subtitle' => 'Create an account, or leave a message to see a demo.',
-    'signup_email_tab' => 'Create account',
-    'signup_demo_tab' => 'Request a demo',
+    'signup_subtitle' => 'Create an account, or sign in with your mobile number.',
     'signup_name' => 'Name',
     'signup_email' => 'Email',
     'signup_password' => 'Password',
@@ -89,12 +127,6 @@ return [
     'signup_phone_alternative' => 'In Iran? Sign in with your mobile number',
     'signup_email_disabled' => 'Email signup is unavailable at the moment, because outbound email has not been configured on this installation yet. Please use mobile sign-in instead.',
     'signup_have_account' => 'Already have an account? Sign in',
-
-    'demo_message' => 'What would you like to see?',
-    'demo_submit' => 'Send request',
-    'demo_sent' => 'Thanks — we have your request and will be in touch.',
-    // TODO(business): a demo request currently opens a ticket. If it should
-    // reach a sales inbox or a CRM instead, say where.
 
     // ── FAQ ─────────────────────────────────────────────────────────────
     'faq_title' => 'Frequently asked questions',
@@ -122,15 +154,17 @@ return [
     // several real installations have been timed.
     'faq_a7' => 'Install the plugin, paste your key and run the first sync. A step-by-step guide is waiting in your panel once you have an account.',
 
+    // ── final CTA band ──────────────────────────────────────────────────
+    'final_cta_title' => 'Give it your catalogue',
+    'final_cta_subtitle' => 'It only answers from what you give it — install the plugin and see what it says.',
+    'final_cta_button' => 'Start free',
+
     // ── footer ──────────────────────────────────────────────────────────
     'footer_tagline' => 'A shop assistant, grounded in your own content.',
     // TODO(business): company address, phone and legal identifier go here.
+    // TODO(business): privacy policy and terms of service do not exist yet
+    // — no footer link to either until there is real text to link to.
     'footer_contact' => 'Contact',
     'footer_login' => 'Sign in',
     'footer_rights' => 'All rights reserved.',
-
-    // ── what a chatbot itself costs ─────────────────────
-    'types_title' => 'What a chatbot costs',
-    'types_subtitle' => 'A plan is the monthly subscription. This is the one-off price for the chatbot itself.',
-    'toman' => 'Toman',
 ];

@@ -1,0 +1,52 @@
+<!--
+  The "H" mark alone: no wordmark, no tagline.
+
+  Built by measuring the alpha channel of hamanai-logo-source.png column by
+  column (see the paths' control points: the outer edge of each stroke is a
+  straight line because the source's outer edge genuinely is one, for the
+  same reason a hand trace should not invent curvature the source does not
+  have), and swept with the single brand gradient rather than per-stroke
+  tints, so this mark and every other brand-gradient element on the site
+  read as the same gradient, not two similar ones.
+
+  Self-contained: no text element, no external font reference, so it renders
+  correctly wherever it is dropped: an img src, a favicon pipeline, a
+  Filament collapsed-sidebar icon, regardless of whether that context has
+  the brand fonts loaded.
+
+  XML comments cannot contain a double hyphen, which is why this file's
+  prose avoids the em dash style used elsewhere in the codebase; the first
+  draft of this comment had exactly that and failed to parse as SVG.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 112 131" role="img" aria-label="Haman AI">
+  <defs>
+    <linearGradient id="hamanai-mark-brand" x1="0" y1="0" x2="112" y2="131" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0098F8"/>
+      <stop offset="0.5" stop-color="#4870F8"/>
+      <stop offset="1" stop-color="#7050F8"/>
+    </linearGradient>
+    <linearGradient id="hamanai-mark-bubble" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0098F8"/>
+      <stop offset="1" stop-color="#4870F8"/>
+    </linearGradient>
+  </defs>
+
+  <path d="M 44 9 L 11 34 L 11 116 C 11 120, 13 122, 17 121
+           C 26 112, 39 98, 46 84 L 46 40 C 46 30, 45 18, 44 9 Z"
+        fill="url(#hamanai-mark-brand)"/>
+  <path d="M 68 9 L 101 34 L 101 116 C 101 120, 99 122, 95 121
+           C 86 112, 73 98, 66 84 L 66 40 C 66 30, 67 18, 68 9 Z"
+        fill="url(#hamanai-mark-brand)"/>
+
+  <path d="M 27 47 h 58 a 15 15 0 0 1 15 15 v 5 a 15 15 0 0 1 -15 15 h -33
+           q -9 7, -13 7 q -3 0, -2 -3 q 1 -2, 2 -4 h -12
+           a 15 15 0 0 1 -15 -15 v -5 a 15 15 0 0 1 15 -15 Z"
+        fill="none" stroke="#FFFFFF" stroke-width="5.5"/>
+  <path d="M 27 47 h 58 a 15 15 0 0 1 15 15 v 5 a 15 15 0 0 1 -15 15 h -33
+           q -9 7, -13 7 q -3 0, -2 -3 q 1 -2, 2 -4 h -12
+           a 15 15 0 0 1 -15 -15 v -5 a 15 15 0 0 1 15 -15 Z"
+        fill="url(#hamanai-mark-bubble)"/>
+  <circle cx="46" cy="62" r="3.2" fill="#fff"/>
+  <circle cx="56" cy="62" r="3.2" fill="#fff"/>
+  <circle cx="66" cy="62" r="3.2" fill="#fff"/>
+</svg>

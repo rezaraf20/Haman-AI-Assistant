@@ -73,6 +73,17 @@ cp -a public/downloads/. /shared-assets/downloads/ 2>/dev/null || true
 mkdir -p /shared-assets/og
 cp -a public/og/. /shared-assets/og/ 2>/dev/null || true
 
+# The logo, favicon, and self-hosted brand fonts. Same reasoning throughout:
+# nginx has no view of this container's filesystem beyond this volume.
+# favicon.ico and apple-touch-icon.png sit at the site root because browsers
+# probe /favicon.ico directly, ignoring whatever a <link rel="icon"> says —
+# see the two location blocks in nginx/conf.d/api.conf that alias them.
+mkdir -p /shared-assets/brand /shared-assets/fonts
+cp -a public/brand/. /shared-assets/brand/ 2>/dev/null || true
+cp -a public/fonts/. /shared-assets/fonts/ 2>/dev/null || true
+cp -f public/favicon.ico /shared-assets/favicon.ico 2>/dev/null || true
+cp -f public/apple-touch-icon.png /shared-assets/apple-touch-icon.png 2>/dev/null || true
+
 echo "=== Haman AI Ready ==="
 
 if [ "$#" -gt 0 ]; then
