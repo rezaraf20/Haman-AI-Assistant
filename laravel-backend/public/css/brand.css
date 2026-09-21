@@ -21,6 +21,17 @@
  * a Latin word inside a Persian sentence falls through to Poppins/Roboto.
  * One stack, both directions, no server-side or template-side branching on
  * language.
+ *
+ * unicode-range IS used below, but for a different job: deciding which of
+ * these files the browser bothers to fetch at all, not which glyph renders.
+ * Without it, a Persian-only page still downloaded all three Poppins files
+ * and the 43KB Roboto file on the chance some Latin character might need
+ * them — a real, measured cost (Lighthouse's clean run, with a
+ * system-antivirus content-injection script that was polluting an earlier
+ * run excluded: mobile Performance 80, ~1.2s of the page's own style/layout
+ * time). Restricting each Latin face's unicode-range to what it actually
+ * covers lets the browser skip the fetch outright on a page with no Latin
+ * text in that weight, while the rendered glyph is identical either way.
  */
 
 :root {
@@ -37,11 +48,16 @@
     --font-body: 'Roboto', 'Vazirmatn', sans-serif;
 }
 
+/* The same Latin range Google's own Poppins/Roboto CSS ships for the
+   "latin" subset -- basic Latin, Latin-1 supplement, and the handful of
+   punctuation/currency code points outside them. Persian text is nowhere
+   in this range, so a page with none of it never fetches these files. */
 @font-face {
     font-family: 'Poppins';
     font-style: normal;
     font-weight: 500;
     font-display: swap;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
     src: url('/fonts/poppins-500.woff2') format('woff2');
 }
 @font-face {
@@ -49,6 +65,7 @@
     font-style: normal;
     font-weight: 600;
     font-display: swap;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
     src: url('/fonts/poppins-600.woff2') format('woff2');
 }
 @font-face {
@@ -56,6 +73,7 @@
     font-style: normal;
     font-weight: 700;
     font-display: swap;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
     src: url('/fonts/poppins-700.woff2') format('woff2');
 }
 
@@ -67,6 +85,7 @@
     font-style: normal;
     font-weight: 100 900;
     font-display: swap;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
     src: url('/fonts/roboto-variable.woff2') format('woff2-variations'), url('/fonts/roboto-variable.woff2') format('woff2');
 }
 
