@@ -34,3 +34,15 @@ for repo in $(docker images --format '{{.Repository}}' | grep '^hamman-platform-
         docker rmi "${repo}:${tag}" >/dev/null 2>&1 || true
     done < <(docker images --no-trunc "$repo" --format $'{{.ID}}\t{{.CreatedAt}}\t{{.Tag}}' | sort -t $'\t' -k2 -r)
 done
+
+# The common case a version-count limit alone does not cover: docker compose
+# build always overwrites the same :latest tag in place, so a routine deploy
+# never produces a second tagged version to prune -- the image :latest used
+# to point at just goes dangling (<none>:<none>) instead. `docker image
+# prune -f` is the right tool for exactly that: it only ever removes
+# untagged images with no container referencing them (a running container
+# pins its image regardless of tag -- confirmed against this host's own
+# digest-pinned, permanently-dangling pgvector/postgres image, which this
+# leaves alone), so it cannot touch anything another project has tagged or
+# is running.
+docker image prune -f >/dev/null
