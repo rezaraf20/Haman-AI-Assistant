@@ -14,6 +14,7 @@ use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use App\Http\Middleware\SetLocale;
+use App\Http\Middleware\ShareSessionAcrossBrandDomains;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Support\HtmlString;
 
@@ -79,8 +80,25 @@ class AdminPanelProvider extends PanelProvider {
                 __('panel.nav_group_support'),
                 __('panel.nav_group_infrastructure'),
             ])
+            // This panel builds its OWN middleware pipeline — it does not
+            // reuse bootstrap/app.php's 'web' group at all — which is why
+            // two fixes made there (ShareSessionAcrossBrandDomains,
+            // SetLocale's position) never reached these routes. See
+            // MiddlewareParityTest, which now fails the build if this array
+            // and the 'web' group ever drift apart again without the
+            // difference being named in its own allowlist.
             ->middleware([
-                SetLocale::class,
+                // Must run before StartSession, which reads
+                // config('session.domain') when it opens the session — same
+                // reasoning as its `prepend:` registration on the 'web'
+                // group. Without this here, every panel response set the
+                // session cookie's Domain from whatever the base config
+                // says (nothing, on this app), while /livewire/update and
+                // the plain web.php routes set it to .hamanai.com — two
+                // different Domain attributes on one cookie name is two
+                // cookies in the browser, and which one a request happens
+                // to send back is when the reported 419s came from.
+                ShareSessionAcrossBrandDomains::class,
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,
@@ -90,9 +108,23 @@ class AdminPanelProvider extends PanelProvider {
                 SubstituteBindings::class,
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
+                // Guest-only coverage: the login page never enters
+                // ->authMiddleware() below, so it needs its own locale pass
+                // here to render in the right language/direction. This runs
+                // a second time — harmlessly, app()->setLocale() is
+                // idempotent — on every authenticated request, because the
+                // authoritative pass is the one after Authenticate below.
+                SetLocale::class,
             ])
             ->authMiddleware([
                 Authenticate::class,
+                // After Authenticate, not before: SetLocale reads
+                // $request->user()->locale, and placing it here — rather
+                // than trusting the lazy session-guard resolution the copy
+                // above relies on — means it only ever sees a session
+                // AuthenticateSession has already accepted, never one that
+                // middleware is a step away from invalidating.
+                SetLocale::class,
             ]);
     }
 }

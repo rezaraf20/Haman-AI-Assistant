@@ -56,8 +56,18 @@ class Profile extends Page implements HasForms {
         // Same reasoning as the customer portal's Profile page — RTL/LTR
         // direction and Filament's own bundled translations are resolved
         // once per full request by SetLocale, not per-Livewire-component.
+        //
+        // static::getUrl(), not request()->fullUrl(): a Livewire action
+        // method runs inside the POST to /livewire/update, so request()
+        // there IS that AJAX request, not the page the component is
+        // mounted on. redirect(request()->fullUrl()) sent the browser to
+        // /livewire/update itself — a route that only accepts POST — and a
+        // plain top-level GET navigation to it is a 405. getUrl() asks
+        // Filament for this page's own route instead of reading the
+        // transport request, so it names the actual page regardless of
+        // which request happened to carry the save() call.
         if ($localeChanged) {
-            $this->redirect(request()->fullUrl(), navigate: false);
+            $this->redirect(static::getUrl(), navigate: false);
         }
     }
 }

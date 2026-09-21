@@ -14,6 +14,7 @@ use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use App\Http\Middleware\SetLocale;
+use App\Http\Middleware\ShareSessionAcrossBrandDomains;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Support\HtmlString;
 
@@ -67,8 +68,18 @@ class CustomerPanelProvider extends PanelProvider {
                 __('panel.nav_group_customer_wallet'),
                 __('panel.nav_group_customer_account'),
             ])
+            // See AdminPanelProvider for why this array exists at all
+            // (this panel builds its own pipeline, entirely separate from
+            // bootstrap/app.php's 'web' group) and MiddlewareParityTest,
+            // which fails the build if it drifts from that group again
+            // without the difference being named in its own allowlist.
             ->middleware([
-                SetLocale::class,
+                // Must run before StartSession — see AdminPanelProvider for
+                // the full reasoning. Its absence here is why /portal and
+                // /livewire/update disagreed on the session cookie's Domain
+                // attribute and a browser ended up holding two cookies
+                // under one name.
+                ShareSessionAcrossBrandDomains::class,
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,
@@ -78,9 +89,18 @@ class CustomerPanelProvider extends PanelProvider {
                 SubstituteBindings::class,
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
+                // Guest-only coverage (the OTP login page never reaches
+                // ->authMiddleware() below) — see AdminPanelProvider for why
+                // this runs a second, harmless time on authenticated
+                // requests, the first of two rather than the only one.
+                SetLocale::class,
             ])
             ->authMiddleware([
                 Authenticate::class,
+                // The authoritative pass — see AdminPanelProvider for why
+                // it has to be after Authenticate specifically, not just
+                // after StartSession.
+                SetLocale::class,
             ]);
     }
 }
