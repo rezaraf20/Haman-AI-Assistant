@@ -27,6 +27,17 @@ class LocaleAndSessionRegressionTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // StartSession attaches no cookie at all under the 'array' driver
+        // this suite runs with by default, which would make every cookie
+        // assertion below pass by finding nothing rather than by testing
+        // the real Domain-matching logic. A real driver is the point.
+        config(['session.driver' => 'file']);
+    }
+
     private function portalUser(string $locale = 'en'): User
     {
         $plan = Plan::create([
@@ -110,8 +121,10 @@ class LocaleAndSessionRegressionTest extends TestCase
 
         Livewire::test(\App\Filament\Customer\Pages\Profile::class)
             ->set('data.locale', 'fa')
-            ->set('data.name', $user->name)
+            ->set('data.first_name', 'Test')
+            ->set('data.last_name', 'User')
             ->set('data.email', $user->email)
+            ->set('data.address', 'Test address 123')
             ->call('save');
 
         $html = $this->get('https://app.hamanai.com/portal')->getContent();
@@ -126,10 +139,22 @@ class LocaleAndSessionRegressionTest extends TestCase
         $user = $this->portalUser(locale: 'en');
         $this->actingAs($user, 'web');
 
+        // static::getUrl() resolves against the currently bound request's
+        // host (Filament's Page::getUrl() is just route(), and a route with
+        // no ->domain() constraint falls back to the ambient request's
+        // root). Livewire::test() alone never binds one, so without a real
+        // request first, getUrl() would resolve against APP_URL's host
+        // (hamanai.com) instead of the app.hamanai.com this test is about —
+        // not a bug in the app, just something a real page load always
+        // provides for free and Livewire::test() does not.
+        $this->get('https://app.hamanai.com/portal');
+
         Livewire::test(\App\Filament\Customer\Pages\Profile::class)
             ->set('data.locale', 'fa')
-            ->set('data.name', $user->name)
+            ->set('data.first_name', 'Test')
+            ->set('data.last_name', 'User')
             ->set('data.email', $user->email)
+            ->set('data.address', 'Test address 123')
             ->call('save')
             ->assertRedirect('https://app.hamanai.com/portal/profile');
     }
@@ -138,6 +163,11 @@ class LocaleAndSessionRegressionTest extends TestCase
     {
         $admin = $this->admin(locale: 'en');
         $this->actingAs($admin, 'web');
+
+        // See the matching comment on the customer-profile version of this
+        // test: getUrl() needs a real request bound to app.hamanai.com
+        // first, or it falls back to APP_URL's host.
+        $this->get('https://app.hamanai.com/admin');
 
         Livewire::test(\App\Filament\Pages\Profile::class)
             ->set('data.locale', 'fa')
@@ -166,7 +196,13 @@ class LocaleAndSessionRegressionTest extends TestCase
     public function test_a_panel_route_and_a_web_route_agree_on_the_session_cookies_domain(): void
     {
         $panel = $this->sessionCookieDomain('https://app.hamanai.com/admin/login');
-        $web = $this->sessionCookieDomain('https://app.hamanai.com/livewire/update');
+        // Not /livewire/update: that route only accepts POST, so a GET to it
+        // 405s during route matching itself, before the 'web' group -- the
+        // very thing under test -- ever runs, and carries no Set-Cookie at
+        // all. /portal/login is a real GET route registered on the 'web'
+        // group in routes/web.php, which is the actual comparison this test
+        // is meant to make.
+        $web = $this->sessionCookieDomain('https://app.hamanai.com/portal/login');
 
         $this->assertSame(
             '.hamanai.com',

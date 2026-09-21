@@ -37,10 +37,22 @@ class MiddlewareParityTest extends TestCase
             . 'panel, where Filament\'s own icon system is not in use.',
         'Filament\Http\Middleware\DispatchServingFilamentEvent' => 'Filament-only: fires the event panel plugins hook into. '
             . 'Meaningless for a request that never reaches a panel.',
-        'Illuminate\Foundation\Http\Middleware\ValidateCsrfToken' => 'Not a real difference: ValidateCsrfToken is `class '
-            . 'ValidateCsrfToken extends VerifyCsrfToken {}`, a bare rename alias with no behaviour of its own. The panels list '
-            . 'VerifyCsrfToken (Laravel\'s pre-11 name) and bootstrap/app.php\'s web() helper installs ValidateCsrfToken '
-            . '(the 11+ name) under the same "web" key — same class hierarchy, same check.',
+        'Filament\Http\Middleware\Authenticate' => 'A panel-only concept, not a gap: the \'web\' group has no equivalent '
+            . 'middleware at all, because bootstrap/app.php redirects an unauthenticated web.php visitor via '
+            . 'redirectGuestsTo() at the kernel level instead of a middleware in the group array. Nothing is missing here; '
+            . 'the two approaches just live in different places.',
+        // Both sides of one alias, not two differences: ValidateCsrfToken is
+        // `class ValidateCsrfToken extends VerifyCsrfToken {}`, a bare
+        // rename with no behaviour of its own. The 'web' group carries the
+        // Laravel 11+ name (bootstrap/app.php's web() helper installs it
+        // under that name); the panels still list the pre-11 name. Same
+        // class hierarchy, same check — each entry explains why the OTHER
+        // one does not need a matching partner of its own name.
+        'Illuminate\Foundation\Http\Middleware\ValidateCsrfToken' => 'Same behaviour as the panels\' VerifyCsrfToken — see '
+            . 'that entry.',
+        'Illuminate\Foundation\Http\Middleware\VerifyCsrfToken' => 'Same behaviour as the \'web\' group\'s ValidateCsrfToken '
+            . '(ValidateCsrfToken extends VerifyCsrfToken with no changes) — the panels were built before Laravel 11 renamed '
+            . 'it and were never updated to the new name, which is fine, since both names run the identical check.',
     ];
 
     /** The middleware Laravel's own 'web' group carries. */
