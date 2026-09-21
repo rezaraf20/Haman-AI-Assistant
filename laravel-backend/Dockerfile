@@ -66,6 +66,19 @@ COPY public/downloads/ public/downloads/
 # public/og/ — the link-preview card. Generated from resources/og/og-image.svg
 # by scripts/render-og-image.sh, committed because it has to be served.
 COPY public/og/ public/og/
+# public/brand/, public/fonts/, public/css/ — the logo, favicon source and
+# self-hosted brand fonts. Same reasoning as public/og/ above: this Dockerfile
+# copies public/ narrowly on purpose, so a file placed there is invisible to
+# the running container until it has a COPY line of its own. The first
+# deploy of these files was missed for exactly that reason: create-project
+# already leaves an empty public/favicon.ico in the image, so the entrypoint's
+# `cp -f public/favicon.ico ...` "succeeded" — silently shipping a 0-byte icon
+# instead of the real one, with nothing failing to say so.
+COPY public/brand/ public/brand/
+COPY public/fonts/ public/fonts/
+COPY public/css/ public/css/
+COPY public/favicon.ico public/favicon.ico
+COPY public/apple-touch-icon.png public/apple-touch-icon.png
 # tests/ + phpunit.xml: without these the image only ever carries Laravel's
 # default create-project scaffold test, not this project's real suite — so
 # `vendor/bin/phpunit` inside a deployed/throwaway container silently proves
