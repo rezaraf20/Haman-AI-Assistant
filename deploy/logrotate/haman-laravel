@@ -1,0 +1,29 @@
+# Rotates storage/logs/laravel.log, bind-mounted from the laravel/horizon/
+# scheduler containers into ./logs on the host (see docker-compose.yml).
+# Without this it grows forever -- LOG_LEVEL=debug in production writes a
+# lot, and the file lived only inside each container's writable layer
+# before the bind mount existed, so nothing ever rotated it at all.
+#
+# One-time install, not part of any deploy script (this file only takes
+# effect once it is actually in /etc/logrotate.d/ -- copying it there is a
+# step a human runs once per host, same as the DB password rotation script):
+#
+#   sudo cp deploy/logrotate/haman-laravel /etc/logrotate.d/haman-laravel
+#
+# copytruncate, not the normal move-then-signal rotation: laravel, horizon
+# and scheduler are three separate long-running processes across three
+# containers, none of which logrotate can reach to send a reopen signal to.
+# copytruncate avoids that entirely by truncating the file Monolog already
+# has open, in place, instead of renaming it out from under those processes
+# -- the tiny gap between the copy and the truncate can lose at most the
+# handful of lines written in that instant, an acceptable trade for not
+# needing per-container signal delivery from the host.
+/opt/hamman-platform/logs/laravel.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

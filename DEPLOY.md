@@ -178,7 +178,12 @@ docker compose restart laravel
 
 # Update پروژه
 git pull
-docker compose build laravel python_ai
+# هر چهار سرویس، نه فقط laravel و python_ai: تا ۲۰۲۶-۰۹-۲۱ این خط فقط این دو
+# را build می‌کرد، و horizon/scheduler همان ایمیجی را اجرا می‌کردند که آخرین
+# بار اینجا build شده بود — که هشت روز و ۳۰ کامیت عقب بود. هیچ خطایی هم
+# نمی‌داد چون کانتینرهایشان با force-recreate عادی بالا می‌آمدند، فقط از
+# ایمیج قدیمی.
+docker compose build laravel horizon scheduler python_ai
 docker compose up -d
 docker compose exec laravel php artisan migrate --force
 docker compose exec laravel php artisan config:cache
@@ -186,6 +191,10 @@ docker compose exec laravel php artisan config:cache
 # عوض می‌شد و nginx آدرس قدیمی را کش‌کرده نگه می‌داشت، و همه‌چیز ۵۰۲ می‌شد.
 # حالا nginx مقصد را در هر درخواست دوباره resolve می‌کند (nginx/conf.d/api.conf:
 # resolver + set $upstream_laravel) پس آی‌پی تازه خودبه‌خود پیدا می‌شود.
+
+# بعد از هر دیپلوی: ایمیج‌های قدیمی‌تر از دو نسخه‌ی قبل را پاک کن، تا دوباره
+# انباشته نشوند (شرح کامل در «نگهداری دیسک» پایین‌تر همین فایل).
+bash scripts/prune-old-images.sh
 
 # Backup database — شبانه خودکار اجرا می‌شود (۰۲:۳۰) و ۰۳:۴۵ واقعاً بازیابی
 # و بررسی می‌شود. این‌ها فقط برای اجرای دستی‌اند:
@@ -206,6 +215,41 @@ docker compose exec laravel php artisan haman:verify-backup
 | Widget not showing | در WordPress: بررسی Chatbot ID + Domain whitelist در داشبورد |
 | Embeddings stuck | `docker compose logs horizon` برای مشاهده خطای job |
 | ایمیج postgres build نمی‌شود | دیگر build نمی‌شود و نباید بشود — از ایمیج رسمی `pgvector/pgvector` با digest ثابت استفاده می‌کنیم. اگر `docker compose up --build` روی postgres خطا داد، یعنی جایی `build:` برگشته؛ به docker-compose.yml نگاه کنید |
+
+---
+
+## نگهداری دیسک: لاگ‌ها و ایمیج‌های داکر (۲۰۲۶-۰۹-۲۱)
+
+دیسک سرور از انباشت بی‌رویه‌ی این سه چیز پر شده بود — ۱۰۸ ایمیج (۹.۲GB
+قابل بازیابی)، لاگ‌های JSON بدون سقف داکر، و `storage/logs/laravel.log`ی
+که هیچ‌وقت rotate نمی‌شد چون اصلاً بیرون کانتینر نبود.
+
+**لاگ‌های داکر:** هر سرویس در `docker-compose.yml` حالا
+`logging: *default-logging` دارد (`max-size: 10m`، `max-file: 3`) — کاری
+لازم نیست، از دفعه‌ی بعدی که کانتینرها بازسازی شوند خودش اعمال می‌شود.
+
+**لاگ لاراول:** `laravel`، `horizon` و `scheduler` حالا `./logs` را روی
+`storage/logs` هر سه‌شان mount می‌کنند (host bind mount، نه named volume —
+چون logrotate باید از بیرون کانتینر آن را ببیند). این نصب یک‌بار روی هاست
+لازم دارد:
+
+```bash
+sudo cp deploy/logrotate/haman-laravel /etc/logrotate.d/haman-laravel
+```
+
+بعد از آن، `logrotate` سیستم (که خودش از قبل روی این سرور فعال است — کنار
+`apache`، `chrony` در `/etc/logrotate.d/` بود) این فایل را هم روزانه اجرا
+می‌کند. توضیح کامل `copytruncate` و چرایی‌اش داخل خود آن فایل است.
+
+**پاک‌سازی ایمیج بعد از هر دیپلوی:** `scripts/prune-old-images.sh`
+(بعد از هر build، ایمیج هر سرویس را فقط به سه نسخه — در حال اجرا + دو
+قبلی — می‌رساند). `deploy/scratch-install/run.sh` هم حالا `--rmi local`
+می‌زند، نه فقط `-v`، چون قبلاً چهار ایمیج ~۶۶۰MB از هر اجرا باقی می‌ماند
+و هیچ‌وقت پاک نمی‌شد.
+
+**گزارش دیسک:** `php artisan haman:disk-report` (هم از CLI، هم در تب
+System صفحه‌ی تنظیمات پنل ادمین) فضای ایمیج/لاگ/بکاپ را با یک آستانه‌ی
+هشدار نشان می‌دهد.
 
 ---
 

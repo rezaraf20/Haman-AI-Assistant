@@ -253,6 +253,12 @@ class SettingsRegistry
             'system.retention_activity_log_months' => [
                 'tab' => 'system', 'group' => 'retention', 'type' => 'int', 'default' => 18,
             ],
+            // Read by DiskReportCommand (haman:disk-report and the System
+            // tab's disk usage card) as the point at which the filesystem
+            // reading turns into a warning, not just a number.
+            'system.disk_warn_percent' => [
+                'tab' => 'system', 'group' => 'disk', 'type' => 'int', 'default' => 85,
+            ],
             // Off-server backup destination. S3-compatible on purpose:
             // Arvan, Liara and Backblaze all speak it, so the platform is
             // not tied to one provider — and the whole point is that the

@@ -1,6 +1,7 @@
 <?php
 namespace App\Filament\Pages;
 
+use App\Console\Commands\DiskReportCommand;
 use App\Models\{LlmProviderProfile, Plan};
 use App\Services\Payments\PaymentGatewayManager;
 use App\Support\{MailSettings, PlatformAccess, PlatformActivity, Settings as Config, SettingsRegistry};
@@ -287,6 +288,16 @@ class Settings extends Page implements HasForms
                             'checks' => $this->healthChecks(),
                         ])),
                 ]),
+            Section::make(__('settings.disk_usage'))
+                ->description(__('settings.disk_usage_desc'))
+                ->schema([
+                    Placeholder::make('disk_usage')
+                        ->label('')
+                        ->content(fn () => view('filament.pages.partials.disk-usage', [
+                            'report' => $this->diskUsageReport(),
+                        ])),
+                    $this->field('system.disk_warn_percent'),
+                ]),
             Section::make(__('settings.retention'))
                 ->description(__('settings.retention_desc'))
                 ->schema([
@@ -462,6 +473,22 @@ class Settings extends Page implements HasForms
             ->status($result['ok'] ? 'success' : 'danger')
             ->persistent()
             ->send();
+    }
+
+    /**
+     * The System tab's view of haman:disk-report — same numbers, same
+     * warn-percent config, formatted for display instead of a CLI table.
+     */
+    public function diskUsageReport(): array
+    {
+        $report = DiskReportCommand::build((int) Config::get('system.disk_warn_percent', 85));
+
+        return $report + [
+            'logs_human'       => DiskReportCommand::formatBytes($report['logs_bytes']),
+            'backups_human'    => DiskReportCommand::formatBytes($report['backups_bytes']),
+            'disk_used_human'  => DiskReportCommand::formatBytes($report['disk_used']),
+            'disk_total_human' => DiskReportCommand::formatBytes($report['disk_total']),
+        ];
     }
 
     /**

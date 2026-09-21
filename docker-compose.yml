@@ -1,5 +1,16 @@
 version: '3.9'
 
+# Every service got this after the disk filled up on unrotated container logs
+# (docker's default json-file driver keeps them forever otherwise). 10m x 3
+# files per container is enough to read back a recent incident without
+# needing days of history — anything older belongs in a real log store, not
+# sitting on the container's own disk.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
 
   # Note: nginx and laravel run in separate containers with no shared filesystem
@@ -19,6 +30,7 @@ services:
     depends_on: [laravel]
     networks: [haman_net]
     restart: unless-stopped
+    logging: *default-logging
 
   laravel:
     build:
@@ -31,11 +43,24 @@ services:
       # Database dumps. Without this they live inside the container and are
       # destroyed the next time it is recreated — which is every deploy.
       - laravel_backups:/var/www/html/storage/app/backups
+      # A host bind mount, not a named volume: deploy/logrotate/haman-laravel
+      # rotates this from the HOST, and logrotate cannot see inside a
+      # container's own writable layer. laravel, horizon and scheduler all
+      # write to the one storage/logs/laravel.log path (LOG_CHANNEL=stack ->
+      # single), so all three share this same host directory rather than
+      # each getting its own -- Monolog's appends are short enough to stay
+      # atomic, and that is how multiple workers already shared one log file
+      # before this was ever split into separate containers. Not tracked in
+      # git (deploy's rsync has no --delete, so an untracked directory here
+      # survives every redeploy untouched); see DEPLOY.md for the one-time
+      # host setup this depends on.
+      - ./logs:/var/www/html/storage/logs
     depends_on:
       postgres: {condition: service_healthy}
       redis:    {condition: service_healthy}
     networks: [haman_net]
     restart: unless-stopped
+    logging: *default-logging
 
   horizon:
     build:
@@ -44,9 +69,12 @@ services:
     container_name: haman_horizon
     command: php artisan horizon
     env_file: ./laravel-backend/.env
+    volumes:
+      - ./logs:/var/www/html/storage/logs
     depends_on: [laravel, redis]
     networks: [haman_net]
     restart: unless-stopped
+    logging: *default-logging
 
   scheduler:
     build:
@@ -60,9 +88,11 @@ services:
       # same volume — and haman:verify-backup, run from either container,
       # has to find the file the other one wrote.
       - laravel_backups:/var/www/html/storage/app/backups
+      - ./logs:/var/www/html/storage/logs
     depends_on: [laravel]
     networks: [haman_net]
     restart: unless-stopped
+    logging: *default-logging
 
   python_ai:
     build:
@@ -75,6 +105,7 @@ services:
       redis:    {condition: service_healthy}
     networks: [haman_net]
     restart: unless-stopped
+    logging: *default-logging
 
   postgres:
     # The official pgvector image, pinned by digest, instead of building the
@@ -129,6 +160,7 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    logging: *default-logging
 
   redis:
     image: redis:7.2-alpine
@@ -150,6 +182,7 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    logging: *default-logging
 
 networks:
   haman_net:

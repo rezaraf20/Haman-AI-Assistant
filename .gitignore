@@ -48,3 +48,9 @@ VECTOR_DIM_PATCH.txt
 # finished files it produced live under laravel-backend/{resources,public}/,
 # this directory is the workbench, not a deliverable.
 .tools/
+
+# Bind-mounted into laravel/horizon/scheduler at ./logs:/var/www/html/storage/logs
+# (see docker-compose.yml and deploy/logrotate/haman-laravel) — runtime
+# output, never a deliverable, and `docker compose up` will happily create
+# this directory locally too.
+/logs/

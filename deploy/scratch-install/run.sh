@@ -34,15 +34,20 @@ cleanup() {
     if [ "$KEEP" = "--keep" ]; then
         echo
         echo "Left running (--keep):  $WORK"
-        echo "Remove with:  cd $WORK && docker compose -p $PROJECT -f docker-compose.yml -f deploy/scratch-install/docker-compose.scratch.yml down -v && rm -rf $WORK"
+        echo "Remove with:  cd $WORK && docker compose -p $PROJECT -f docker-compose.yml -f deploy/scratch-install/docker-compose.scratch.yml down -v --rmi local && rm -rf $WORK"
         return 0
     fi
     echo
-    echo "== Tearing down, volumes included =="
-    compose down -v --remove-orphans >/dev/null 2>&1 || true
+    echo "== Tearing down, volumes and images included =="
+    # --rmi local: without it, "down -v" removes the containers and volumes
+    # but leaves the four haman_scratch-* images this run built sitting
+    # around -- there is no next run to reuse them, since WORK is a fresh
+    # mktemp clone every time, so they just accumulate. Found on 2026-09-21
+    # as four ~660MB images with no container ever referencing them again.
+    compose down -v --rmi local --remove-orphans >/dev/null 2>&1 || true
     cd /
     rm -rf "$WORK"
-    echo "Removed $WORK and every volume it created."
+    echo "Removed $WORK, every volume it created, and every image it built."
 }
 trap cleanup EXIT
 
