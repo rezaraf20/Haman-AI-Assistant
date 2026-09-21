@@ -416,6 +416,39 @@ match نمی‌کند استفاده می‌کند. فایل ما قبل از Di
 per-request انجام می‌دهد. با `prepend` ثبت شده، نه `append` — چون
 `StartSession` مقدار را موقع شروع سشن می‌خواند و هر جای دیرتری بی‌اثر است.
 
+### ممیزی میدل‌ورها: گروه `web` در برابر دو پنل (۲۰۲۶-۰۹-۲۱)
+
+سه باگ یک روز (زبان اشتباه بعد از لاگین، ذخیره‌ی پروفایل که به ۴۰۵ می‌خورد،
+و ۴۱۹ متناوب) همه یک ریشه داشتند: هر پنل Filament میدل‌ورهای خودش را از صفر
+می‌سازد، کاملاً جدا از گروه `web` در `bootstrap/app.php` — پس فرضِ «هرجا از
+گروه `web` رد می‌شود» ساکت غلط از آب درمی‌آمد. `ShareSessionAcrossBrandDomains`
+فقط روی گروه `web` ثبت شده بود؛ هیچ پنلی مسیرهای خودش را از آن گروه رد
+نمی‌کند، پس هیچ درخواست پنلی کوکی را پهن نمی‌کرد.
+
+جدول زیر همان چیزی است که از `tests/Feature/MiddlewareParityTest.php` درمی‌آید
+— آن تست همین جدول را برای همیشه اجرا می‌کند: هر میدل‌وری که فقط در یک طرف
+باشد و در allowlist آن تست (`INTENTIONAL_DIFFERENCES`) توضیح داده نشده باشد،
+تست را فیل می‌کند.
+
+| میدل‌ور | گروه `web` | پنل Admin | پنل Customer | عمدی؟ | دلیل |
+|---|:---:|:---:|:---:|:---:|---|
+| `ShareSessionAcrossBrandDomains` | ✓ | ✓ | ✓ | — | یکسان روی هر سه؛ همین باگ ۴۱۹ بود، حالا رفع شده |
+| `EncryptCookies` | ✓ | ✓ | ✓ | — | یکسان |
+| `AddQueuedCookiesToResponse` | ✓ | ✓ | ✓ | — | یکسان |
+| `StartSession` | ✓ | ✓ | ✓ | — | یکسان |
+| `Filament\...\AuthenticateSession` | ✗ | ✓ | ✓ | بله | فقط مفهوم Filament — سشنی که هش پسورد دیگر با کاربر نمی‌خواند را باطل می‌کند؛ صفحات ساده‌ی `web.php` معادلش را ندارند |
+| `ShareErrorsFromSession` | ✓ | ✓ | ✓ | — | یکسان |
+| `ValidateCsrfToken` (گروه `web`) / `VerifyCsrfToken` (دو پنل) | ✓ | ✓ | ✓ | بله | یک رفتار، دو اسم: `ValidateCsrfToken extends VerifyCsrfToken {}` بدون هیچ کد اضافه — گروه `web` اسم Laravel 11+ را دارد، پنل‌ها همان اسم قبل از ۱۱ را نگه داشته‌اند |
+| `SubstituteBindings` | ✓ | ✓ | ✓ | — | یکسان |
+| `Filament\...\DisableBladeIconComponents` | ✗ | ✓ | ✓ | بله | فقط مفهوم Filament — بیرون از پنل سیستم آیکون Filament اصلاً استفاده نمی‌شود |
+| `Filament\...\DispatchServingFilamentEvent` | ✗ | ✓ | ✓ | بله | فقط مفهوم Filament — هوک پلاگین‌های پنل؛ برای درخواستی که هرگز به پنل نمی‌رسد بی‌معنی است |
+| `SetLocale` | ✓ (یک‌بار) | ✓✓ (هم در `->middleware()` هم در `->authMiddleware()`) | ✓✓ (همان) | بله | در دو پنل عمداً دوبار: یک‌بار برای پوشش صفحات مهمان (لاگین)، یک‌بار بعد از `Authenticate` برای گذر نهایی و معتبر روی کاربر لاگین‌شده — `app()->setLocale()` idempotent است، تکرارش بی‌ضرر |
+| `Filament\...\Authenticate` | ✗ | ✓ (در `->authMiddleware()`) | ✓ (همان) | بله | مفهومی که فقط در پنل هست؛ گروه `web` معادلی ندارد چون مهمان‌های بدون لاگین را `bootstrap/app.php`'s `redirectGuestsTo()` در سطح kernel هندل می‌کند، نه یک میدل‌ور داخل آرایه‌ی گروه |
+
+هر ردیف «عمدی: بله» دقیقاً همان رشته و دلیلی است که در
+`MiddlewareParityTest::INTENTIONAL_DIFFERENCES` نوشته شده — این جدول و آن
+آرایه باید همیشه با هم عوض شوند.
+
 ### زرین‌پال
 
 آدرس callback هیچ‌جا ذخیره نشده؛ `route('payments.zarinpal.callback')` آن را
