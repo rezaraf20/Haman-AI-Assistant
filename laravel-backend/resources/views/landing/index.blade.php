@@ -136,7 +136,11 @@
         .phone-bar { background: var(--brand-gradient); padding: 16px 18px; display: flex; align-items: center; gap: 10px; color: #fff; }
         .phone-bar .dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,.9); }
         .phone-bar strong { font-family: var(--font-heading); font-size: .95rem; }
-        .phone-bar span { font-size: .74rem; opacity: .85; }
+        /* Full opacity, not .85 -- the same AA reasoning as .cta-band p and
+           .popular-badge: small text on the gradient needs every bit of the
+           contrast solid white gives it, since it is too small to qualify
+           for the large-text exemption. */
+        .phone-bar span { font-size: .74rem; }
         .phone-body { padding: 18px; display: flex; flex-direction: column; gap: 12px; min-height: 300px; }
         .bubble { max-width: 84%; padding: 11px 14px; border-radius: 14px; font-size: .9rem; line-height: 1.55; animation: rise .45s ease both; }
         .bubble.user { align-self: flex-end; background: var(--soft); border-end-end-radius: 4px; }
@@ -202,7 +206,12 @@
         @media (min-width: 760px) { .price-grid { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); } }
         .price { position: relative; border: 1px solid var(--line); border-radius: var(--radius); padding: 30px 26px; display: flex; flex-direction: column; background: #fff; box-shadow: var(--shadow); }
         .price.popular { border-color: var(--brand-indigo); box-shadow: 0 12px 32px rgba(72,112,248,.18); }
-        .price .popular-badge { position: absolute; top: -13px; inset-inline-start: 26px; background: var(--brand-gradient); color: #fff; font-family: var(--font-heading); font-size: .74rem; font-weight: 700; padding: 5px 14px; border-radius: 99px; }
+        /* Navy, not the gradient: at .74rem/700 this text is too small to
+           qualify for the WCAG large-text exemption, and white on the
+           gradient's own blue end is only 3.07:1 -- short of the 4.5:1 a
+           badge this size actually needs. White on navy is 18.8:1, and
+           navy is already a brand token, not a color invented for this. */
+        .price .popular-badge { position: absolute; top: -13px; inset-inline-start: 26px; background: var(--brand-navy); color: #fff; font-family: var(--font-heading); font-size: .74rem; font-weight: 700; padding: 5px 14px; border-radius: 99px; }
         .price .amount { font-size: 2.1rem; font-weight: 700; letter-spacing: -.02em; font-family: var(--font-heading); }
         .price ul { list-style: none; padding: 0; margin: 18px 0 26px; }
         .price li { padding: 7px 0; color: var(--muted); font-size: .92rem; border-bottom: 1px dashed var(--line); }
@@ -231,7 +240,13 @@
         /* ── final CTA ───────────────────────────────────────────────── */
         .cta-band { background: var(--brand-gradient); color: #fff; text-align: center; border-radius: 28px; padding: 64px 32px; margin: 0 20px; }
         .cta-band h2 { color: #fff; }
-        .cta-band p { color: rgba(255,255,255,.92); }
+        /* Solid white, not translucent, and sized/weighted to qualify as
+           "large text" under WCAG (>=18.66px bold) rather than the 18.4px
+           regular .lead default: the gradient's own blue end contrasts
+           white at 3.07:1, which clears the large-text AA minimum (3:1) but
+           not the normal-text one (4.5:1) -- this text needs the exemption,
+           not a slightly-less-translucent white. */
+        .cta-band p { color: #fff; font-size: 1.3rem; font-weight: 500; }
         .cta-band .btn-primary { background: #fff; color: var(--brand-indigo); box-shadow: 0 8px 24px rgba(0,0,0,.18); }
 
         footer { padding: 48px 0 calc(32px + env(safe-area-inset-bottom, 0px)); color: var(--muted); font-size: .9rem; border-top: 1px solid var(--line); margin-top: 40px; }
