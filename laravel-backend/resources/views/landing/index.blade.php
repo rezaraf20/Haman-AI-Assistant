@@ -33,15 +33,12 @@
     <meta name="twitter:title" content="{{ __('landing.brand') }} — {{ __('landing.hero_title') }}">
     <meta name="twitter:description" content="{{ __('landing.hero_subtitle') }}">
 
-    {{-- The two fonts that render above the fold on every load regardless of
-         language: Vazirmatn for the heading's Persian glyphs (or a Latin
-         word's Persian neighbours), Poppins 700 for the H1 itself. Preloaded
-         so the browser starts fetching them before it has parsed brand.css
-         far enough to discover the @font-face rule that names them --
-         without this, the font request only starts after CSSOM is built,
-         one whole round trip later than it has to. --}}
-    <link rel="preload" href="/fonts/vazirmatn-variable.woff2" as="font" type="font/woff2" crossorigin>
-    <link rel="preload" href="/fonts/poppins-700.woff2" as="font" type="font/woff2" crossorigin>
+    {{-- A font preload was tried here and measured out: it shaved latency
+         but moved the Vazirmatn/Poppins swap earlier, into the same window
+         Lighthouse measures layout shift in, and CLS went from 0 to 0.114
+         for a Performance gain that didn't survive the tradeoff. Removed
+         rather than kept on the theory that preloading fonts is always
+         correct — here, measured, it was not. --}}
     <link rel="stylesheet" href="/css/brand.css">
     <style>
         :root {
