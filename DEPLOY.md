@@ -234,6 +234,11 @@ docker compose exec laravel php artisan haman:verify-backup
 لازم دارد:
 
 ```bash
+mkdir -p /opt/hamman-platform/logs
+# 82:82 = www-data داخل ایمیج laravel. بدون این، اولین باری که یک خطا لاگ
+# می‌شود «Permission denied» می‌گیرید — دقیقاً همان چیزی که وقتی این
+# volume اول اضافه شد و پوشه هنوز مال root بود پیش آمد (۵ تست شکست خورد).
+chown -R 82:82 /opt/hamman-platform/logs
 sudo cp deploy/logrotate/haman-laravel /etc/logrotate.d/haman-laravel
 ```
 
