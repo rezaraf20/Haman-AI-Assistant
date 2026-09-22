@@ -589,9 +589,24 @@
         <span class="muted">{{ __('landing.footer_tagline') }}</span>
         <span class="foot-links">
             <a href="{{ \App\Support\BrandDomains::appUrl('/portal/login') }}">{{ __('landing.footer_login') }}</a>
-            <a href="#faq">{{ __('landing.footer_contact') }}</a>
+            <a href="{{ route('legal', 'about') }}">{{ __('legal.about_title') }}</a>
+            <a href="{{ route('legal', 'contact') }}">{{ __('legal.contact_title') }}</a>
+            <a href="{{ route('legal', 'terms') }}">{{ __('legal.terms_title') }}</a>
+            <a href="{{ route('legal', 'privacy') }}">{{ __('legal.privacy_title') }}</a>
         </span>
     </div>
+    {{-- Set once from the admin panel's Site Content page (Contact info),
+         read from the same place the /legal/contact page reads it — never
+         hardcoded twice. Each piece only renders once it has actually been
+         set, same as everywhere else in this codebase an optional field is
+         shown (see e.g. Profile.php's phone/national_id). --}}
+    @if ($contact['address'] || $contact['phone'] || $contact['email'])
+        <div class="wrap muted" style="margin-top:10px;font-size:.85rem;display:flex;gap:16px;flex-wrap:wrap">
+            @if ($contact['address'])<span>{{ $contact['address'] }}</span>@endif
+            @if ($contact['phone'])<span dir="ltr">{{ $contact['phone'] }}</span>@endif
+            @if ($contact['email'])<span dir="ltr">{{ $contact['email'] }}</span>@endif
+        </div>
+    @endif
     <div class="wrap muted" style="margin-top:18px;font-size:.85rem">© {{ date('Y') }} {{ __('landing.brand') }} — {{ __('landing.footer_rights') }}</div>
 </footer>
 

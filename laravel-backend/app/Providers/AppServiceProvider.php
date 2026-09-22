@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Auth\Events\{Failed, Login, Logout};
 use App\Listeners\RecordPlatformAuthActivity;
-use App\Support\{MailSettings, Settings};
+use App\Support\{LandingContent, MailSettings, Settings};
 
 class AppServiceProvider extends ServiceProvider {
     public function register(): void {}
@@ -78,6 +78,12 @@ class AppServiceProvider extends ServiceProvider {
         // SMTP credentials live in the settings table, not env — see
         // config/mail.php for why this has to happen at boot instead.
         MailSettings::apply();
+
+        // Landing/legal copy edited in the Site Content panel, patched over
+        // the lang/*/landing.php and lang/*/legal.php defaults. Same "read
+        // per request" reasoning as MailSettings::apply() above — no cache
+        // to bust anywhere else, a save is live on the very next request.
+        LandingContent::applyOverrides();
 
         // Platform staff sign-ins, sign-outs and failed attempts. Bound to
         // the guard's events rather than to a login screen, so every way

@@ -11,6 +11,7 @@ use App\Http\Controllers\LandingSignupController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Middleware\SetLocale;
 use App\Services\TrendsService;
+use App\Support\LandingContent;
 
 // The public site. Until this existed there was nowhere to send someone who
 // became interested: the only public pages were a login form and a payment
@@ -26,6 +27,16 @@ Route::get('/robots.txt', [SeoController::class, 'robots'])
     ->middleware('throttle:public-read')->name('robots');
 Route::get('/sitemap.xml', [SeoController::class, 'sitemap'])
     ->middleware('throttle:public-read')->name('sitemap');
+
+// About/contact/terms/privacy — one route, one view, four slugs; content
+// for each comes from LandingContent (see that class and the admin panel's
+// Site Content page). {slug} is constrained to the known four rather than
+// left open, so an unknown slug 404s at the router instead of reaching the
+// controller at all.
+Route::get('/legal/{slug}', [LandingController::class, 'legal'])
+    ->whereIn('slug', LandingContent::LEGAL_PAGES)
+    ->middleware([SetLocale::class, 'throttle:public-read'])
+    ->name('legal');
 
 // Email + password signup, the second way in. OtpLogin only accepts an
 // Iranian mobile number, which is a hard stop for anyone outside Iran.

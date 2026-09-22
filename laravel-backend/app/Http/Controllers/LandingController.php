@@ -2,8 +2,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\{ChatbotTypePrice, Plan};
-use App\Support\{MailSettings, Settings};
+use App\Support\{LandingContent, MailSettings, Settings};
 use Illuminate\Http\Request;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * The public site. Until now there was nowhere to send someone who became
@@ -36,6 +37,7 @@ class LandingController extends Controller
             'currency'     => (string) Settings::get('pricing.default_currency'),
             'emailSignup'  => MailSettings::isUsable(),
             'faq'          => $this->faq(),
+            'contact'      => LandingContent::contact(),
         ]);
 
         // Vary on the language header: the same URL serves Persian and
@@ -72,12 +74,48 @@ class LandingController extends Controller
     }
 
     /**
+     * About/contact/terms/privacy — one view for all four, distinguished
+     * only by which slug's content LandingContent hands back. The route
+     * itself (routes/web.php) restricts {slug} to LandingContent::LEGAL_PAGES,
+     * so an unknown slug never reaches here at all; this check stays as the
+     * hard backstop in case that route constraint is ever loosened.
+     */
+    public function legal(string $slug)
+    {
+        if (!in_array($slug, LandingContent::LEGAL_PAGES, true)) {
+            throw new NotFoundHttpException();
+        }
+
+        return response()
+            ->view('landing.legal', [
+                'slug'    => $slug,
+                'title'   => LandingContent::legalTitle($slug, app()->getLocale()),
+                'body'    => LandingContent::legalBody($slug, app()->getLocale()),
+                'contact' => LandingContent::contact(),
+            ])
+            ->header('Cache-Control', 'public, max-age=' . self::CACHE_SECONDS)
+            ->header('Vary', 'Accept-Language');
+    }
+
+    /**
+     * Editable in the panel as a re-orderable list (LandingContent::faq()),
+     * so unlike every other piece of copy on this page its item count is
+     * not fixed at seven — that is exactly why this reads LandingContent
+     * directly instead of going through __('landing.faq_qN'), the trick
+     * every OTHER field on this page uses (see LandingContent's own
+     * docblock): a numbered translation key cannot represent "how many".
+     *
      * @return array<int, array{q:string, a:string}>
      */
     private function faq(): array
     {
-        return collect(range(1, 7))
-            ->map(fn ($i) => ['q' => __("landing.faq_q{$i}"), 'a' => __("landing.faq_a{$i}")])
+        $locale = app()->getLocale();
+
+        return collect(LandingContent::faq())
+            ->map(fn ($item) => [
+                'q' => $item["q_{$locale}"] ?? $item['q_fa'],
+                'a' => $item["a_{$locale}"] ?? $item['a_fa'],
+            ])
             ->all();
     }
 }

@@ -47,6 +47,10 @@ class PlatformAccess
         'activity_log',
         // Destructive tenant operations: delete, change plan.
         'tenant_lifecycle',
+        // Public-facing marketing/legal copy — wrong wording here is a
+        // public-facing mistake the moment it's saved, same reasoning as
+        // platform_settings above.
+        'site_content',
     ];
 
     /** Things platform staff of any role may reach. */
