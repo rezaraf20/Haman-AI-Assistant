@@ -54,6 +54,7 @@ class AbuseAuditCommand extends Command
         'api/v1/chat/order-status/verify'             => ['outbound', 'Live query to the merchant shop'],
         'payments/zarinpal/callback'                  => ['outbound', 'Server-to-server verify call to Zarinpal'],
         '/'                                           => ['none', 'Public landing page; reads published plans'],
+        'legal/{slug}'                                => ['none', 'Static about/contact/terms/privacy copy, edited from the admin panel'],
         'signup'                                      => ['db-write', 'Creates a tenant AND a Postgres schema, same as the API register'],
         'verify-email/{id}/{hash}'                    => ['none', 'Signed, expiring link; marks one address verified'],
         'verify-email/resend'                         => ['none', 'Sends one email to the signed-in user own address'],
