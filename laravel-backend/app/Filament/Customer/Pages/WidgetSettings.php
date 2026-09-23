@@ -33,6 +33,20 @@ class WidgetSettings extends Page implements HasForms {
     protected static string $view = 'filament.customer.pages.widget-settings';
     protected static bool $shouldRegisterNavigation = false;
 
+    // Without this, Filament's default slug is just "widget-settings" — a
+    // route with no {chatbot} segment at all, so mount(string $chatbot)
+    // below can never actually receive one: not from MyChatbots's own row
+    // action (WidgetSettings::getUrl(['chatbot' => $record->chatbot_id])
+    // silently falls back to appending it as a *query string* instead,
+    // since 'chatbot' matches no placeholder in the path), and not from the
+    // WordPress plugin's "Edit in the portal" link either. Both produced a
+    // real, reachable 500 (BindingResolutionException: "Unable to resolve
+    // dependency ... string $chatbot") rather than a page anyone could
+    // actually use — found 2026-09-23 from a customer's report of exactly
+    // that error on the plugin's link, which turned out to be inherited
+    // from this page never having had a working URL at all.
+    protected static ?string $slug = 'widget-settings/{chatbot}';
+
     public ?array $data = [];
     public string $chatbotId;
     public string $schemaName;

@@ -177,14 +177,18 @@ $authenticity_field_labels = [
         // Not just "/portal": that lands on the bare dashboard, which has
         // no path from there to this chatbot's own appearance/text fields
         // — a merchant who clicked this button had nowhere to actually
-        // make the edit they came here for. /portal/widget-settings is the
-        // real page (WidgetSettings.php); it takes the chatbot as a plain
-        // ?chatbot= query parameter, not a route segment — the same way
-        // MyChatbots.php's own "row action" already links to it, so this
-        // mirrors a link that is already known to work rather than a
-        // freshly guessed URL shape.
+        // make the edit they came here for. /portal/widget-settings/{id}
+        // is the real page (WidgetSettings.php) — the chatbot id is a
+        // route SEGMENT, not a ?chatbot= query parameter: an earlier
+        // version of this fix used a query string, matching what
+        // MyChatbots.php's own row action appeared to do, and both turned
+        // out to 500 for the same reason (WidgetSettings had no {chatbot}
+        // route parameter declared at all, so nothing --the row action
+        // included-- could ever have reached it with a query string).
+        // Fixed at the source in WidgetSettings.php; this now matches its
+        // real, working URL shape.
         $chatbot_id = get_option('haman_chatbot_id', '');
-        $portal_url = $portal_base . '/portal/widget-settings?chatbot=' . rawurlencode($chatbot_id);
+        $portal_url = $portal_base . '/portal/widget-settings/' . rawurlencode($chatbot_id);
     ?>
     <p>
         <a href="<?php echo esc_url($portal_url); ?>" target="_blank" rel="noopener" class="button button-primary">
