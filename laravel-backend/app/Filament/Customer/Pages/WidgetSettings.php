@@ -33,8 +33,7 @@ class WidgetSettings extends Page implements HasForms {
     protected static string $view = 'filament.customer.pages.widget-settings';
     protected static bool $shouldRegisterNavigation = false;
 
-    // Without this, Filament's default slug is just "widget-settings" — a
-    // route with no {chatbot} segment at all, so mount(string $chatbot)
+    // Without a {chatbot} segment in the route at all, mount(string $chatbot)
     // below can never actually receive one: not from MyChatbots's own row
     // action (WidgetSettings::getUrl(['chatbot' => $record->chatbot_id])
     // silently falls back to appending it as a *query string* instead,
@@ -45,7 +44,24 @@ class WidgetSettings extends Page implements HasForms {
     // actually use — found 2026-09-23 from a customer's report of exactly
     // that error on the plugin's link, which turned out to be inherited
     // from this page never having had a working URL at all.
-    protected static ?string $slug = 'widget-settings/{chatbot}';
+    //
+    // Not solved by putting '{chatbot}' directly in $slug: the base
+    // HasRoutes trait builds the route's NAME from the same slug string
+    // (str($slug)->replace('/', '.')), so the literal braces end up baked
+    // into the route name too (filament.customer.pages.widget-settings.
+    // {chatbot}) — self-consistent for a raw URL hit, since Laravel's router
+    // parses {chatbot} in the PATH independently of what the name looks
+    // like, but it broke every route()/getUrl() lookup made without an
+    // already-active panel context (this page's own test suite included),
+    // because Filament's panel-inference has nothing to go on outside a
+    // request and silently guessed the wrong panel. Overriding
+    // getRoutePath() alone — instead of overloading $slug for both jobs —
+    // keeps the registered NAME plain ("widget-settings") and puts the
+    // parameter only where it belongs, in the PATH.
+    public static function getRoutePath(): string
+    {
+        return '/' . static::getSlug() . '/{chatbot}';
+    }
 
     public ?array $data = [];
     public string $chatbotId;

@@ -69,7 +69,7 @@ class WidgetSettingsRouteTest extends TestCase
 
     public function test_the_generated_url_puts_the_chatbot_id_in_the_path_not_a_query_string(): void
     {
-        $url = WidgetSettings::getUrl(['chatbot' => 'abc-123']);
+        $url = WidgetSettings::getUrl(['chatbot' => 'abc-123'], panel: 'customer');
 
         $this->assertStringContainsString('/widget-settings/abc-123', $url);
         $this->assertStringNotContainsString('?chatbot=', $url);
@@ -80,7 +80,7 @@ class WidgetSettingsRouteTest extends TestCase
         [$chatbotId, $owner] = $this->makeChatbotAndOwner();
         $this->actingAs($owner, 'web');
 
-        $this->get(WidgetSettings::getUrl(['chatbot' => $chatbotId]))
+        $this->get(WidgetSettings::getUrl(['chatbot' => $chatbotId], panel: 'customer'))
             ->assertOk();
     }
 
@@ -90,7 +90,7 @@ class WidgetSettingsRouteTest extends TestCase
         [, $otherOwner] = $this->makeChatbotAndOwner();
         $this->actingAs($otherOwner, 'web');
 
-        $this->get(WidgetSettings::getUrl(['chatbot' => $chatbotId]))
+        $this->get(WidgetSettings::getUrl(['chatbot' => $chatbotId], panel: 'customer'))
             ->assertNotFound();
     }
 }
