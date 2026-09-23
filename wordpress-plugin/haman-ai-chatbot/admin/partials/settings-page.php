@@ -174,7 +174,17 @@ $authenticity_field_labels = [
         // argument is a character mask (strips any of /,a,p,i,v,1 from the
         // end), not a literal suffix — hence the explicit regex.
         $portal_base = preg_replace('#/api/v1/?$#', '', get_option('haman_api_url', HAMAN_API_BASE));
-        $portal_url = $portal_base . '/portal';
+        // Not just "/portal": that lands on the bare dashboard, which has
+        // no path from there to this chatbot's own appearance/text fields
+        // — a merchant who clicked this button had nowhere to actually
+        // make the edit they came here for. /portal/widget-settings is the
+        // real page (WidgetSettings.php); it takes the chatbot as a plain
+        // ?chatbot= query parameter, not a route segment — the same way
+        // MyChatbots.php's own "row action" already links to it, so this
+        // mirrors a link that is already known to work rather than a
+        // freshly guessed URL shape.
+        $chatbot_id = get_option('haman_chatbot_id', '');
+        $portal_url = $portal_base . '/portal/widget-settings?chatbot=' . rawurlencode($chatbot_id);
     ?>
     <p>
         <a href="<?php echo esc_url($portal_url); ?>" target="_blank" rel="noopener" class="button button-primary">
