@@ -1,13 +1,13 @@
 <?php
 /**
  * Plugin Name:       Haman AI Chatbot
- * Plugin URI:        https://haman.ir/ai-chatbot
+ * Plugin URI:        https://hamanai.com
  * Description:       AI-powered chatbot for customer support, sales, and WooCommerce recommendations.
- * Version:           2.0.0
+ * Version:           2.1.0
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            Reza Rafiei
- * Author URI:        https://haman.ir
+ * Author URI:        https://hamanai.com
  * License:           GPL v2 or later
  * Text Domain:       haman-ai-chatbot
  * Company:           شرکت هامان فناوران پیشرو
@@ -15,7 +15,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'HAMAN_VERSION',    '2.0.0' );
+define( 'HAMAN_VERSION',    '2.1.0' );
 define( 'HAMAN_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'HAMAN_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 // The default for a fresh install. Deliberately still api.arshanweb.ir and

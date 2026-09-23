@@ -11,7 +11,50 @@
  * script attaches the shadow root to) from inside the shadow tree — that's
  * the standard way to style the widget's own outer box from its own
  * stylesheet.
+ *
+ * Brand redesign (2026-09-23): the widget runs on a CUSTOMER's site, an
+ * origin we don't control, so its fonts cannot assume the host theme loaded
+ * anything useful — these @font-face rules point at hamanai.com, a domain
+ * we do control, the same files laravel-backend/public/css/brand.css
+ * self-hosts for the landing page and panels (already served with
+ * Access-Control-Allow-Origin: *, which cross-origin @font-face requires).
+ * Not Google Fonts or any third-party CDN, for the same reason brand.css
+ * gives: this platform is used from Iran, where a CDN being unreachable is
+ * routine, and a font request that hangs is worse than one that never
+ * arrives. Same unicode-range split as brand.css too — a Persian-only
+ * conversation never fetches the Latin-only Poppins/Roboto files at all.
  */
+@font-face {
+    font-family: 'Poppins';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    src: url('https://hamanai.com/fonts/poppins-600.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Poppins';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    src: url('https://hamanai.com/fonts/poppins-700.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Roboto';
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+    src: url('https://hamanai.com/fonts/roboto-variable.woff2') format('woff2-variations'), url('https://hamanai.com/fonts/roboto-variable.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Vazirmatn';
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url('https://hamanai.com/fonts/vazirmatn-variable.woff2') format('woff2-variations'), url('https://hamanai.com/fonts/vazirmatn-variable.woff2') format('woff2');
+}
 
 /* Which corner the widget occupies is controlled by :host's own
  * data-position attribute (set from widget_config in haman-widget.js),
@@ -25,10 +68,22 @@
     bottom: 24px;
     right: 24px;
     z-index: 2147483000;
-    --hm-primary: #1B3A6B;
+    /* Brand blue (config('haman.brand.primary_color') on the server side —
+     * see check-widget-brand-defaults.php, which fails the build if this
+     * literal and that config value ever disagree again). haman-widget.js
+     * overwrites this immediately from the chatbot's own configured color,
+     * so it is only ever visible for the first paint before that runs, or
+     * if a merchant has never set one — never a value they chose. */
+    --hm-primary: #0098F8;
     --hm-primary-contrast: #ffffff;
-    --hm-font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    font-family: var(--hm-font-family);
+    /* Set alongside --hm-primary by haman-widget.js's gradientFor(): the
+     * exact brand gradient (#0098F8 → #4870F8 → #7050F8) when the color is
+     * still ours, or a lighter shade of the merchant's OWN color otherwise
+     * — a gradient effect that never introduces a hue they didn't choose. */
+    --hm-gradient: linear-gradient(135deg, #0098F8, #4870F8, #7050F8);
+    --hm-font-heading: 'Poppins', 'Vazirmatn', sans-serif;
+    --hm-font-body: 'Roboto', 'Vazirmatn', sans-serif;
+    font-family: var(--hm-font-body);
     display: block;
 }
 
@@ -58,14 +113,14 @@
 #hm-box {
     display: none;
     flex-direction: column;
-    width: 360px;
-    height: 520px;
-    max-height: 80vh;
+    width: 376px;
+    height: 560px;
+    max-height: 82vh;
     background: #fff;
-    border-radius: 16px;
-    box-shadow: 0 8px 40px rgba(0, 0, 0, .18);
+    border-radius: 22px;
+    box-shadow: 0 1px 2px rgba(0, 16, 48, .06), 0 16px 48px rgba(0, 16, 48, .16);
     overflow: hidden;
-    margin-bottom: 12px;
+    margin-bottom: 16px;
 }
 
 #hm-box.hm-open {
@@ -75,93 +130,128 @@
 #hm-hdr {
     background: var(--hm-primary);
     color: var(--hm-primary-contrast);
-    padding: 14px 16px;
+    padding: 18px 20px;
     display: flex;
-    justify-content: space-between;
+    gap: 12px;
+    justify-content: flex-start;
     align-items: center;
     flex-shrink: 0;
 }
 
 #hm-hdr h3 {
     margin: 0;
-    font-size: 15px;
+    font-family: var(--hm-font-heading);
+    font-size: 15.5px;
     font-weight: 600;
 }
 
+#hm-hdr-text {
+    flex: 1;
+    min-width: 0;
+}
+
+/* One persistent container, always rendered, whichever of the two it
+ * currently holds — a plain <img> (customer's own avatar_url, set at
+ * first paint or swapped in later by applyWidgetConfig()) or the brand
+ * mark SVG (renderAvatarSlot() in haman-widget.js). A container that only
+ * exists in the DOM once an avatar_url is already known could never be
+ * found later to swap an image into if the FIRST paint had none — this
+ * one is always there to update. */
 #hm-avatar-hdr {
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
-    object-fit: cover;
     flex-shrink: 0;
+    background: rgba(255, 255, 255, .16);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+#hm-avatar-hdr img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+#hm-avatar-hdr svg {
+    width: 22px;
+    height: 22px;
 }
 
 #hm-hdr span {
-    font-size: 11px;
-    opacity: .75;
+    font-size: 12px;
+    opacity: .8;
 }
 
 #hm-close {
     background: none;
     border: none;
     color: inherit;
-    font-size: 20px;
+    font-size: 18px;
     cursor: pointer;
-    min-width: 44px;
-    min-height: 44px;
+    min-width: 40px;
+    min-height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 8px;
+    border-radius: 10px;
+    flex-shrink: 0;
 }
 
 #hm-close:hover, #hm-close:focus-visible {
-    background: rgba(255, 255, 255, .15);
+    background: rgba(255, 255, 255, .16);
 }
 
 #hm-msgs {
     flex: 1;
     overflow-y: auto;
-    padding: 14px;
+    padding: 18px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
     position: relative;
+    background: #FAFBFF;
 }
 
 .hm-msg {
     max-width: 82%;
-    padding: 10px 14px;
-    border-radius: 12px;
+    padding: 11px 15px;
+    border-radius: 18px;
     font-size: 14px;
-    line-height: 1.5;
+    line-height: 1.6;
     word-break: break-word;
     position: relative;
+    box-shadow: 0 1px 2px rgba(0, 16, 48, .04);
 }
 
 .hm-msg.user {
-    background: var(--hm-primary);
+    background: var(--hm-gradient);
     color: var(--hm-primary-contrast);
     align-self: flex-end;
+    border-end-end-radius: 6px;
 }
 
 .hm-msg.bot {
-    background: #F1F5F9;
-    color: #0F172A;
+    background: #fff;
+    border: 1px solid #E9ECF5;
+    color: #001030;
     align-self: flex-start;
-    padding-inline-end: 34px;
+    border-end-start-radius: 6px;
+    padding-inline-end: 36px;
 }
 
 .hm-msg-copy {
     position: absolute;
-    top: 6px;
-    inset-inline-end: 6px;
+    top: 8px;
+    inset-inline-end: 8px;
     width: 22px;
     height: 22px;
     padding: 0;
     border: none;
     background: transparent;
-    color: #64748B;
+    color: #707898;
     cursor: pointer;
     border-radius: 6px;
     display: flex;
@@ -172,18 +262,18 @@
 
 .hm-msg-copy:hover, .hm-msg-copy:focus-visible {
     opacity: 1;
-    background: rgba(15, 23, 42, .08);
+    background: rgba(0, 16, 48, .06);
 }
 
 /* ── Product cards (recommend_products) ────────────────────────────── */
 /* A horizontally-scrolling strip rather than a fixed grid — this is what
- * actually makes it render correctly at any width (the ~360px desktop
+ * actually makes it render correctly at any width (the ~376px desktop
  * popup and the full-viewport mobile sheet use the exact same rule, no
  * separate mobile override needed) instead of squeezing columns until
  * they're unreadable. */
 .hm-product-cards {
     display: flex;
-    gap: 8px;
+    gap: 10px;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     align-self: stretch;
@@ -191,44 +281,45 @@
 }
 
 .hm-product-card {
-    flex: 0 0 132px;
-    width: 132px;
+    flex: 0 0 138px;
+    width: 138px;
     display: flex;
     flex-direction: column;
     background: #fff;
-    border: 1px solid #E2E8F0;
-    border-radius: 10px;
+    border: 1px solid #E9ECF5;
+    border-radius: 14px;
     overflow: hidden;
     text-decoration: none;
     color: inherit;
+    box-shadow: 0 1px 2px rgba(0, 16, 48, .04);
 }
 
 .hm-product-card img {
     width: 100%;
-    height: 90px;
+    height: 92px;
     object-fit: cover;
     display: block;
-    background: #F1F5F9;
+    background: #F4F6FB;
 }
 
 .hm-product-card-noimg {
     width: 100%;
-    height: 90px;
-    background: #F1F5F9;
+    height: 92px;
+    background: #F4F6FB;
 }
 
 .hm-product-card-body {
-    padding: 8px;
+    padding: 10px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 5px;
 }
 
 .hm-product-name {
     font-size: 12px;
     font-weight: 600;
-    line-height: 1.3;
-    color: #0F172A;
+    line-height: 1.35;
+    color: #001030;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
@@ -236,16 +327,17 @@
 }
 
 .hm-product-price {
-    font-size: 12px;
-    font-weight: 600;
+    font-size: 12.5px;
+    font-weight: 700;
     color: var(--hm-primary);
 }
 
 .hm-stock-badge {
     font-size: 10px;
-    padding: 2px 6px;
-    border-radius: 6px;
+    padding: 3px 7px;
+    border-radius: 8px;
     align-self: start;
+    font-weight: 600;
 }
 
 .hm-stock-badge.hm-instock {
@@ -267,44 +359,52 @@
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     align-self: stretch;
+    border-radius: 14px;
+    border: 1px solid #E9ECF5;
 }
 
 .hm-compare-table {
     border-collapse: collapse;
     font-size: 12px;
+    width: 100%;
 }
 
 .hm-compare-table th, .hm-compare-table td {
-    border: 1px solid #E2E8F0;
-    padding: 6px 8px;
+    border-inline-start: 1px solid #E9ECF5;
+    border-bottom: 1px solid #E9ECF5;
+    padding: 8px 10px;
     text-align: start;
     white-space: nowrap;
 }
 
+.hm-compare-table th:first-child, .hm-compare-table td:first-child {
+    border-inline-start: none;
+}
+
 .hm-compare-table thead th {
-    background: #F8FAFC;
+    background: #F4F6FB;
     vertical-align: top;
 }
 
 .hm-compare-table thead img {
-    width: 56px;
-    height: 56px;
+    width: 58px;
+    height: 58px;
     object-fit: cover;
-    border-radius: 6px;
+    border-radius: 10px;
     display: block;
-    margin-bottom: 4px;
+    margin-bottom: 5px;
 }
 
 .hm-compare-name {
     font-weight: 600;
-    color: #0F172A;
+    color: #001030;
     white-space: normal;
     max-width: 120px;
 }
 
 .hm-compare-price {
     color: var(--hm-primary);
-    font-weight: 600;
+    font-weight: 700;
 }
 
 .hm-compare-table thead a {
@@ -316,7 +416,7 @@
 }
 
 .hm-compare-table tbody th {
-    background: #F8FAFC;
+    background: #F4F6FB;
     font-weight: 600;
     white-space: normal;
 }
@@ -336,18 +436,18 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: var(--hm-primary);
+    background: var(--hm-gradient);
     color: var(--hm-primary-contrast);
-    border-radius: 8px;
-    padding: 8px 14px;
+    border-radius: 11px;
+    padding: 9px 16px;
     font-size: 13px;
     font-weight: 600;
     text-decoration: none;
-    min-height: 36px;
+    min-height: 38px;
 }
 
 .hm-cart-link-btn:hover, .hm-cart-link-btn:focus-visible {
-    opacity: .9;
+    opacity: .92;
 }
 
 /* ── Inline add-to-cart (add_to_cart, Store API) ────────────────────── */
@@ -369,28 +469,28 @@
     gap: 10px;
     flex-wrap: wrap;
     background: #F8FAFC;
-    border: 1px solid #E2E8F0;
-    border-radius: 10px;
-    padding: 8px 10px;
+    border: 1px solid #E9ECF5;
+    border-radius: 12px;
+    padding: 9px 12px;
 }
 
 .hm-atc-name {
     font-size: 13px;
-    color: #0F172A;
+    color: #001030;
     flex: 1 1 auto;
     min-width: 0;
 }
 
 .hm-atc-btn {
-    background: var(--hm-primary);
+    background: var(--hm-gradient);
     color: var(--hm-primary-contrast);
     border: none;
-    border-radius: 8px;
-    padding: 8px 14px;
+    border-radius: 10px;
+    padding: 9px 16px;
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    min-height: 36px;
+    min-height: 38px;
     flex-shrink: 0;
 }
 
@@ -421,9 +521,9 @@
 .hm-payment-preview {
     align-self: stretch;
     background: #F8FAFC;
-    border: 1px solid #E2E8F0;
-    border-radius: 10px;
-    padding: 10px 12px;
+    border: 1px solid #E9ECF5;
+    border-radius: 14px;
+    padding: 12px 14px;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -443,27 +543,27 @@
     justify-content: space-between;
     gap: 10px;
     font-size: 12.5px;
-    color: #0F172A;
+    color: #001030;
 }
 
 .hm-payment-total {
     font-size: 13px;
-    color: #0F172A;
-    border-top: 1px dashed #E2E8F0;
-    padding-top: 6px;
+    color: #001030;
+    border-top: 1px dashed #E9ECF5;
+    padding-top: 8px;
 }
 
 .hm-payment-confirm-btn {
     align-self: flex-start;
-    background: var(--hm-primary);
+    background: var(--hm-gradient);
     color: var(--hm-primary-contrast);
     border: none;
-    border-radius: 8px;
-    padding: 8px 14px;
+    border-radius: 10px;
+    padding: 9px 16px;
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    min-height: 36px;
+    min-height: 38px;
 }
 
 .hm-payment-confirm-btn:disabled {
@@ -492,9 +592,9 @@
 .hm-order-list {
     align-self: stretch;
     background: #F8FAFC;
-    border: 1px solid #E2E8F0;
-    border-radius: 10px;
-    padding: 10px 12px;
+    border: 1px solid #E9ECF5;
+    border-radius: 14px;
+    padding: 12px 14px;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -507,15 +607,15 @@
 
 .hm-order-status-btn {
     align-self: flex-start;
-    background: var(--hm-primary);
+    background: var(--hm-gradient);
     color: var(--hm-primary-contrast);
     border: none;
-    border-radius: 8px;
-    padding: 8px 14px;
+    border-radius: 10px;
+    padding: 9px 16px;
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    min-height: 36px;
+    min-height: 38px;
 }
 
 .hm-order-status-btn:disabled {
@@ -531,13 +631,13 @@
 
 .hm-order-status-input {
     align-self: flex-start;
-    width: 140px;
-    padding: 8px 10px;
+    width: 144px;
+    padding: 9px 10px;
     font-size: 15px;
     letter-spacing: 2px;
     text-align: center;
-    border: 1px solid #CBD5E1;
-    border-radius: 8px;
+    border: 1px solid #D7DBEA;
+    border-radius: 10px;
     direction: ltr;
 }
 
@@ -551,7 +651,7 @@
 }
 
 .hm-order-card {
-    border-bottom: 1px dashed #E2E8F0;
+    border-bottom: 1px dashed #E9ECF5;
     padding-bottom: 8px;
     display: flex;
     flex-direction: column;
@@ -569,7 +669,7 @@
     gap: 8px;
     font-size: 13px;
     font-weight: 600;
-    color: #0F172A;
+    color: #001030;
 }
 
 .hm-order-state {
@@ -579,7 +679,7 @@
 
 .hm-order-meta {
     font-size: 12px;
-    color: #64748B;
+    color: #707898;
 }
 
 .hm-order-items {
@@ -593,9 +693,11 @@
 /* Typing indicator: three animated dots shown while waiting for a response. */
 .hm-typing {
     align-self: flex-start;
-    background: #F1F5F9;
-    border-radius: 12px;
-    padding: 10px 14px;
+    background: #fff;
+    border: 1px solid #E9ECF5;
+    border-radius: 18px;
+    border-end-start-radius: 6px;
+    padding: 11px 15px;
     display: flex;
     gap: 4px;
     align-items: center;
@@ -605,7 +707,8 @@
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: #94A3B8;
+    background: var(--hm-primary);
+    opacity: .55;
     animation: hm-typing-bounce 1.2s infinite ease-in-out;
 }
 
@@ -619,19 +722,19 @@
 
 #hm-scroll-bottom {
     position: absolute;
-    bottom: 10px;
-    inset-inline-end: 14px;
-    width: 32px;
-    height: 32px;
+    bottom: 12px;
+    inset-inline-end: 16px;
+    width: 34px;
+    height: 34px;
     border-radius: 50%;
-    border: 1px solid #E2E8F0;
+    border: 1px solid #E9ECF5;
     background: #fff;
     color: var(--hm-primary);
     cursor: pointer;
     display: none;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, .12);
+    box-shadow: 0 4px 12px rgba(0, 16, 48, .1);
 }
 
 #hm-scroll-bottom.hm-visible {
@@ -641,59 +744,68 @@
 #hm-qq {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    padding: 0 14px 10px;
+    gap: 7px;
+    padding: 0 18px 12px;
     flex-shrink: 0;
 }
 
 #hm-qq button {
     background: #fff;
-    border: 1px solid var(--hm-primary);
+    border: 1px solid #E9ECF5;
     color: var(--hm-primary);
-    border-radius: 10px;
-    padding: 7px 10px;
+    border-radius: 12px;
+    padding: 8px 12px;
     font-size: 12.5px;
+    font-weight: 500;
     cursor: pointer;
     text-align: start;
     min-height: 44px;
 }
 
+#hm-qq button:hover, #hm-qq button:focus-visible {
+    border-color: var(--hm-primary);
+    background: #F4F8FF;
+}
+
 #hm-in-row {
-    padding: 10px 12px;
-    border-top: 1px solid #E2E8F0;
+    padding: 14px 16px;
+    border-top: 1px solid #E9ECF5;
     display: flex;
-    gap: 8px;
+    gap: 10px;
     align-items: flex-end;
     flex-shrink: 0;
+    background: #fff;
 }
 
 #hm-in {
     flex: 1;
-    padding: 10px 12px;
-    border: 1px solid #CBD5E1;
-    border-radius: 10px;
+    padding: 11px 14px;
+    border: 1px solid #D7DBEA;
+    border-radius: 14px;
     font-size: 14px;
     font-family: inherit;
     outline: none;
     resize: none;
     max-height: calc(1.4em * 4 + 20px);
     line-height: 1.4;
+    background: #FAFBFF;
 }
 
 #hm-in:focus-visible {
     border-color: var(--hm-primary);
+    background: #fff;
 }
 
 #hm-send {
-    background: var(--hm-primary);
+    background: var(--hm-gradient);
     color: var(--hm-primary-contrast);
     border: none;
-    border-radius: 10px;
-    padding: 10px 16px;
+    border-radius: 14px;
+    padding: 11px 18px;
     cursor: pointer;
     font-size: 14px;
-    min-width: 44px;
-    min-height: 44px;
+    min-width: 46px;
+    min-height: 46px;
 }
 
 #hm-send:disabled {
@@ -702,40 +814,72 @@
 }
 
 #hm-powered {
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    font-family: var(--hm-font-heading);
     font-size: 11px;
-    color: #94A3B8;
-    padding: 6px;
-    background: #F8FAFC;
+    color: #707898;
+    padding: 9px 6px;
+    background: #FAFBFF;
+    border-top: 1px solid #F0F2F9;
     flex-shrink: 0;
 }
 
+#hm-powered svg { width: 13px; height: 15px; flex-shrink: 0; }
+
 #hm-powered a {
-    color: var(--hm-primary);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #001030;
+    font-weight: 600;
     text-decoration: none;
 }
 
 #hm-btn {
-    width: 56px;
-    height: 56px;
+    width: 60px;
+    height: 60px;
     border-radius: 50%;
-    background: var(--hm-primary);
+    background: var(--hm-gradient);
     color: var(--hm-primary-contrast);
     border: none;
     cursor: pointer;
     font-size: 24px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, .25);
+    box-shadow: 0 8px 28px rgba(0, 16, 48, .28);
     display: flex;
     align-items: center;
     justify-content: center;
     position: relative;
+    transition: transform .15s ease;
 }
 
+#hm-btn:hover {
+    transform: translateY(-2px);
+}
+
+/* Same pattern as #hm-avatar-hdr above — always present, holds an <img>
+ * or the brand mark SVG. */
 #hm-avatar-btn {
     width: 100%;
     height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
     border-radius: 50%;
+}
+
+#hm-avatar-btn img {
+    width: 100%;
+    height: 100%;
     object-fit: cover;
+}
+
+#hm-avatar-btn svg {
+    width: 30px;
+    height: 35px;
 }
 
 #hm-btn:focus-visible {
@@ -747,11 +891,11 @@
     position: absolute;
     top: 2px;
     right: 2px;
-    width: 12px;
-    height: 12px;
+    width: 13px;
+    height: 13px;
     border-radius: 50%;
     background: #EF4444;
-    border: 2px solid #fff;
+    border: 2.5px solid #fff;
     display: none;
 }
 
@@ -802,11 +946,11 @@
     }
 
     #hm-hdr {
-        padding-top: calc(14px + env(safe-area-inset-top, 0px));
+        padding-top: calc(16px + env(safe-area-inset-top, 0px));
     }
 
     #hm-in-row {
-        padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+        padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
     }
 
     #hm-btn {

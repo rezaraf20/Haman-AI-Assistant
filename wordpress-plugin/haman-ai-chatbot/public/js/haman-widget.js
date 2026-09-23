@@ -83,13 +83,82 @@
     styleLink.href = CFG.cssUrl;
     root.appendChild(styleLink);
 
-    function setThemeVars(primaryColor, dir) {
-        hostEl.style.setProperty('--hm-primary', primaryColor || '#1B3A6B');
-        hostEl.style.setProperty('--hm-font-family', dir === 'rtl'
-            ? "'Vazirmatn','Tahoma',sans-serif"
-            : "system-ui,-apple-system,'Segoe UI',sans-serif");
+    // ── Color ──────────────────────────────────────────────────────────
+    // #0098F8 mirrors config('haman.brand.primary_color') on the server —
+    // see check-widget-brand-defaults.php, which fails the build if this
+    // literal and that config value ever disagree. Not read live from the
+    // server at this point: this is only the color for the instant before
+    // /chat/session responds with whatever the merchant actually chose
+    // (CFG.primaryColor below already carries THAT value when set).
+    var BRAND_PRIMARY = '#0098F8';
+    var BRAND_GRADIENT = 'linear-gradient(135deg, #0098F8, #4870F8, #7050F8)';
+
+    function hexToRgb(hex) {
+        var m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '');
+        return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : null;
     }
-    setThemeVars(CFG.primaryColor, CFG.dir);
+    function toHex(n) {
+        var h = Math.max(0, Math.min(255, Math.round(n))).toString(16);
+        return h.length === 1 ? '0' + h : h;
+    }
+    /** Same hue, lighter — used only to build a two-stop gradient FROM a
+     *  merchant's own chosen color, never to invent a second brand hue on
+     *  top of a choice that isn't ours to override. */
+    function lighten(rgb, amount) {
+        return '#' + toHex(rgb.r + (255 - rgb.r) * amount) + toHex(rgb.g + (255 - rgb.g) * amount) + toHex(rgb.b + (255 - rgb.b) * amount);
+    }
+    function gradientFor(primary) {
+        if (!primary || primary.toUpperCase() === BRAND_PRIMARY) return BRAND_GRADIENT;
+        var rgb = hexToRgb(primary);
+        if (!rgb) return BRAND_GRADIENT;
+        return 'linear-gradient(135deg, ' + primary + ', ' + lighten(rgb, .32) + ')';
+    }
+    function setThemeVars(primaryColor) {
+        var color = primaryColor || BRAND_PRIMARY;
+        hostEl.style.setProperty('--hm-primary', color);
+        hostEl.style.setProperty('--hm-gradient', gradientFor(color));
+    }
+    setThemeVars(CFG.primaryColor);
+
+    // ── Brand mark (replaces the plain emoji glyph everywhere it used to
+    // appear) ──────────────────────────────────────────────────────────
+    // Two renderings of the same mark from resources/brand/ — see
+    // partials/brand-logo.blade.php, which this mirrors: a flat white
+    // silhouette for the header/floating-button badges (sitting on
+    // var(--hm-primary) or the gradient, i.e. an unpredictable color a
+    // merchant may have chosen — a gradient-filled mark risks vanishing
+    // against its own background there), and the real gradient-filled mark
+    // for the footer, which always sits on a plain white strip.
+    function markMono() {
+        return '<svg viewBox="0 0 112 131" role="img" aria-label="Haman AI">' +
+            '<path d="M 44 9 L 11 34 L 11 116 C 11 120, 13 122, 17 121 C 26 112, 39 98, 46 84 L 46 40 C 46 30, 45 18, 44 9 Z" fill="#FFFFFF"/>' +
+            '<path d="M 68 9 L 101 34 L 101 116 C 101 120, 99 122, 95 121 C 86 112, 73 98, 66 84 L 66 40 C 66 30, 67 18, 68 9 Z" fill="#FFFFFF" fill-opacity="0.75"/>' +
+            '<path d="M 27 47 h 58 a 15 15 0 0 1 15 15 v 5 a 15 15 0 0 1 -15 15 h -33 q -9 7, -13 7 q -3 0, -2 -3 q 1 -2, 2 -4 h -12 a 15 15 0 0 1 -15 -15 v -5 a 15 15 0 0 1 15 -15 Z" fill="none" stroke="#FFFFFF" stroke-width="6"/>' +
+        '</svg>';
+    }
+    function markColor(id) {
+        return '<svg viewBox="0 0 112 131" role="img" aria-label="Haman AI">' +
+            '<defs>' +
+                '<linearGradient id="' + id + '-m" x1="0" y1="0" x2="112" y2="131" gradientUnits="userSpaceOnUse">' +
+                    '<stop offset="0" stop-color="#0098F8"/><stop offset="0.5" stop-color="#4870F8"/><stop offset="1" stop-color="#7050F8"/>' +
+                '</linearGradient>' +
+                '<linearGradient id="' + id + '-b" x1="0" y1="0" x2="1" y2="1">' +
+                    '<stop offset="0" stop-color="#0098F8"/><stop offset="1" stop-color="#4870F8"/>' +
+                '</linearGradient>' +
+            '</defs>' +
+            '<path d="M 44 9 L 11 34 L 11 116 C 11 120, 13 122, 17 121 C 26 112, 39 98, 46 84 L 46 40 C 46 30, 45 18, 44 9 Z" fill="url(#' + id + '-m)"/>' +
+            '<path d="M 68 9 L 101 34 L 101 116 C 101 120, 99 122, 95 121 C 86 112, 73 98, 66 84 L 66 40 C 66 30, 67 18, 68 9 Z" fill="url(#' + id + '-m)"/>' +
+            '<path d="M 27 47 h 58 a 15 15 0 0 1 15 15 v 5 a 15 15 0 0 1 -15 15 h -33 q -9 7, -13 7 q -3 0, -2 -3 q 1 -2, 2 -4 h -12 a 15 15 0 0 1 -15 -15 v -5 a 15 15 0 0 1 15 -15 Z" fill="none" stroke="#FFFFFF" stroke-width="5.5"/>' +
+            '<path d="M 27 47 h 58 a 15 15 0 0 1 15 15 v 5 a 15 15 0 0 1 -15 15 h -33 q -9 7, -13 7 q -3 0, -2 -3 q 1 -2, 2 -4 h -12 a 15 15 0 0 1 -15 -15 v -5 a 15 15 0 0 1 15 -15 Z" fill="url(#' + id + '-b)"/>' +
+            '<circle cx="46" cy="62" r="3.2" fill="#fff"/><circle cx="56" cy="62" r="3.2" fill="#fff"/><circle cx="66" cy="62" r="3.2" fill="#fff"/>' +
+        '</svg>';
+    }
+    /** A merchant's own uploaded avatar always wins — see WidgetDefaults.php
+     *  on the server, "admin-settable, same override path as primary_color".
+     *  This is only ever the DEFAULT before/absent that choice. */
+    function avatarSlotHtml(url) {
+        return url ? '<img src="' + esc(url) + '" alt="">' : markMono();
+    }
 
     function esc(t) {
         var d = document.createElement('div');
@@ -117,18 +186,15 @@
     }
 
     // Avatar is optional per chatbot (Appearance settings) — falls back to
-    // the plain emoji glyph on both the header and the floating button
-    // when unset, exactly like before this existed.
-    var avatarHeaderHtml = CFG.avatarUrl ? '<img id="hm-avatar-hdr" src="' + esc(CFG.avatarUrl) + '" alt="">' : '';
-    var avatarBtnHtml = CFG.avatarUrl
-        ? '<img id="hm-avatar-btn" src="' + esc(CFG.avatarUrl) + '" alt="">'
-        : '<span aria-hidden="true">💬</span>';
+    // the brand mark on both the header and the floating button when unset,
+    // instead of the plain emoji glyph this used to be.
+    var avatarHtml = avatarSlotHtml(CFG.avatarUrl);
 
     w.innerHTML =
         '<div id="hm-box" role="dialog" aria-modal="true" aria-label="' + esc(CFG.i18n.dialogLabel) + '" aria-hidden="true">' +
             '<div id="hm-hdr">' +
-                avatarHeaderHtml +
-                '<div><h3>' + esc(CFG.chatTitle) + '</h3><span>' + esc(CFG.aiName) + '</span></div>' +
+                '<div id="hm-avatar-hdr">' + avatarHtml + '</div>' +
+                '<div id="hm-hdr-text"><h3>' + esc(CFG.chatTitle) + '</h3><span>' + esc(CFG.aiName) + '</span></div>' +
                 '<button id="hm-close" type="button" aria-label="' + esc(CFG.i18n.closeLabel) + '">✕</button>' +
             '</div>' +
             '<div id="hm-msgs" aria-live="polite"></div>' +
@@ -140,7 +206,7 @@
             '<div id="hm-powered"></div>' +
         '</div>' +
         '<button id="hm-btn" type="button" aria-label="' + esc(CFG.i18n.openLabel) + '" aria-expanded="false">' +
-            avatarBtnHtml +
+            '<span id="hm-avatar-btn">' + avatarHtml + '</span>' +
             '<span id="hm-unread-dot" aria-hidden="true"></span>' +
         '</button>';
 
@@ -158,8 +224,8 @@
 
     function renderPoweredBy() {
         if (CFG.poweredByEnabled === false) { poweredEl.style.display = 'none'; return; }
-        poweredEl.innerHTML = 'Powered by <a href="' + esc(CFG.poweredByUrl || 'https://hamantech.ir') +
-            '" target="_blank" rel="noopener">' + esc(CFG.poweredByName || 'HamanTech') + '</a>';
+        poweredEl.innerHTML = '<a href="' + esc(CFG.poweredByUrl || 'https://hamanai.com') +
+            '" target="_blank" rel="noopener">' + markColor('hm-mark-ftr') + esc(CFG.poweredByName || 'Haman AI') + '</a>';
     }
     renderPoweredBy();
 
@@ -901,14 +967,15 @@
         if (wc.unavailable_message) CFG.unavailableMessage = wc.unavailable_message;
         if (wc.generic_error_message) CFG.genericErrorMessage = wc.generic_error_message;
         if (wc.connection_error_message) CFG.connectionErrorMessage = wc.connection_error_message;
-        if (wc.primary_color) { CFG.primaryColor = wc.primary_color; setThemeVars(wc.primary_color, w.getAttribute('dir')); }
+        if (wc.primary_color) { CFG.primaryColor = wc.primary_color; setThemeVars(wc.primary_color); }
         if (wc.position) { CFG.position = wc.position; hostEl.setAttribute('data-position', wc.position); }
         if (wc.avatar_url && wc.avatar_url !== CFG.avatarUrl) {
             CFG.avatarUrl = wc.avatar_url;
+            var newAvatarHtml = avatarSlotHtml(wc.avatar_url);
             var hdrAvatar = root.getElementById('hm-avatar-hdr');
-            if (hdrAvatar) hdrAvatar.src = wc.avatar_url;
+            if (hdrAvatar) hdrAvatar.innerHTML = newAvatarHtml;
             var btnAvatar = root.getElementById('hm-avatar-btn');
-            if (btnAvatar) btnAvatar.src = wc.avatar_url;
+            if (btnAvatar) btnAvatar.innerHTML = newAvatarHtml;
         }
         if (typeof wc.powered_by_enabled !== 'undefined') CFG.poweredByEnabled = wc.powered_by_enabled;
         if (wc.powered_by_name) CFG.poweredByName = wc.powered_by_name;

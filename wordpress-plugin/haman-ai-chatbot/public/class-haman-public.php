@@ -203,11 +203,19 @@ class Haman_Public {
             'genericErrorMessage'    => $l10n_defaults['genericErrorMessage'],
             'connectionErrorMessage' => $l10n_defaults['connectionErrorMessage'],
             'quickQuestions' => [],
-            'primaryColor'     => '#1B3A6B',
+            // Brand blue — mirrors config('haman.brand.primary_color') on
+            // the server (laravel-backend/config/haman.php), enforced by
+            // check-widget-brand-defaults.php so the two cannot drift apart
+            // silently again the way they did before (this fallback was
+            // still the pre-rebrand navy #1B3A6B long after the panels and
+            // landing page moved on). Only visible for the instant before
+            // /chat/session responds with whatever the merchant actually
+            // set — never overrides a merchant's own chosen color.
+            'primaryColor'     => '#0098F8',
             'avatarUrl'        => '',
             'poweredByEnabled' => true,
-            'poweredByName'    => 'HamanTech',
-            'poweredByUrl'     => 'https://hamantech.ir',
+            'poweredByName'    => 'Haman AI',
+            'poweredByUrl'     => 'https://hamanai.com',
             'i18n' => $i18n,
             'storeApiNonce' => $store_api_nonce,
             'storeApiUrl'   => $store_api_url,

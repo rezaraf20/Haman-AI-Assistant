@@ -113,5 +113,11 @@ if ! "$PHP_BIN" laravel-backend/scripts/check-plugin-version.php; then
     exit 1
 fi
 
+echo "== Preflight: the widget's brand defaults match config('haman.brand.*') =="
+if ! "$PHP_BIN" laravel-backend/scripts/check-widget-brand-defaults.php; then
+    echo "FAIL: the widget's first-paint color/name/URL fallback drifted from the brand config."
+    exit 1
+fi
+
 echo ""
 echo "All preflight checks passed."
