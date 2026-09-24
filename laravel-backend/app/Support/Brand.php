@@ -149,8 +149,14 @@ class Brand
         $settings->values = $values;
         $settings->save();
 
-        self::$cache = null;
+        self::forget();
         Settings::forget();
+    }
+
+    /** Drops the memoized row — tests changing the DB underneath the cache (RefreshDatabase's rollback doesn't touch this static) must call this between cases, the same way they already call Settings::forget(). */
+    public static function forget(): void
+    {
+        self::$cache = null;
     }
 
     /** @return array<string, ?string> every field, for the admin form and for the activity log diff. */

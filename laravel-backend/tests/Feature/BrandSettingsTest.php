@@ -30,6 +30,7 @@ class BrandSettingsTest extends TestCase
     {
         parent::setUp();
         Settings::forget();
+        Brand::forget();
         Storage::fake(Brand::DISK);
     }
 
