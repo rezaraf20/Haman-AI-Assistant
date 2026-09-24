@@ -118,7 +118,7 @@ class Settings extends Page implements HasForms
                         ->acceptedFileTypes(Brand::ALLOWED_MIMES)
                         ->maxSize(Brand::UPLOAD_MAX_KB)
                         ->getUploadedFileNameForStorageUsing(fn ($file) => $this->hashedBrandFilename($file))
-                        ->rules([$this->minDimensionRule()])
+                        ->rules([fn (): \Closure => $this->minDimensionRule()])
                         ->columnSpanFull(),
                     FileUpload::make('brand_mark')
                         ->label(__('settings.brand_mark'))
@@ -127,7 +127,7 @@ class Settings extends Page implements HasForms
                         ->acceptedFileTypes(Brand::ALLOWED_MIMES)
                         ->maxSize(Brand::UPLOAD_MAX_KB)
                         ->getUploadedFileNameForStorageUsing(fn ($file) => $this->hashedBrandFilename($file))
-                        ->rules([$this->minDimensionRule()]),
+                        ->rules([fn (): \Closure => $this->minDimensionRule()]),
                     FileUpload::make('brand_mark_light')
                         ->label(__('settings.brand_mark_light'))
                         ->helperText(__('settings.brand_mark_light_help'))
@@ -135,7 +135,7 @@ class Settings extends Page implements HasForms
                         ->acceptedFileTypes(Brand::ALLOWED_MIMES)
                         ->maxSize(Brand::UPLOAD_MAX_KB)
                         ->getUploadedFileNameForStorageUsing(fn ($file) => $this->hashedBrandFilename($file))
-                        ->rules([$this->minDimensionRule()]),
+                        ->rules([fn (): \Closure => $this->minDimensionRule()]),
                     ColorPicker::make('brand_primary_color')
                         ->label(__('settings.brand_primary_color'))
                         ->helperText(__('settings.brand_primary_color_help')),
