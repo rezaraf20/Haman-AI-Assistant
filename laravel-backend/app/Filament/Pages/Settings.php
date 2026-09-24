@@ -4,8 +4,8 @@ namespace App\Filament\Pages;
 use App\Console\Commands\DiskReportCommand;
 use App\Models\{LlmProviderProfile, Plan};
 use App\Services\Payments\PaymentGatewayManager;
-use App\Support\{MailSettings, PlatformAccess, PlatformActivity, Settings as Config, SettingsRegistry};
-use Filament\Forms\Components\{Actions, Grid, Placeholder, Section, Select, Tabs, TextInput, Toggle};
+use App\Support\{Brand, MailSettings, PlatformAccess, PlatformActivity, Settings as Config, SettingsRegistry};
+use Filament\Forms\Components\{Actions, ColorPicker, FileUpload, Grid, Placeholder, Section, Select, Tabs, TextInput, Toggle};
 use Filament\Forms\Components\Actions\Action as FormAction;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -62,7 +62,24 @@ class Settings extends Page implements HasForms
         foreach (array_keys(SettingsRegistry::all()) as $key) {
             $values[$this->fieldName($key)] = Config::redactedFor($key);
         }
+
+        // Brand fields aren't in SettingsRegistry (they're files, not
+        // scalars) — fed in separately here so form()/save() can still treat
+        // the whole form as one flat $state array. Only a genuinely
+        // uploaded file is shown as an existing FileUpload value; the
+        // shipped default is never presented as if someone had chosen it.
+        $values['brand_logo']          = $this->diskPathFromUrl(Brand::hasCustomLogo() ? Brand::logoUrl() : null);
+        $values['brand_mark']          = $this->diskPathFromUrl(Brand::hasCustomMark() ? Brand::markUrl() : null);
+        $values['brand_mark_light']    = $this->diskPathFromUrl(Brand::hasCustomMarkLight() ? Brand::markLightUrl() : null);
+        $values['brand_primary_color'] = Brand::primaryColor();
+
         return $values;
+    }
+
+    /** '/brand/uploads/xyz.svg' -> 'uploads/xyz.svg' — the 'brand' disk's own root already is /brand, so this is the path FileUpload's disk-relative state expects. */
+    private function diskPathFromUrl(?string $url): ?string
+    {
+        return $url ? ltrim(str_replace('/brand/', '', $url), '/') : null;
     }
 
     /** Dots are Filament's nesting separator, so they cannot survive here. */
@@ -75,6 +92,7 @@ class Settings extends Page implements HasForms
     {
         return $form->schema([
             Tabs::make('settings')->tabs([
+                Tabs\Tab::make(__('settings.tab_brand'))->icon('heroicon-o-swatch')->schema($this->brandTab()),
                 Tabs\Tab::make(__('settings.tab_payments'))->icon('heroicon-o-credit-card')->schema($this->paymentsTab()),
                 Tabs\Tab::make(__('settings.tab_email'))->icon('heroicon-o-envelope')->schema($this->emailTab()),
                 Tabs\Tab::make(__('settings.tab_sms'))->icon('heroicon-o-device-phone-mobile')->schema($this->smsTab()),
@@ -86,6 +104,68 @@ class Settings extends Page implements HasForms
     }
 
     // ── Tab bodies ──────────────────────────────────────────────────────
+
+    private function brandTab(): array
+    {
+        return [
+            Section::make(__('settings.brand_identity'))
+                ->description(__('settings.brand_identity_desc'))
+                ->schema([
+                    FileUpload::make('brand_logo')
+                        ->label(__('settings.brand_logo'))
+                        ->helperText(__('settings.brand_logo_help'))
+                        ->disk(Brand::DISK)->directory('uploads')->visibility('public')
+                        ->acceptedFileTypes(Brand::ALLOWED_MIMES)
+                        ->maxSize(Brand::UPLOAD_MAX_KB)
+                        ->getUploadedFileNameForStorageUsing(fn ($file) => $this->hashedBrandFilename($file))
+                        ->rules([$this->minDimensionRule()])
+                        ->columnSpanFull(),
+                    FileUpload::make('brand_mark')
+                        ->label(__('settings.brand_mark'))
+                        ->helperText(__('settings.brand_mark_help'))
+                        ->disk(Brand::DISK)->directory('uploads')->visibility('public')
+                        ->acceptedFileTypes(Brand::ALLOWED_MIMES)
+                        ->maxSize(Brand::UPLOAD_MAX_KB)
+                        ->getUploadedFileNameForStorageUsing(fn ($file) => $this->hashedBrandFilename($file))
+                        ->rules([$this->minDimensionRule()]),
+                    FileUpload::make('brand_mark_light')
+                        ->label(__('settings.brand_mark_light'))
+                        ->helperText(__('settings.brand_mark_light_help'))
+                        ->disk(Brand::DISK)->directory('uploads')->visibility('public')
+                        ->acceptedFileTypes(Brand::ALLOWED_MIMES)
+                        ->maxSize(Brand::UPLOAD_MAX_KB)
+                        ->getUploadedFileNameForStorageUsing(fn ($file) => $this->hashedBrandFilename($file))
+                        ->rules([$this->minDimensionRule()]),
+                    ColorPicker::make('brand_primary_color')
+                        ->label(__('settings.brand_primary_color'))
+                        ->helperText(__('settings.brand_primary_color_help')),
+                ])->columns(2),
+            Placeholder::make('brand_scope_note')
+                ->label('')
+                ->content(__('settings.brand_scope_note')),
+        ];
+    }
+
+    /** Same content-hash naming Brand::storeUpload() uses elsewhere — a re-upload of the same bytes reuses the same URL instead of piling up duplicate files. */
+    private function hashedBrandFilename($file): string
+    {
+        $hash = substr(hash_file('sha256', $file->getRealPath()), 0, 16);
+        return "{$hash}.{$file->getClientOriginalExtension()}";
+    }
+
+    /** Skipped for SVG, which has no intrinsic raster size to check. */
+    private function minDimensionRule(): \Closure
+    {
+        return function (string $attribute, $value, \Closure $fail) {
+            if (!$value instanceof \Illuminate\Http\UploadedFile) return;
+            if ($value->getClientMimeType() === 'image/svg+xml') return;
+
+            $size = @getimagesize($value->getRealPath());
+            if ($size && ($size[0] < Brand::MIN_DIMENSION_PX || $size[1] < Brand::MIN_DIMENSION_PX)) {
+                $fail(__('settings.brand_dimension_too_small', ['min' => Brand::MIN_DIMENSION_PX]));
+            }
+        };
+    }
 
     private function paymentsTab(): array
     {
@@ -453,12 +533,58 @@ class Settings extends Page implements HasForms
             );
         }
 
+        $this->saveBrand($state);
+
         // A changed SMTP host has to reach the mailer without a restart.
         MailSettings::apply();
 
         $this->form->fill($this->currentValues());
 
         Notification::make()->title(__('common.settings_saved'))->success()->send();
+    }
+
+    /**
+     * FileUpload's disk-relative state, when it changed, is turned into the
+     * /brand/... URL Brand::set() stores and everywhere else reads. The old
+     * file is deleted whenever it's actually being replaced or cleared —
+     * never on an untouched field, where old === new and nothing happens.
+     */
+    private function saveBrand(array $state): void
+    {
+        $brandBefore = Brand::all();
+        $brandAfter = [];
+
+        $fileFields = ['brand_logo' => 'logo_url', 'brand_mark' => 'mark_url', 'brand_mark_light' => 'mark_light_url'];
+        foreach ($fileFields as $field => $key) {
+            if (!array_key_exists($field, $state)) continue;
+
+            $newPath = $state[$field];
+            $newUrl = $newPath ? '/brand/' . ltrim((string) $newPath, '/') : null;
+            $oldUrl = $brandBefore[$key];
+            if ($newUrl === $oldUrl) continue;
+
+            Brand::deleteUpload($oldUrl);
+            Brand::set($key, $newUrl);
+            $brandAfter[$key] = $newUrl;
+        }
+
+        if (array_key_exists('brand_primary_color', $state)) {
+            $newColor = $state['brand_primary_color'] ?: null;
+            if ($newColor !== $brandBefore['primary_color']) {
+                Brand::set('primary_color', $newColor);
+                $brandAfter['primary_color'] = $newColor;
+            }
+        }
+
+        if ($brandAfter) {
+            PlatformActivity::record(
+                'brand_changed',
+                subjectType: 'platform',
+                subjectId: 'brand',
+                before: array_intersect_key($brandBefore, $brandAfter),
+                after: $brandAfter,
+            );
+        }
     }
 
     public function sendTestEmail(): void

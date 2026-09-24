@@ -85,10 +85,17 @@ class WidgetDefaults {
     // same way an explicit send_button_label etc. already does).
     private static function common(): array {
         return [
-            'primary_color'       => config('haman.brand.primary_color'),
+            'primary_color'       => \App\Support\Brand::primaryColor(),
             'powered_by_enabled'  => true,
             'powered_by_name'     => config('haman.brand.name'),
             'powered_by_url'      => config('haman.brand.url'),
+            // The "Powered by Haman AI" badge's own mark — absolute URLs
+            // since the widget runs on a customer's own domain. Defaults to
+            // the same resources/brand/ files the plugin ships inline until
+            // someone uploads a replacement in the admin Brand tab; see
+            // Brand::markUrl()/markLightUrl().
+            'powered_by_mark_url'       => \App\Support\Brand::absoluteMarkUrl(),
+            'powered_by_mark_light_url' => \App\Support\Brand::absoluteMarkLightUrl(),
             // Which corner of the page the floating widget sits in — must
             // NOT be derived from the chatbot's text direction (a Persian
             // site owner may still want the widget bottom-right, matching

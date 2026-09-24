@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Auth\Events\{Failed, Login, Logout};
 use App\Listeners\RecordPlatformAuthActivity;
-use App\Support\{LandingContent, MailSettings, Settings};
+use App\Support\{Brand, LandingContent, MailSettings, Settings};
 
 class AppServiceProvider extends ServiceProvider {
     public function register(): void {}
@@ -17,6 +17,24 @@ class AppServiceProvider extends ServiceProvider {
         if($this->app->isProduction()) URL::forceScheme('https');
         Model::preventLazyLoading(!$this->app->isProduction());
         \DB::prohibitDestructiveCommands($this->app->isProduction());
+
+        // Not in config/filesystems.php (this app tracks none in git — see
+        // Brand.php's own docblock): registered here so it can point at
+        // the shared volume path without a committed config file assuming
+        // it always exists, the same reasoning BackupService::remoteDisk()
+        // already gives for building its S3 disk at call time instead.
+        // Filament's FileUpload needs a named, config-resolvable disk (not
+        // just a Filesystem instance), which is what this provides.
+        config(['filesystems.disks.' . Brand::DISK => [
+            'driver'     => 'local',
+            // The exact path nginx already aliases at /brand/ — Brand::
+            // storeUpload() writes into an 'uploads' subdirectory of this,
+            // so the root here must NOT also include 'uploads' or every
+            // path doubles up.
+            'root'       => '/shared-assets/brand',
+            'url'        => '/brand',
+            'visibility' => 'public',
+        ]]);
 
         // Hard floor for the public (unauthenticated) chat widget endpoints —
         // independent of ChatController's per-chatbot widget_config throttle,

@@ -85,6 +85,6 @@ return [
     // the two and fails when they disagree, which is what actually keeps
     // them together.
     'wp_plugin' => [
-        'latest_version' => env('HAMAN_WP_PLUGIN_LATEST_VERSION', '2.2.0'),
+        'latest_version' => env('HAMAN_WP_PLUGIN_LATEST_VERSION', '2.3.0'),
     ],
 ];

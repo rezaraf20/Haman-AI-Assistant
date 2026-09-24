@@ -130,6 +130,13 @@
     // against its own background there), and the real gradient-filled mark
     // for the footer, which always sits on a plain white strip.
     function markMono() {
+        // An admin-uploaded mark (Settings > Brand, server-side) always wins
+        // once /chat/session has responded — see applyWidgetConfig() below.
+        // Until then, and if nothing's been uploaded, this is the same
+        // built-in silhouette it always was.
+        if (CFG.poweredByMarkLightUrl) {
+            return '<img src="' + esc(CFG.poweredByMarkLightUrl) + '" alt="' + esc(CFG.poweredByName || 'Haman AI') + '">';
+        }
         return '<svg viewBox="0 0 112 131" role="img" aria-label="Haman AI">' +
             '<path d="M 44 9 L 11 34 L 11 116 C 11 120, 13 122, 17 121 C 26 112, 39 98, 46 84 L 46 40 C 46 30, 45 18, 44 9 Z" fill="#FFFFFF"/>' +
             '<path d="M 68 9 L 101 34 L 101 116 C 101 120, 99 122, 95 121 C 86 112, 73 98, 66 84 L 66 40 C 66 30, 67 18, 68 9 Z" fill="#FFFFFF" fill-opacity="0.75"/>' +
@@ -137,6 +144,9 @@
         '</svg>';
     }
     function markColor(id) {
+        if (CFG.poweredByMarkUrl) {
+            return '<img src="' + esc(CFG.poweredByMarkUrl) + '" alt="">';
+        }
         return '<svg viewBox="0 0 112 131" role="img" aria-label="Haman AI">' +
             '<defs>' +
                 '<linearGradient id="' + id + '-m" x1="0" y1="0" x2="112" y2="131" gradientUnits="userSpaceOnUse">' +
@@ -980,6 +990,28 @@
         if (typeof wc.powered_by_enabled !== 'undefined') CFG.poweredByEnabled = wc.powered_by_enabled;
         if (wc.powered_by_name) CFG.poweredByName = wc.powered_by_name;
         if (wc.powered_by_url) CFG.poweredByUrl = wc.powered_by_url;
+        // An admin-uploaded mark (Settings > Brand, platform-wide — not
+        // per-chatbot) replaces the built-in silhouette everywhere it's
+        // used: the footer badge below, and — since no avatar_url means
+        // avatarSlotHtml() falls back to markMono() too — the header and
+        // floating-toggle badges, refreshed the same way avatar_url already
+        // is above.
+        var markChanged = false;
+        if (wc.powered_by_mark_url && wc.powered_by_mark_url !== CFG.poweredByMarkUrl) {
+            CFG.poweredByMarkUrl = wc.powered_by_mark_url;
+            markChanged = true;
+        }
+        if (wc.powered_by_mark_light_url && wc.powered_by_mark_light_url !== CFG.poweredByMarkLightUrl) {
+            CFG.poweredByMarkLightUrl = wc.powered_by_mark_light_url;
+            markChanged = true;
+        }
+        if (markChanged && !CFG.avatarUrl) {
+            var freshMono = avatarSlotHtml(CFG.avatarUrl);
+            var hdrAvatar2 = root.getElementById('hm-avatar-hdr');
+            if (hdrAvatar2) hdrAvatar2.innerHTML = freshMono;
+            var btnAvatar2 = root.getElementById('hm-avatar-btn');
+            if (btnAvatar2) btnAvatar2.innerHTML = freshMono;
+        }
         renderPoweredBy();
 
         // chat_title/ai_name/quick_questions: the server (customer portal)

@@ -34,7 +34,7 @@ class PlatformActivity
     public const ACTIONS = [
         'access' => ['login', 'logout', 'login_failed'],
         'conversations' => ['conversation_list_opened', 'conversation_viewed', 'contact_revealed'],
-        'settings' => ['chatbot_settings_changed', 'tenant_settings_changed'],
+        'settings' => ['chatbot_settings_changed', 'tenant_settings_changed', 'site_content_changed', 'brand_changed'],
         'operations' => ['cache_cleared', 'webhook_secret_rotated', 'sync_triggered'],
         'tickets' => ['ticket_replied', 'ticket_status_changed'],
         'staff' => ['staff_created', 'staff_updated', 'staff_activated', 'staff_deactivated'],

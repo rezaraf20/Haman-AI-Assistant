@@ -15,6 +15,7 @@ use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\ShareSessionAcrossBrandDomains;
+use App\Support\Brand;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Support\HtmlString;
 
@@ -28,9 +29,9 @@ class AdminPanelProvider extends PanelProvider {
             ->brandLogo(fn () => view('partials.brand-logo', ['height' => 28]))
             ->darkModeBrandLogo(fn () => view('partials.brand-logo', ['height' => 28, 'variant' => 'light']))
             ->brandLogoHeight('1.75rem')
-            ->favicon('/favicon.ico')
+            ->favicon(Brand::markUrl())
             ->login()
-            ->colors(['primary' => config('haman.brand.primary_color')])
+            ->colors(['primary' => Brand::primaryColor()])
             // Bell icon + dropdown in the topbar, backed by the notifications
             // table (see its migration). First real use: alerting the
             // platform admin when an LLM provider auto-disables itself after

@@ -20,6 +20,14 @@
       height  int    the SVG's rendered height in px (width follows, ~3.2x)
       variant string 'color' (default) or 'light' for a dark background
       tag     string wrapping element, default 'span'
+
+    An admin-uploaded logo (Settings > Brand) always wins over the inline
+    lockup below, rendered as a plain <img> at the same height. It's a
+    single file with no separate light/dark variant of its own — an
+    uploaded logo is the merchant's own artwork, already designed for
+    whatever background they intend, not ours to recolor the way the
+    hand-drawn paths below can be. $variant only ever affects the built-in
+    default.
 --}}
 @php
     $height = $height ?? 32;
@@ -28,6 +36,11 @@
     $wordColor = $variant === 'light' ? '#FFFFFF' : 'var(--brand-navy, #001030)';
     $aiFill = $variant === 'light' ? '#FFFFFF' : 'url(#brand-logo-ai-' . $variant . ')';
 @endphp
+@if (\App\Support\Brand::hasCustomLogo())
+<{{ $tag }} class="brand-logo" style="display:inline-flex;align-items:center;line-height:1">
+    <img src="{{ \App\Support\Brand::logoUrl() }}" alt="{{ config('haman.brand.name') }}" height="{{ $height }}" style="height:{{ $height }}px;width:auto;flex-shrink:0">
+</{{ $tag }}>
+@else
 <{{ $tag }} class="brand-logo" style="display:inline-flex;align-items:center;gap:.5em;line-height:1">
     <svg viewBox="0 0 112 131" width="{{ round($height * 112 / 131) }}" height="{{ $height }}" role="img" aria-label="Haman AI" style="flex-shrink:0">
         <defs>
@@ -67,3 +80,4 @@
         <text x="105" y="29" font-family="Poppins, Vazirmatn, sans-serif" font-weight="700" font-size="27" fill="{{ $aiFill }}">AI</text>
     </svg>
 </{{ $tag }}>
+@endif

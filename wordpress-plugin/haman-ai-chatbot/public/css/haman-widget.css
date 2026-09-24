@@ -827,7 +827,7 @@
     flex-shrink: 0;
 }
 
-#hm-powered svg { width: 13px; height: 15px; flex-shrink: 0; }
+#hm-powered svg, #hm-powered img { width: 13px; height: 15px; flex-shrink: 0; object-fit: contain; }
 
 #hm-powered a {
     display: inline-flex;

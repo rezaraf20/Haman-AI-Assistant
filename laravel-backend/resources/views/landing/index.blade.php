@@ -12,7 +12,7 @@
     <link rel="canonical" href="{{ \App\Support\BrandDomains::landingUrl('/') }}">
 
     <link rel="icon" href="{{ \App\Support\BrandDomains::landingUrl('/favicon.ico') }}" sizes="any">
-    <link rel="icon" type="image/svg+xml" href="{{ \App\Support\BrandDomains::landingUrl('/brand/hamanai-mark.svg') }}">
+    <link rel="icon" type="{{ \App\Support\Brand::markMimeType() }}" href="{{ \App\Support\BrandDomains::landingUrl(\App\Support\Brand::markUrl()) }}">
     <link rel="apple-touch-icon" href="{{ \App\Support\BrandDomains::landingUrl('/apple-touch-icon.png') }}">
 
     {{-- What a shared link looks like in a chat app or a search result.

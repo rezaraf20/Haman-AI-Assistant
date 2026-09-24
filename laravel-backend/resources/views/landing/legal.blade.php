@@ -9,6 +9,7 @@
     <title>{{ $title }} — {{ __('landing.brand') }}</title>
     <link rel="canonical" href="{{ \App\Support\BrandDomains::landingUrl('/legal/' . $slug) }}">
     <link rel="icon" href="{{ \App\Support\BrandDomains::landingUrl('/favicon.ico') }}" sizes="any">
+    <link rel="icon" type="{{ \App\Support\Brand::markMimeType() }}" href="{{ \App\Support\BrandDomains::landingUrl(\App\Support\Brand::markUrl()) }}">
     <link rel="stylesheet" href="/css/brand.css">
     <style>
         :root { --ink: var(--brand-navy); --muted: var(--brand-muted); --line: #E6E9F2; }

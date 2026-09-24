@@ -15,6 +15,7 @@ use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\ShareSessionAcrossBrandDomains;
+use App\Support\Brand;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Support\HtmlString;
 
@@ -32,7 +33,7 @@ class CustomerPanelProvider extends PanelProvider {
             ->brandLogo(fn () => view('partials.brand-logo', ['height' => 28]))
             ->darkModeBrandLogo(fn () => view('partials.brand-logo', ['height' => 28, 'variant' => 'light']))
             ->brandLogoHeight('1.75rem')
-            ->favicon('/favicon.ico')
+            ->favicon(Brand::markUrl())
             // No ->login() — auth is phone+SMS-OTP via the plain Livewire flow
             // at routes/web.php's /portal/login (app/Livewire/OtpLogin.php),
             // not Filament's built-in email/password login page. It still
@@ -40,7 +41,7 @@ class CustomerPanelProvider extends PanelProvider {
             // Filament's Authenticate middleware below recognizes it exactly
             // like its own login would — bootstrap/app.php's redirectGuestsTo
             // sends unauthenticated /portal* visitors to that route instead.
-            ->colors(['primary' => config('haman.brand.primary_color')])
+            ->colors(['primary' => Brand::primaryColor()])
             // See AdminPanelProvider for why this is a render hook and not
             // ->font() (whose $family parameter is a plain, eagerly-evaluated
             // string, not string|Closure), and why it overrides the
