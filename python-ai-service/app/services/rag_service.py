@@ -173,6 +173,51 @@ def _business_name_rule(business_name: Optional[str], is_fa: bool) -> str:
     return f"\n\nThis business's name is \"{business_name}\". Never use any other name for it, and never state any other company's name as its own."
 
 
+# Real report: a customer asked three questions back to back in one live
+# conversation, and every single reply opened with "سلام!" ("Hello!") — the
+# model has no built-in sense of "we're already mid-conversation" unless the
+# prompt tells it so explicitly, every turn. Same root cause for a merchant's
+# own custom system_prompt: WidgetSettings' "System Instruction" field is
+# free text a merchant is invited to use for "things to always mention" (see
+# lang/*/chatbot.php's help text for that field) — a closing signature with
+# phone/email is exactly the kind of thing merchants write there, and with no
+# turn-awareness at all it got appended, and obeyed, on every single reply.
+# prior_turn_count counts ASSISTANT messages specifically, not user ones:
+# Laravel's ChatService::prepare() inserts the current user message into the
+# DB *before* querying history, so history's own last entry already
+# duplicates the just-asked query — counting "user" turns would be off by
+# one, but a fresh conversation always has exactly zero prior assistant
+# replies regardless of that quirk, so this is the one unambiguous signal.
+def _turn_awareness_rule(prior_turn_count: int, is_fa: bool) -> str:
+    if prior_turn_count == 0:
+        if is_fa:
+            return (
+                "\n\nاین اولین پیام این مکالمه است. اگر کاربر در پیامش سلام یا احوال‌پرسی "
+                "کرده، می‌توانی پاسخ را با یک احوال‌پرسی کوتاه شروع کنی؛ در غیر این صورت "
+                "مستقیم به سؤال پاسخ بده."
+            )
+        return (
+            "\n\nThis is the first message of this conversation. If the user's own message "
+            "includes a greeting, you may open your reply with a brief greeting; otherwise "
+            "answer directly, with no greeting."
+        )
+    if is_fa:
+        return (
+            f"\n\nاین پیام شماره {prior_turn_count + 1} در این مکالمه است، نه اولین پیام — "
+            "مکالمه از قبل در جریان است. پاسخ را با «سلام» یا هر احوال‌پرسی دیگری شروع نکن؛ "
+            "مستقیم به سؤال جواب بده. اطلاعات تماس یا جمله‌ی معرفی/پایانی کسب‌وکار را فقط "
+            "وقتی بیاور که کاربر واقعاً آن را خواسته یا مکالمه در حال جمع‌شدن است — نه در "
+            "انتهای هر پاسخ."
+        )
+    return (
+        f"\n\nThis is message #{prior_turn_count + 1} of this conversation, not the first — "
+        "the conversation is already under way. Do not open your reply with \"Hello\", "
+        "\"Hi\", or any other greeting; answer directly. Only include contact info or a "
+        "closing sign-off about the business when the user actually asked for it, or the "
+        "conversation is wrapping up — not at the end of every reply."
+    )
+
+
 # "Is this genuine?" — the single most common customer question in BOTH
 # real interviews this app was built from (electronics parts and
 # cosmetics). A wrong "yes" here is a real liability the merchant bears,
@@ -460,21 +505,30 @@ def _catalogue_lookup_rule(enabled_tools: Optional[List[str]], is_fa: bool) -> s
     )
 
 
-def _grounding_reminder(is_fa: bool) -> str:
+def _grounding_reminder(is_fa: bool, is_first_turn: bool = True) -> str:
     """A short, final restatement of the highest-risk rules, placed right
     before the user's question — the repetition closest to the generated
     text has more influence than the same rule stated once at the top of a
     long system prompt, which is otherwise easy for a small model to lose
-    track of by the time it reaches the actual question."""
+    track of by the time it reaches the actual question.
+
+    is_first_turn's own reminder is the same reasoning applied to
+    _turn_awareness_rule() above: greeting on every turn was the actual
+    reported bug, so it gets restated here too, right next to the question,
+    not just once at the top a small model may have already lost track of.
+    """
     if is_fa:
-        return (
+        base = (
             "یادآوری: فقط بر اساس زمینه‌ی بالا پاسخ بده. هیچ نام شرکتی (چه رقیب، چه هر نام دیگری) "
             "را که در بالا صراحتاً به‌عنوان نام این کسب‌وکار داده نشده، نساز یا به‌کار نبر — اگر نام "
             "دقیق را نمی‌دانی، صادقانه بگو نمی‌دانی. همچنین هیچ نام پلتفرم/نرم‌افزار شخص ثالث (مثل "
             "Shopify، Magento، GPT-4، Claude) و هیچ عدد یا درصدی که دقیقاً در زمینه، برای همین سوال، "
             "نیامده نساز — اگر زمینه چیزی نگفته، بگو این اطلاعات فهرست نشده."
         )
-    return (
+        if not is_first_turn:
+            base += " مکالمه از قبل در جریان است؛ دوباره سلام نکن و امضای پایانی/اطلاعات تماس را تکرار نکن."
+        return base
+    base = (
         "Reminder: answer using only the context above. Never invent or state any "
         "company name (a competitor's or anything else) that wasn't explicitly given "
         "above as this business's own name — if you don't know its exact name, say so. "
@@ -482,6 +536,9 @@ def _grounding_reminder(is_fa: bool) -> str:
         "GPT-4, Claude) or any number/percentage that doesn't appear verbatim in the "
         "context for this exact question — if the context doesn't say, say it isn't listed."
     )
+    if not is_first_turn:
+        base += " The conversation is already under way; do not greet again, and do not repeat a closing signature or contact info."
+    return base
 
 
 # From a real interview at an electronics-parts shop: a customer typing
@@ -1359,8 +1416,12 @@ async def run_rag_pipeline_stream(
     context = "\n\n---\n\n".join(context_parts)
 
     is_fa_question = _looks_persian(query)
+    # See _turn_awareness_rule()'s own docstring for why this counts
+    # assistant messages specifically, not user ones.
+    prior_turn_count = sum(1 for h in history if h.get("role") == "assistant")
     sys_p = _grounding_rules_for(query)
     sys_p += _business_name_rule(business_name, is_fa_question)
+    sys_p += _turn_awareness_rule(prior_turn_count, is_fa_question)
     sys_p += _live_pricing_rule(enabled_tools, is_fa_question)
     sys_p += _catalogue_lookup_rule(enabled_tools, is_fa_question)
     sys_p += _product_display_rule(enabled_tools, is_fa_question)
@@ -1412,7 +1473,7 @@ async def run_rag_pipeline_stream(
     # the generated text carries more weight than a rule stated once far
     # above, which a small model can lose track of by the time it reaches
     # the actual answer.
-    reminder = _grounding_reminder(is_fa_question)
+    reminder = _grounding_reminder(is_fa_question, is_first_turn=(prior_turn_count == 0))
     full_prompt = f"{sys_p}\n\n{hist_text}{reminder}\n\nUser: {query}\nAssistant:"
 
     sources = []
@@ -1568,8 +1629,12 @@ async def run_rag_pipeline(
     # _grounding_rules_for()'s docstring for why that's more reliable here
     # than the chatbot's configured response_language.
     is_fa_question = _looks_persian(query)
+    # See _turn_awareness_rule()'s own docstring for why this counts
+    # assistant messages specifically, not user ones.
+    prior_turn_count = sum(1 for h in history if h.get("role") == "assistant")
     sys_p = _grounding_rules_for(query)
     sys_p += _business_name_rule(business_name, is_fa_question)
+    sys_p += _turn_awareness_rule(prior_turn_count, is_fa_question)
     sys_p += _live_pricing_rule(enabled_tools, is_fa_question)
     sys_p += _catalogue_lookup_rule(enabled_tools, is_fa_question)
     sys_p += _product_display_rule(enabled_tools, is_fa_question)
@@ -1619,7 +1684,7 @@ async def run_rag_pipeline(
 
     # Repeated right before the question, in addition to the top of the
     # prompt — see run_rag_pipeline_stream()'s identical comment.
-    reminder = _grounding_reminder(is_fa_question)
+    reminder = _grounding_reminder(is_fa_question, is_first_turn=(prior_turn_count == 0))
     full_prompt = f"{sys_p}\n\n{hist_text}{reminder}\n\nUser: {query}\nAssistant:"
 
     model_used = "n/a"
