@@ -137,7 +137,7 @@ class SyncSettingsFilterTest extends TestCase
         DB::table('documents')->insert([
             'id' => (string) Str::uuid(), 'chatbot_id' => $chatbotId, 'source_type' => 'faq',
             'external_id' => 'faq_manual_1', 'title' => 'Manual FAQ', 'raw_content' => 'Q: A: ',
-            'status' => 'indexed', 'created_at' => now(), 'updated_at' => now(),
+            'content_hash' => md5('Q: A: '), 'status' => 'indexed', 'created_at' => now(), 'updated_at' => now(),
         ]);
         $pageDocId = DB::table('documents')->where('external_id', '903')->value('id');
         DB::table('chunks')->insert([
