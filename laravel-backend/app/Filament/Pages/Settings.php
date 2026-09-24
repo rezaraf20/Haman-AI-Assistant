@@ -71,7 +71,13 @@ class Settings extends Page implements HasForms
         $values['brand_logo']          = $this->diskPathFromUrl(Brand::hasCustomLogo() ? Brand::logoUrl() : null);
         $values['brand_mark']          = $this->diskPathFromUrl(Brand::hasCustomMark() ? Brand::markUrl() : null);
         $values['brand_mark_light']    = $this->diskPathFromUrl(Brand::hasCustomMarkLight() ? Brand::markLightUrl() : null);
-        $values['brand_primary_color'] = Brand::primaryColor();
+        // The raw override, not Brand::primaryColor()'s resolved value —
+        // same reason Config::redactedFor() above never hands back a
+        // coalesced default: showing the platform default back as if it
+        // were a saved choice would freeze it into an explicit override
+        // (and log a spurious brand_changed) the moment the page is next
+        // saved for any unrelated reason. Null just shows an empty picker.
+        $values['brand_primary_color'] = Brand::all()['primary_color'];
 
         return $values;
     }

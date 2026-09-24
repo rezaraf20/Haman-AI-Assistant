@@ -133,7 +133,16 @@ class BrandSettingsTest extends TestCase
 
         $page = new SettingsPage();
         $page->mount();
-        $page->data['brand_mark'] = 'uploads/newmark123.svg';
+        // FileUpload's internal state is always an array keyed by a random
+        // upload id, even for a single (non-multiple) field — Filament's
+        // own BaseFileUpload::getValidationRules() min/max-files rule
+        // enforces this shape, confirmed on the server: assigning a bare
+        // string here throws a TypeError inside form()->getState() before
+        // save() even runs. Field::dehydrateState() is what unwraps this
+        // back to the plain '/brand/...'-relative path save() actually
+        // reads — see the real (non-test) flow in saveBrand() below, which
+        // never sees this array shape.
+        $page->data['brand_mark'] = [(string) Str::uuid() => 'uploads/newmark123.svg'];
         $page->save();
 
         $this->assertTrue(Brand::hasCustomMark());
@@ -154,10 +163,10 @@ class BrandSettingsTest extends TestCase
 
         $page = new SettingsPage();
         $page->mount();
-        $this->assertSame('uploads/old111.svg', $page->data['brand_mark'],
+        $this->assertSame(['uploads/old111.svg'], array_values($page->data['brand_mark']),
             'The existing upload must be pre-filled so the admin sees what is currently set.');
 
-        $page->data['brand_mark'] = 'uploads/new222.svg';
+        $page->data['brand_mark'] = [(string) Str::uuid() => 'uploads/new222.svg'];
         $page->save();
 
         Storage::disk(Brand::DISK)->assertMissing('uploads/old111.svg');
