@@ -32,6 +32,18 @@ class Haman_Admin {
         include HAMAN_PLUGIN_DIR.'admin/partials/settings-page.php';
     }
 
+    /** Keeps only comma-separated positive integers — what
+     * Haman_Page_Sync::excluded_ids() (WordPress side) and
+     * App\Support\SyncSettings (server side) both expect to parse. */
+    private function sanitize_id_list( string $raw ): string {
+        $ids = $this->id_list_to_array($raw);
+        return implode(', ', $ids);
+    }
+    private function id_list_to_array( string $raw ): array {
+        if ('' === trim($raw)) return [];
+        return array_values(array_filter(array_map('intval', array_map('trim', explode(',', $raw)))));
+    }
+
     public static function log( string $message ): void {
         $log = get_option( self::LOG_OPTION, [] );
         if ( ! is_array( $log ) ) $log = [];
@@ -50,10 +62,38 @@ class Haman_Admin {
         update_option('haman_api_url',       esc_url_raw($_POST['haman_api_url']??HAMAN_API_BASE));
         update_option('haman_enabled',       isset($_POST['haman_enabled'])?'1':'0');
 
-        // همگام‌سازی / Sync scope
+        // همگام‌سازی / Sync scope. Pages and posts are two independent
+        // toggles (see Haman_Page_Sync::enabled_post_types()'s docblock for
+        // the incident behind splitting them) — posts default OFF, unlike
+        // every other checkbox here, since an unchecked box and "not sent
+        // in $_POST at all" are indistinguishable and a fresh install must
+        // not silently start syncing blog posts.
         update_option('haman_sync_products', isset($_POST['haman_sync_products'])?'1':'0');
         update_option('haman_sync_pages',    isset($_POST['haman_sync_pages'])?'1':'0');
+        update_option('haman_sync_posts',    isset($_POST['haman_sync_posts'])?'1':'0');
         update_option('haman_sync_pdfs',     isset($_POST['haman_sync_pdfs'])?'1':'0');
+        update_option('haman_sync_excluded_category_ids', $this->sanitize_id_list($_POST['haman_sync_excluded_category_ids']??''));
+        update_option('haman_sync_excluded_page_ids',     $this->sanitize_id_list($_POST['haman_sync_excluded_page_ids']??''));
+
+        // Best-effort push to the server, so a change made here also shows
+        // up in the customer portal's SyncSettings page without the admin
+        // having to open that separately — mirrors ajax_migrate_to_server()'s
+        // reasoning, just synchronous since this is a handful of scalar
+        // fields on an already-full-page POST, not worth a second AJAX round
+        // trip. Never blocks the redirect below: a merchant without a
+        // working API connection yet must still be able to save local
+        // settings, exactly like every other field on this page already can.
+        $chatbot_id = get_option('haman_chatbot_id', '');
+        if (!empty($chatbot_id)) {
+            $r = (new Haman_Api_Client())->update_sync_settings($chatbot_id, [
+                'sync_products'         => get_option('haman_sync_products') === '1',
+                'sync_pages'            => get_option('haman_sync_pages') === '1',
+                'sync_posts'            => get_option('haman_sync_posts') === '1',
+                'excluded_category_ids' => $this->id_list_to_array(get_option('haman_sync_excluded_category_ids', '')),
+                'excluded_page_ids'     => $this->id_list_to_array(get_option('haman_sync_excluded_page_ids', '')),
+            ]);
+            if (is_wp_error($r)) self::log('Push sync settings to server failed: ' . $r->get_error_message());
+        }
 
         // نگاشت فیلدهای اصالت / Authenticity field mapping — see
         // Haman_Product_Sync::AUTHENTICITY_FIELDS/authenticity_fields().
@@ -208,6 +248,52 @@ class Haman_Admin {
         }
         self::log('Local content settings migrated to server');
         wp_send_json_success(['message' => 'OK']);
+    }
+
+    /** AJAX: pulls the current sync scope from the server, so this site's
+     * settings page reflects a change made from the customer portal without
+     * requiring the admin to already know one happened. Called when the
+     * "همگام‌سازی" tab is opened — see haman-admin.js. */
+    public function ajax_get_sync_settings(): void {
+        check_ajax_referer('haman_admin_ajax','nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error(['message'=>'دسترسی ندارید / No permission'], 403);
+
+        $chatbot_id = get_option('haman_chatbot_id','');
+        if (empty($chatbot_id)) {
+            wp_send_json_error(['message' => 'ابتدا شناسه‌ی چت‌بات را در تب اتصال تنظیم کنید / Set the Chatbot ID in the Connection tab first']);
+        }
+        $r = (new Haman_Api_Client())->get_sync_settings($chatbot_id);
+        if (is_wp_error($r)) wp_send_json_error(['message' => $r->get_error_message()]);
+        wp_send_json_success($r['data'] ?? []);
+    }
+
+    /** AJAX: "پاک کردن و ایندکس دوباره" — wipes this chatbot's synced
+     * documents server-side, then immediately re-runs a full sync so the
+     * index comes back populated with only what the current settings
+     * allow, rather than sitting empty until the next scheduled run. */
+    public function ajax_clear_and_reindex(): void {
+        check_ajax_referer('haman_admin_ajax','nonce');
+        if (!current_user_can('manage_options')) wp_send_json_error(['message'=>'دسترسی ندارید / No permission'], 403);
+
+        $chatbot_id = get_option('haman_chatbot_id','');
+        if (empty($chatbot_id)) {
+            wp_send_json_error(['message' => 'ابتدا شناسه‌ی چت‌بات را در تب اتصال تنظیم کنید / Set the Chatbot ID in the Connection tab first']);
+        }
+
+        $cleared = (new Haman_Api_Client())->clear_index($chatbot_id);
+        if (is_wp_error($cleared)) {
+            self::log('Clear index failed: ' . $cleared->get_error_message());
+            wp_send_json_error(['message' => $cleared->get_error_message()]);
+        }
+
+        $results = (new Haman_Sync_Manager())->run_full_sync();
+        set_transient('haman_sync_results', $results, 3600);
+        self::log('Index cleared and reindexed: ' . wp_json_encode($cleared['data'] ?? []) . ' / ' . wp_json_encode($results));
+
+        wp_send_json_success([
+            'cleared' => $cleared['data'] ?? [],
+            'synced'  => $results,
+        ]);
     }
 
     /** AJAX: compares HAMAN_VERSION against the server's advertised

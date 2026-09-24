@@ -72,8 +72,20 @@ $authenticity_field_labels = [
     <table class="form-table">
     <tr><th>چه چیزی همگام‌سازی شود / What to sync</th><td>
         <label><input type="checkbox" name="haman_sync_products" value="1" <?php checked(get_option('haman_sync_products','1'),'1'); ?>> محصولات (WooCommerce) / Products</label><br>
-        <label><input type="checkbox" name="haman_sync_pages" value="1" <?php checked(get_option('haman_sync_pages','1'),'1'); ?>> صفحات و نوشته‌ها / Pages &amp; posts</label><br>
+        <label><input type="checkbox" name="haman_sync_pages" value="1" <?php checked(get_option('haman_sync_pages','1'),'1'); ?>> صفحات / Pages</label><br>
+        <label><input type="checkbox" name="haman_sync_posts" value="1" <?php checked(get_option('haman_sync_posts','0'),'1'); ?>> نوشته‌های وبلاگ / Blog posts</label>
+        <p class="description">
+            به‌صورت پیش‌فرض خاموش است — یک نوشته‌ی وبلاگ به‌ندرت چیزی است که مشتری بخواهد وسط گفتگو جوابش را بگیرد.<br>
+            <em>Off by default — a blog post is rarely something a customer wants answered from mid-conversation.</em>
+        </p><br>
         <label><input type="checkbox" name="haman_sync_pdfs" value="1" <?php checked(get_option('haman_sync_pdfs','1'),'1'); ?>> فایل‌های PDF ضمیمه‌ی محصول (دیتاشیت) / PDF attachments (datasheets)</label>
+    </td></tr>
+    <tr><th>استثنا کردن محتوای خاص / Exclude specific content</th><td>
+        <label>شناسه‌ی دسته‌های مستثنا (نوشته‌ها) / Excluded category IDs (posts):<br>
+            <input type="text" name="haman_sync_excluded_category_ids" value="<?php echo esc_attr(get_option('haman_sync_excluded_category_ids','')); ?>" class="regular-text" placeholder="مثلاً / e.g. 4, 9, 12"></label>
+        <p class="description">نوشته‌های این دسته‌ها هیچ‌وقت همگام نمی‌شوند، حتی اگر «نوشته‌های وبلاگ» روشن باشد. / Posts in these categories are never synced, even when Blog posts is on.</p>
+        <label>شناسه‌ی برگه‌های مستثنا / Excluded page IDs:<br>
+            <input type="text" name="haman_sync_excluded_page_ids" value="<?php echo esc_attr(get_option('haman_sync_excluded_page_ids','')); ?>" class="regular-text" placeholder="مثلاً / e.g. 2, 15"></label>
     </td></tr>
     </table>
 
@@ -137,6 +149,13 @@ $authenticity_field_labels = [
     <?php wp_nonce_field('haman_manual_sync'); ?>
     <?php submit_button('اجرای همگام‌سازی کامل / Run Full Sync Now','secondary'); ?>
     </form>
+
+    <button type="button" id="hm-clear-reindex" class="button">پاک کردن و ایندکس دوباره / Clear and reindex</button>
+    <p class="description">
+        هرچه الان همگام شده (محصولات، صفحات، نوشته‌های وبلاگ) را پاک می‌کند و با تنظیمات بالا از نو می‌سازد — برای وقتی که تنظیمات «چه چیزی همگام‌سازی شود» را تغییر داده‌اید و محتوای قدیمی هنوز در ایندکس مانده است. سوالات متداولی که دستی وارد کرده‌اید دست‌نخورده می‌مانند.<br>
+        <em>Deletes everything currently synced (products, pages, blog posts) and rebuilds it using the settings above — for when you've changed what to sync and old content is still stuck in the index. Manually-entered FAQs are not affected.</em>
+    </p>
+    <span id="hm-clear-reindex-result"></span>
     <?php $r = get_transient('haman_sync_results'); if($r): ?>
         <table class="widefat" style="max-width:700px">
         <thead><tr><th>نوع / Type</th><th>جدید / New</th><th>به‌روزشده / Updated</th><th>بدون تغییر / Skipped</th><th>حذف‌شده / Deleted</th><th>ناموفق / Failed</th></tr></thead>

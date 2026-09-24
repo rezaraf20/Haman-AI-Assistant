@@ -27,6 +27,8 @@ class Haman_Loader {
         $this->add_action( 'wp_ajax_haman_get_widget_settings',       $admin, 'ajax_get_widget_settings' );
         $this->add_action( 'wp_ajax_haman_migrate_to_server',         $admin, 'ajax_migrate_to_server' );
         $this->add_action( 'wp_ajax_haman_check_version',             $admin, 'ajax_check_version' );
+        $this->add_action( 'wp_ajax_haman_get_sync_settings',         $admin, 'ajax_get_sync_settings' );
+        $this->add_action( 'wp_ajax_haman_clear_and_reindex',         $admin, 'ajax_clear_and_reindex' );
         $this->add_action( 'wp_enqueue_scripts',   $public, 'enqueue_assets' );
         $this->add_action( 'haman_hourly_sync',   $sync,   'run_incremental_sync' );
         // create_payment_link (doc-04) — auto-cancel rule for unpaid draft

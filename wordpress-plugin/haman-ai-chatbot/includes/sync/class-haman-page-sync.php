@@ -12,10 +12,91 @@ class Haman_Page_Sync {
 
     public function __construct( private Haman_Api_Client $api ) {}
 
+    /**
+     * Which post types this site's own settings currently allow syncing at
+     * all. Pages and posts used to be one combined "haman_sync_pages"
+     * option (get_posts(['post_type'=>['page','post'],...]) unconditionally)
+     * -- the actual cause of a real incident: a hamantech.ir blog post's
+     * pricing table got indexed and surfaced mid-conversation to a customer
+     * who never asked about it, because there was no way to sync pages
+     * without also syncing every blog post. Posts default OFF for exactly
+     * that reason; pages keep the old default (on), so an existing install
+     * upgrading to this version sees no behavior change for pages.
+     */
+    public static function enabled_post_types(): array {
+        $types = [];
+        if (get_option('haman_sync_pages', '1') === '1') $types[] = 'page';
+        if (get_option('haman_sync_posts', '0') === '1') $types[] = 'post';
+        return $types;
+    }
+
+    private static function excluded_ids( string $option ): array {
+        $raw = get_option($option, '');
+        if (!$raw) return [];
+        return array_values(array_filter(array_map('intval', array_map('trim', explode(',', $raw)))));
+    }
+
+    /**
+     * The single place both the bulk queries below AND sync-manager's
+     * real-time save/delete webhooks ask "is this specific post allowed to
+     * sync right now" -- so a page excluded by ID, or a post in an excluded
+     * category, is treated identically whether it arrives via a full sync
+     * or a single wp_insert_post save, instead of the two paths quietly
+     * drifting apart.
+     */
+    public static function is_allowed( \WP_Post $post ): bool {
+        if (!in_array($post->post_type, self::enabled_post_types(), true)) return false;
+
+        if ($post->post_type === 'page') {
+            return !in_array($post->ID, self::excluded_ids('haman_sync_excluded_page_ids'), true);
+        }
+
+        if ($post->post_type === 'post') {
+            $excluded = self::excluded_ids('haman_sync_excluded_category_ids');
+            if (empty($excluded)) return true;
+            $categories = wp_get_post_categories($post->ID, ['fields' => 'ids']);
+            return empty(array_intersect($categories, $excluded));
+        }
+
+        return true;
+    }
+
+    private function query_args( int $per_page, int $paged, array $extra = [] ): array {
+        $post_types = self::enabled_post_types();
+        $args = array_merge([
+            'post_type'      => $post_types,
+            'post_status'    => 'publish',
+            'posts_per_page' => $per_page,
+            'paged'          => $paged,
+        ], $extra);
+
+        $excluded_pages = self::excluded_ids('haman_sync_excluded_page_ids');
+        if (!empty($excluded_pages)) {
+            $args['post__not_in'] = array_merge($args['post__not_in'] ?? [], $excluded_pages);
+        }
+
+        // tax_query has no effect on 'page' (pages carry no 'category'
+        // terms), so this only ever filters the 'post' half of a mixed
+        // query -- no separate branch needed for the pages-only case.
+        $excluded_cats = self::excluded_ids('haman_sync_excluded_category_ids');
+        if (!empty($excluded_cats) && in_array('post', $post_types, true)) {
+            $args['tax_query'] = [[
+                'taxonomy' => 'category',
+                'field'    => 'term_id',
+                'terms'    => $excluded_cats,
+                'operator' => 'NOT IN',
+            ]];
+        }
+
+        return $args;
+    }
+
     public function sync_all( string $cid ): array {
+        if (empty(self::enabled_post_types())) return ['synced' => 0];
+
         $page = 1; $synced = 0; $errors = []; $batch = []; $batchBytes = 0;
         do {
-            $posts = get_posts(['post_type'=>['page','post'],'post_status'=>'publish','posts_per_page'=>self::FETCH_PAGE_SIZE,'paged'=>$page]);
+            $posts = get_posts($this->query_args(self::FETCH_PAGE_SIZE, $page));
             foreach ($posts as $post) {
                 $item     = $this->post_to_array($post);
                 $itemSize = strlen(wp_json_encode($item));
@@ -42,7 +123,10 @@ class Haman_Page_Sync {
     }
 
     public function sync_recent( string $cid, int $hours=25 ): void {
-        $posts = get_posts(['post_type'=>['page','post'],'post_status'=>'publish','posts_per_page'=>self::FETCH_PAGE_SIZE,'date_query'=>[['after'=>date('Y-m-d H:i:s',strtotime("-{$hours} hours"))]]]);
+        if (empty(self::enabled_post_types())) return;
+        $posts = get_posts($this->query_args(self::FETCH_PAGE_SIZE, 1, [
+            'date_query' => [['after' => date('Y-m-d H:i:s', strtotime("-{$hours} hours"))]],
+        ]));
         if (empty($posts)) return;
         $synced = 0; $errors = [];
         $this->flush_batch($cid, array_map([$this,'post_to_array'],$posts), $synced, $errors);

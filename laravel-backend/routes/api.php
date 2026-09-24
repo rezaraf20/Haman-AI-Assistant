@@ -70,10 +70,18 @@ Route::prefix('v1')->group(function () {
             Route::post('faqs',     [SyncController::class, 'syncFaqs']);
             Route::post('webhook',  [SyncController::class, 'handleWebhook'])->middleware('webhook.verify');
             Route::get('status/{jobId}', [SyncController::class, 'status']);
+            // "Clear and reindex" — wipes this chatbot's synced documents
+            // (never manually-entered FAQs) so a changed sync_settings
+            // scope doesn't leave stale, now-excluded content sitting in
+            // the index; the plugin follows this with its own normal full
+            // sync to rebuild only what's currently allowed.
+            Route::post('clear', [SyncController::class, 'clearIndex']);
         });
         Route::get('chatbots',       [ChatbotController::class, 'index']);
         Route::get('chatbots/{id}',  [ChatbotController::class, 'show']);
         Route::put('chatbots/{id}/widget-settings', [ChatbotController::class, 'updateWidgetSettings']);
+        Route::get('chatbots/{id}/sync-settings', [ChatbotController::class, 'syncSettings']);
+        Route::put('chatbots/{id}/sync-settings', [ChatbotController::class, 'updateSyncSettings']);
         Route::get('tenant/webhook-secret', [TenantController::class, 'webhookSecret']);
         Route::post('tenant/webhook-secret/regenerate', [TenantController::class, 'regenerateWebhookSecret']);
     });

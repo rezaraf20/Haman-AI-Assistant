@@ -114,6 +114,21 @@ class SyncController extends BaseApiController {
         return $this->ok($this->jobArr(SyncJob::findOrFail($id)));
     }
 
+    /**
+     * "Clear and reindex" (SyncSettings' own docblock) — wipes this
+     * chatbot's synced documents (products, pages, posts, PDF attachments;
+     * never manually-entered FAQs) so a narrowed sync_settings scope
+     * doesn't leave stale, now-excluded content sitting in the index. The
+     * caller is expected to trigger a normal full sync immediately after —
+     * this endpoint only clears, it never re-syncs on its own, since it has
+     * no way to reach back into a specific WordPress site itself.
+     */
+    public function clearIndex(Request $req): JsonResponse {
+        $d = $req->validate(['chatbot_id' => 'required|uuid']);
+        $result = $this->svc->clearSyncedIndex($d['chatbot_id']);
+        return $this->ok($result);
+    }
+
     private function jobArr(SyncJob $j): array {
         return [
             'id'              => $j->id,

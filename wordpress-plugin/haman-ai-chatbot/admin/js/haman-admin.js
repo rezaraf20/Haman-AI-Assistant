@@ -182,6 +182,34 @@
         });
     }
 
+    /** "پاک کردن و ایندکس دوباره" — wipes this chatbot's synced index
+     * server-side and immediately re-triggers a full sync, so old content
+     * a narrowed sync scope no longer allows doesn't just sit there until
+     * something else happens to remove it. */
+    function initClearReindex() {
+        var btn = qs('#hm-clear-reindex');
+        var resultEl = qs('#hm-clear-reindex-result');
+        if (!btn) return;
+
+        btn.addEventListener('click', function () {
+            if (!confirm('این کار هرچه الان همگام شده (محصولات، صفحات، نوشته‌های وبلاگ) را پاک می‌کند و با تنظیمات بالا از نو می‌سازد. سوالات متداولی که دستی وارد کرده‌اید دست‌نخورده می‌مانند. ادامه می‌دهید؟\n\nThis deletes everything currently synced (products, pages, blog posts) and rebuilds it using the settings above. Manually-entered FAQs are not affected. Continue?')) return;
+            btn.disabled = true;
+            resultEl.textContent = '...';
+            ajaxPost('haman_clear_and_reindex').then(function (data) {
+                if (!data.success) {
+                    resultEl.textContent = '❌ ' + (data.data && data.data.message ? data.data.message : 'خطا / Error');
+                    return;
+                }
+                var cleared = data.data.cleared || {};
+                resultEl.textContent = '✅ ' + (cleared.documents_deleted || 0) + ' سند و ' + (cleared.chunks_deleted || 0) +
+                    ' قطعه حذف شد، همگام‌سازی تازه آغاز شد / ' + (cleared.documents_deleted || 0) + ' document(s) and ' +
+                    (cleared.chunks_deleted || 0) + ' chunk(s) removed, a fresh sync started';
+            }).catch(function () {
+                resultEl.textContent = '❌ ارتباط برقرار نشد / Could not reach the server';
+            }).finally(function () { btn.disabled = false; });
+        });
+    }
+
     function initVersionCheck() {
         var el = qs('#hm-version-check-result');
         if (!el) return;
@@ -203,6 +231,7 @@
         initClearCache();
         initWebhookSecret();
         initMigrate();
+        initClearReindex();
         initVersionCheck();
     });
 })();

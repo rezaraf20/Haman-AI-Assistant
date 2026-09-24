@@ -11,7 +11,12 @@ class Haman_Sync_Manager {
         if (get_option('haman_sync_products','1') === '1') {
             (new Haman_Product_Sync($this->api()))->sync_recent($this->chatbotId());
         }
-        if (get_option('haman_sync_pages','1') === '1') {
+        // Pages and posts are two independent toggles now (see
+        // Haman_Page_Sync::enabled_post_types()'s own docblock) -- this
+        // class only needs to know whether EITHER is on, since the actual
+        // per-type and per-category filtering happens inside the query
+        // Haman_Page_Sync itself builds.
+        if (!empty(Haman_Page_Sync::enabled_post_types())) {
             (new Haman_Page_Sync($this->api()))->sync_recent($this->chatbotId());
         }
     }
@@ -28,7 +33,7 @@ class Haman_Sync_Manager {
         if (get_option('haman_sync_products','1') === '1') {
             $results['products'] = (new Haman_Product_Sync($api))->sync_all($cid);
         }
-        if (get_option('haman_sync_pages','1') === '1') {
+        if (!empty(Haman_Page_Sync::enabled_post_types())) {
             $results['pages'] = (new Haman_Page_Sync($api))->sync_all($cid);
             $results['faqs']  = (new Haman_Faq_Sync($api))->sync_all($cid);
         }
@@ -51,7 +56,12 @@ class Haman_Sync_Manager {
 
     public function on_post_saved( int $id, \WP_Post $post, bool $update ): void {
         if (wp_is_post_revision($id) || $post->post_status !== 'publish') return;
-        if (!in_array($post->post_type, ['page','post'], true)) return;
+        // Same check the bulk sync queries make (Haman_Page_Sync::is_allowed())
+        // -- a post type that's off, a specifically excluded page, or a post
+        // in an excluded category must not sneak into the index just
+        // because it was saved rather than caught by the next full/recent
+        // sync.
+        if (!Haman_Page_Sync::is_allowed($post)) return;
         if (!$this->isReady()) return;
         $data  = ['id'=>$id,'title'=>get_the_title($id),'content'=>wp_strip_all_tags(get_post_field('post_content',$id)),'url'=>get_permalink($id),'post_type'=>$post->post_type];
         $event = $update ? 'page.updated' : 'page.created';
@@ -65,6 +75,12 @@ class Haman_Sync_Manager {
     // Mirrors on_product_deleted() exactly.
     public function on_post_removed( int $id ): void {
         if (!$this->isReady()) return;
+        // A post type this site was never configured to sync in the first
+        // place is fine to just ignore here (it can't be in the index).
+        // Whether a NOW-excluded page/category is still in the index isn't
+        // this webhook's job to reconcile -- it fires only on a real
+        // delete/trash, not on a settings change; see SyncSettings' "Clear
+        // and reindex" for the latter.
         if (!in_array( get_post_type($id), ['page','post'], true )) return;
         $this->api()->send_webhook(['event'=>'page.deleted','chatbot_id'=>$this->chatbotId(),'data'=>['id'=>$id]]);
     }

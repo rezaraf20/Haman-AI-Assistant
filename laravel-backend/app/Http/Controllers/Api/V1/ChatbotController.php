@@ -106,6 +106,43 @@ class ChatbotController extends BaseApiController {
         return $this->ok($chatbot->fresh());
     }
 
+    /**
+     * The portal is authoritative for this setting (see App\Support\
+     * SyncSettings's own docblock) — the plugin calls this before every
+     * sync run so a change made from the portal reaches WordPress without
+     * requiring a WordPress-side admin action first.
+     */
+    public function syncSettings(string $id): JsonResponse {
+        $chatbot = Chatbot::findOrFail($id);
+        return $this->ok(\App\Support\SyncSettings::merge($chatbot));
+    }
+
+    /**
+     * The plugin's own settings page calls this on save, so a change made
+     * from WordPress reaches the portal too — the same "whichever side the
+     * admin actually used, both end up agreeing" shape updateWidgetSettings()
+     * above already established for appearance/text settings.
+     */
+    public function updateSyncSettings(Request $req, string $id): JsonResponse {
+        $chatbot = Chatbot::findOrFail($id);
+        $d = $req->validate([
+            'sync_products'         => 'sometimes|boolean',
+            'sync_pages'            => 'sometimes|boolean',
+            'sync_posts'            => 'sometimes|boolean',
+            'excluded_category_ids' => 'sometimes|array',
+            'excluded_category_ids.*' => 'integer',
+            'excluded_page_ids'     => 'sometimes|array',
+            'excluded_page_ids.*'   => 'integer',
+        ]);
+
+        $chatbot->update(['sync_settings' => array_merge(
+            \App\Support\SyncSettings::merge($chatbot),
+            $d,
+        )]);
+
+        return $this->ok(\App\Support\SyncSettings::merge($chatbot->fresh()));
+    }
+
     public function destroy(string $id): JsonResponse {
         $chatbot = Chatbot::findOrFail($id);
         $chatbot->update(['is_active'=>false,'status'=>'inactive']);

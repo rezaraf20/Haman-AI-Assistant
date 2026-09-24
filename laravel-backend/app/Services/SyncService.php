@@ -182,15 +182,30 @@ class SyncService {
     public function syncPages(string $chatbotId, array $pages, string $schema): SyncJob {
         $job = SyncJob::create(['chatbot_id'=>$chatbotId,'job_type'=>'pages','triggered_by'=>'plugin','status'=>'running','items_total'=>count($pages),'started_at'=>now()]);
         $counts = ['new'=>0,'updated'=>0,'skipped'=>0,'deleted'=>0,'failed'=>0];
+
+        // Defense in depth, not the primary mechanism -- the WordPress
+        // plugin already decides what to QUERY based on this same setting
+        // (see class-haman-page-sync.php), which is what actually keeps
+        // excluded content from ever being sent/stored at all. This only
+        // guards a plugin that sends something anyway (stale settings, an
+        // older plugin version, a direct API call).
+        $syncSettings = \App\Support\SyncSettings::merge(Chatbot::findOrFail($chatbotId));
+
         foreach ($pages as $page) {
             try {
+                $sourceType = ($page['post_type']??'page') === 'post' ? 'wordpress_post' : 'wordpress_page';
+                if (!\App\Support\SyncSettings::allows($syncSettings, $sourceType)) {
+                    $counts['skipped']++;
+                    continue;
+                }
+
                 $content = strip_tags($page['content'] ?? '');
                 if (empty(trim($content))) $content = $page['excerpt'] ?? '';
                 if (empty(trim($content))) $content = $page['title'];
 
                 ['document'=>$doc, 'outcome'=>$outcome] = $this->upsertDoc([
                     'chatbot_id'  => $chatbotId,
-                    'source_type' => ($page['post_type']??'page') === 'post' ? 'wordpress_post' : 'wordpress_page',
+                    'source_type' => $sourceType,
                     'external_id' => (string)$page['id'],
                     'title'       => $page['title'],
                     'raw_content' => $page['title']."\n\n".$content,
@@ -334,6 +349,31 @@ class SyncService {
      * external_id (+ optionally woo_product_id for the product-row cleanup)
      * across both instead.
      */
+    /**
+     * "Clear and reindex" — a real hard delete (not deleteDocument()'s
+     * archive-in-place below), because the whole point is to actually
+     * shrink the index of content a narrowed sync_settings scope no longer
+     * allows, not just hide it. Scoped to source types this app's own sync
+     * actually writes ('faq' is deliberately excluded — those can be
+     * entered by hand in the portal, independent of any WordPress sync,
+     * and clearing the WORDPRESS index must never touch them). Chunks are
+     * deleted first and explicitly counted, rather than relying on
+     * chunks.document_id's ON DELETE CASCADE alone, so the caller gets a
+     * real number back instead of having to infer one.
+     */
+    public function clearSyncedIndex(string $chatbotId): array {
+        $sourceTypes = ['woocommerce_product', 'wordpress_page', 'wordpress_post', 'product_attachment'];
+
+        $documentIds = Document::where('chatbot_id', $chatbotId)
+            ->whereIn('source_type', $sourceTypes)
+            ->pluck('id');
+
+        $chunksDeleted = $documentIds->isEmpty() ? 0 : Chunk::whereIn('document_id', $documentIds)->delete();
+        $documentsDeleted = $documentIds->isEmpty() ? 0 : Document::whereIn('id', $documentIds)->delete();
+
+        return ['documents_deleted' => $documentsDeleted, 'chunks_deleted' => $chunksDeleted];
+    }
+
     private function deleteDocument(string $chatbotId, ?string $sourceType, string $externalId, ?int $wooProductId): SyncJob {
         $job = SyncJob::create(['chatbot_id'=>$chatbotId,'job_type'=>'deletion','triggered_by'=>'webhook','status'=>'running','items_total'=>1,'started_at'=>now()]);
         $counts = ['new'=>0,'updated'=>0,'skipped'=>0,'deleted'=>0,'failed'=>0];

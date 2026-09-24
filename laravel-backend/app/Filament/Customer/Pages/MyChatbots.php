@@ -60,6 +60,15 @@ class MyChatbots extends Page implements HasTable {
                     ->icon('heroicon-o-swatch')
                     ->color('gray')
                     ->url(fn (ChatbotIndexEntry $record) => WidgetSettings::getUrl(['chatbot' => $record->chatbot_id])),
+                // What gets synced into this chatbot's index at all — see
+                // SyncSettings.php's own docblock for the hamantech.ir
+                // incident (a blog post's pricing table surfacing
+                // mid-conversation) this exists to let a merchant prevent.
+                Action::make('sync_settings')
+                    ->label(__('chatbot.sync_settings_action'))
+                    ->icon('heroicon-o-adjustments-horizontal')
+                    ->color('gray')
+                    ->url(fn (ChatbotIndexEntry $record) => SyncSettings::getUrl(['chatbot' => $record->chatbot_id])),
                 // The merchant's own copy of support's manual sync. Capped
                 // per day because each run re-embeds the catalogue and that
                 // costs real money; support is not capped here because the

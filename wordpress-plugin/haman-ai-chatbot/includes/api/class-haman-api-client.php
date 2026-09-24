@@ -88,6 +88,23 @@ class Haman_Api_Client {
             'lead_capture_enabled' => $config['lead_capture_enabled'] ?? false,
         ];
     }
+    /** @return array|WP_Error the always-defaulted sync scope (see
+     * App\Support\SyncSettings::merge() on the server) — the customer
+     * portal's SyncSettings page is authoritative; this is how a change
+     * made there reaches this site without an admin having to also click
+     * Save here. */
+    public function get_sync_settings( string $chatbot_id ): array|WP_Error {
+        return $this->request( 'GET', "/chatbots/{$chatbot_id}/sync-settings" );
+    }
+    public function update_sync_settings( string $chatbot_id, array $settings ): array|WP_Error {
+        return $this->request( 'PUT', "/chatbots/{$chatbot_id}/sync-settings", $settings );
+    }
+    /** "Clear and reindex" — wipes this chatbot's synced documents server-side
+     * (never manually-entered FAQs). The caller is responsible for
+     * triggering a normal full sync right after; this alone only clears. */
+    public function clear_index( string $chatbot_id ): array|WP_Error {
+        return $this->request( 'POST', '/sync/clear', [ 'chatbot_id' => $chatbot_id ], [], self::BULK_SYNC_TIMEOUT );
+    }
     public function get_webhook_secret(): string|WP_Error {
         $r = $this->request( 'GET', '/tenant/webhook-secret' );
         if ( is_wp_error( $r ) ) return $r;

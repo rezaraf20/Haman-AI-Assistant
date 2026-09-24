@@ -528,6 +528,19 @@ class TenantService
                 -- server-side capability with live-data and cost
                 -- implications, never sent to the browser).
                 enabled_tools JSONB NOT NULL DEFAULT '[]',
+                -- Which WordPress content types the plugin is allowed to
+                -- sync into this chatbot's index, plus category/page
+                -- exclusions. Defaults match what sync-everything used to
+                -- mean in practice: products and pages, but not blog posts
+                -- (see class-haman-page-sync.php's docblock — an unfiltered
+                -- post_type=['page','post'] query previously indexed every
+                -- blog article unconditionally, which is how a demo bot on
+                -- hamantech.ir ended up quoting a blog post's pricing table
+                -- mid-conversation). Read/written from both the WordPress
+                -- plugin's own settings page and this chatbot's customer-
+                -- portal SyncSettings page — see that page's docblock for
+                -- which side is authoritative.
+                sync_settings JSONB NOT NULL DEFAULT '{\"sync_products\":true,\"sync_pages\":true,\"sync_posts\":false,\"excluded_category_ids\":[],\"excluded_page_ids\":[]}',
                 -- Store-level fallback for is-this-genuine questions when a
                 -- product has none of the 5 authenticity fields synced.
                 -- Nullable -- when unset, rag_service._authenticity_rule()
