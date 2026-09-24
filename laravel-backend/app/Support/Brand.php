@@ -39,6 +39,13 @@ use Illuminate\Support\Facades\Storage;
  */
 class Brand
 {
+    // Read on every panel boot (favicon, colors()) and on every render of
+    // partials/brand-logo.blade.php (once per variant, so up to twice per
+    // page) — memoized the same way Settings::$cache is, or each of those
+    // call sites is its own PlatformSetting query and a single dashboard
+    // load blows its DB query budget. See DashboardWidgetsTest.
+    private static ?array $cache = null;
+
     public const DISK = 'brand';
     public const UPLOAD_MAX_KB = 2048;
     public const ALLOWED_MIMES = ['image/svg+xml', 'image/png', 'image/webp'];
@@ -142,6 +149,7 @@ class Brand
         $settings->values = $values;
         $settings->save();
 
+        self::$cache = null;
         Settings::forget();
     }
 
@@ -158,12 +166,16 @@ class Brand
 
     private static function get(string $key): ?string
     {
-        try {
-            $values = \App\Models\PlatformSetting::current()->values ?? [];
-        } catch (\Throwable) {
-            return null;
+        if (self::$cache === null) {
+            try {
+                self::$cache = \App\Models\PlatformSetting::current()->values['brand'] ?? [];
+            } catch (\Throwable) {
+                // Console commands run before the table exists (migrate
+                // itself, for one) — same fallback Settings::row() uses.
+                return null;
+            }
         }
 
-        return $values['brand'][$key] ?? null;
+        return self::$cache[$key] ?? null;
     }
 }
