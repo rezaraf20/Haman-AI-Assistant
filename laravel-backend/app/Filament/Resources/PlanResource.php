@@ -94,6 +94,11 @@ class PlanResource extends Resource
                     ->addActionLabel(__('plans.features_add'))
                     ->reorderable()
                     ->collapsible()
+                    // Filament's own default is 1 — a brand-new plan would
+                    // otherwise always start with one required-but-blank
+                    // feature row, forcing something to be typed in even
+                    // when the plan genuinely has nothing to list yet.
+                    ->defaultItems(0)
                     ->columnSpanFull(),
             ]),
 

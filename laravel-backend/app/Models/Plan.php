@@ -44,9 +44,12 @@ class Plan extends Model {
                 if (is_string($feature)) return trim($feature);
                 if (!is_array($feature)) return null;
 
-                $text = $locale === 'en'
-                    ? ($feature['en'] ?? $feature['fa'] ?? null)
-                    : ($feature['fa'] ?? $feature['en'] ?? null);
+                // filled(), not ?? — an empty string (a form field left
+                // blank, which Filament sometimes dehydrates as '' rather
+                // than null) must fall back exactly like an unset one does.
+                $primary = $feature[$locale === 'en' ? 'en' : 'fa'] ?? null;
+                $fallback = $feature[$locale === 'en' ? 'fa' : 'en'] ?? null;
+                $text = filled($primary) ? $primary : $fallback;
 
                 return is_string($text) ? trim($text) : null;
             })
