@@ -421,6 +421,45 @@
     white-space: normal;
 }
 
+/* ── Markdown tables written directly in a reply's own text (mdToHtml) ──
+ * Separate from .hm-compare-table above: that one is a structured
+ * product_compare widget_block; this is a plain "| a | b |" table the
+ * model wrote in prose, which the tool-based compare table doesn't cover
+ * every time (the model can still choose to write one, or the compare_
+ * products tool may not have fired this turn at all). Same horizontal-
+ * scroll strategy so a wide table never breaks the widget's own width. */
+.hm-md-table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 6px 0;
+    border-radius: 10px;
+    border: 1px solid #E9ECF5;
+}
+
+.hm-md-table {
+    border-collapse: collapse;
+    font-size: 12px;
+    width: 100%;
+}
+
+.hm-md-table th, .hm-md-table td {
+    border-inline-start: 1px solid #E9ECF5;
+    border-bottom: 1px solid #E9ECF5;
+    padding: 6px 10px;
+    text-align: start;
+    white-space: nowrap;
+}
+
+.hm-md-table th:first-child, .hm-md-table td:first-child {
+    border-inline-start: none;
+}
+
+.hm-md-table thead th {
+    background: #F4F6FB;
+    font-weight: 600;
+}
+
 /* ── Cart links (build_cart_url) ────────────────────────────────────── */
 /* Real buttons, not a text link — clicking one navigates to the store's
  * own ?add-to-cart=ID URL, which WooCommerce itself handles; nothing here

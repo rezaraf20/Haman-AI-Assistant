@@ -23,14 +23,14 @@
 
         @if ($mode === 'login')
             <form wire:submit="submitLogin">
-                <div style="margin-bottom:16px;">
-                    <label style="{{ $labelStyle }}">{{ __('common.email') }}</label>
-                    <input type="email" wire:model="email" dir="ltr" style="{{ $inputStyle }}">
+                <div style="margin-bottom:16px;" wire:key="login-field-email">
+                    <label for="haman-login-email" style="{{ $labelStyle }}">{{ __('common.email') }}</label>
+                    <input id="haman-login-email" name="email" type="email" wire:model="email" dir="ltr" autocomplete="email" style="{{ $inputStyle }}">
                     @error('email') <span style="{{ $fieldErrStyle }}">{{ $message }}</span> @enderror
                 </div>
-                <div style="margin-bottom:16px;">
-                    <label style="{{ $labelStyle }}">{{ __('common.password') }}</label>
-                    <input type="password" wire:model="password" dir="ltr" style="{{ $inputStyle }}">
+                <div style="margin-bottom:16px;" wire:key="login-field-password">
+                    <label for="haman-login-password" style="{{ $labelStyle }}">{{ __('common.password') }}</label>
+                    <input id="haman-login-password" name="password" type="password" wire:model="password" dir="ltr" autocomplete="current-password" style="{{ $inputStyle }}">
                     @error('password') <span style="{{ $fieldErrStyle }}">{{ $message }}</span> @enderror
                 </div>
                 <button type="submit" style="{{ $btnStyle }}" wire:loading.attr="disabled">{{ __('common.login_button') }}</button>
@@ -41,24 +41,24 @@
             </form>
         @else
             <form wire:submit="submitRegister">
-                <div style="margin-bottom:16px;">
-                    <label style="{{ $labelStyle }}">{{ __('common.full_name') }}</label>
-                    <input type="text" wire:model="name" style="{{ $inputStyle }}">
+                <div style="margin-bottom:16px;" wire:key="register-field-name">
+                    <label for="haman-register-name" style="{{ $labelStyle }}">{{ __('common.full_name') }}</label>
+                    <input id="haman-register-name" name="name" type="text" wire:model="name" autocomplete="name" style="{{ $inputStyle }}">
                     @error('name') <span style="{{ $fieldErrStyle }}">{{ $message }}</span> @enderror
                 </div>
-                <div style="margin-bottom:16px;">
-                    <label style="{{ $labelStyle }}">{{ __('common.email') }}</label>
-                    <input type="email" wire:model="email" dir="ltr" style="{{ $inputStyle }}">
+                <div style="margin-bottom:16px;" wire:key="register-field-email">
+                    <label for="haman-register-email" style="{{ $labelStyle }}">{{ __('common.email') }}</label>
+                    <input id="haman-register-email" name="email" type="email" wire:model="email" dir="ltr" autocomplete="email" style="{{ $inputStyle }}">
                     @error('email') <span style="{{ $fieldErrStyle }}">{{ $message }}</span> @enderror
                 </div>
-                <div style="margin-bottom:16px;">
-                    <label style="{{ $labelStyle }}">{{ __('common.password') }}</label>
-                    <input type="password" wire:model="password" dir="ltr" style="{{ $inputStyle }}">
+                <div style="margin-bottom:16px;" wire:key="register-field-password">
+                    <label for="haman-register-password" style="{{ $labelStyle }}">{{ __('common.password') }}</label>
+                    <input id="haman-register-password" name="password" type="password" wire:model="password" dir="ltr" autocomplete="new-password" style="{{ $inputStyle }}">
                     @error('password') <span style="{{ $fieldErrStyle }}">{{ $message }}</span> @enderror
                 </div>
-                <div style="margin-bottom:16px;">
-                    <label style="{{ $labelStyle }}">{{ __('common.confirm_password') }}</label>
-                    <input type="password" wire:model="password_confirmation" dir="ltr" style="{{ $inputStyle }}">
+                <div style="margin-bottom:16px;" wire:key="register-field-password-confirmation">
+                    <label for="haman-register-password-confirmation" style="{{ $labelStyle }}">{{ __('common.confirm_password') }}</label>
+                    <input id="haman-register-password-confirmation" name="password_confirmation" type="password" wire:model="password_confirmation" dir="ltr" autocomplete="new-password" style="{{ $inputStyle }}">
                 </div>
                 <button type="submit" style="{{ $btnStyle }}" wire:loading.attr="disabled">{{ __('common.register_button') }}</button>
                 <p style="text-align:center;font-size:13px;color:#64748B;margin:16px 0 0;">

@@ -10,28 +10,40 @@ class Haman_Faq_Sync {
 
     public function sync_all( string $cid ): array {
         $faqs = $this->extract_faqs();
-        if (empty($faqs)) return ['synced'=>0];
-        $synced = 0; $errors = []; $batch = []; $batchBytes = 0;
+        // Same shape as an empty result below (all-zero counts), so the
+        // admin results table shows a real zero row instead of a key it
+        // doesn't recognize.
+        if (empty($faqs)) return Haman_Sync_Counts::empty();
+        $counts = Haman_Sync_Counts::empty();
+        $errors = []; $batch = []; $batchBytes = 0;
         foreach ($faqs as $faq) {
             $itemSize = strlen(wp_json_encode($faq));
             if (!empty($batch) && ($batchBytes + $itemSize) > self::MAX_BATCH_BYTES) {
-                $this->flush_batch($cid, $batch, $synced, $errors);
+                $this->flush_batch($cid, $batch, $counts, $errors);
                 $batch = []; $batchBytes = 0;
             }
             $batch[]     = $faq;
             $batchBytes += $itemSize;
         }
-        $this->flush_batch($cid, $batch, $synced, $errors);
-        $result = ['synced'=>$synced];
+        $this->flush_batch($cid, $batch, $counts, $errors);
+        $result = $counts;
         if (!empty($errors)) $result['errors'] = array_values(array_unique($errors));
         return $result;
     }
 
-    private function flush_batch( string $cid, array $batch, int &$synced, array &$errors ): void {
+    /**
+     * Sums whatever new/updated/skipped/deleted/failed counts the platform
+     * actually computed for this batch (SyncJob.result, now returned in the
+     * API response — see SyncController::jobArr()) instead of just counting
+     * how many items this batch attempted to push. A full sync may flush
+     * several batches, each its own SyncJob, so these accumulate across
+     * calls into sync_all()'s final total.
+     */
+    private function flush_batch( string $cid, array $batch, array &$counts, array &$errors ): void {
         if (empty($batch)) return;
         $r = $this->api->sync_faqs($cid, $batch);
-        if (is_wp_error($r)) { $errors[] = $r->get_error_message(); }
-        else { $synced += count($batch); }
+        if (is_wp_error($r)) { $errors[] = $r->get_error_message(); return; }
+        Haman_Sync_Counts::add($counts, is_array($r) ? ($r['result'] ?? []) : []);
     }
 
     private function extract_faqs(): array {

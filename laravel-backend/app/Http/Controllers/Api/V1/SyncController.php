@@ -138,6 +138,15 @@ class SyncController extends BaseApiController {
             'items_total'     => $j->items_total,
             'items_processed' => $j->items_processed,
             'completed_at'    => $j->completed_at?->toISOString(),
+            // The new/updated/skipped/deleted/failed breakdown SyncService
+            // already computes and saves on every job — this just hadn't
+            // been added to the response the plugin actually reads. Without
+            // it, the plugin's own sync_all() had nothing but a flat
+            // "how many did I POST" count to report, so its admin results
+            // table (settings-page.php, keyed on exactly these five names)
+            // always read undefined keys and showed zero for every column,
+            // regardless of what the sync actually did.
+            'result'          => $j->result ?? [],
         ];
     }
 }

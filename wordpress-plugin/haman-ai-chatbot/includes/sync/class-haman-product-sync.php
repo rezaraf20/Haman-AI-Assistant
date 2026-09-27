@@ -23,14 +23,14 @@ class Haman_Product_Sync {
 
     public function sync_all( string $cid ): array {
         if (!class_exists('WooCommerce')) return ['skipped'=>'WooCommerce not active'];
-        $page=1; $synced=0; $errors=[]; $batch=[]; $batchBytes=0;
+        $page=1; $counts=Haman_Sync_Counts::empty(); $errors=[]; $batch=[]; $batchBytes=0;
         do {
             $products = wc_get_products(['status'=>'publish','limit'=>self::FETCH_PAGE_SIZE,'page'=>$page,'return'=>'objects']);
             foreach ($products as $product) {
                 $item     = $this->product_to_array($product);
                 $itemSize = strlen(wp_json_encode($item));
                 if (!empty($batch) && ($batchBytes + $itemSize) > self::MAX_BATCH_BYTES) {
-                    $this->flush_batch($cid, $batch, $synced, $errors);
+                    $this->flush_batch($cid, $batch, $counts, $errors);
                     $batch = []; $batchBytes = 0;
                 }
                 $batch[]     = $item;
@@ -38,25 +38,34 @@ class Haman_Product_Sync {
             }
             $page++;
         } while (count($products) === self::FETCH_PAGE_SIZE);
-        $this->flush_batch($cid, $batch, $synced, $errors);
-        $result = ['synced'=>$synced];
+        $this->flush_batch($cid, $batch, $counts, $errors);
+        $result = $counts;
         if (!empty($errors)) $result['errors'] = array_values(array_unique($errors));
         return $result;
     }
 
-    private function flush_batch( string $cid, array $batch, int &$synced, array &$errors ): void {
+    /**
+     * Sums whatever new/updated/skipped/deleted/failed counts the platform
+     * actually computed for this batch (SyncJob.result, now returned in the
+     * API response — see SyncController::jobArr()) instead of just counting
+     * how many items this batch attempted to push. A full sync may flush
+     * several batches, each its own SyncJob, so these accumulate across
+     * calls into sync_all()'s final total — which is exactly what the
+     * admin's results table (settings-page.php) reads.
+     */
+    private function flush_batch( string $cid, array $batch, array &$counts, array &$errors ): void {
         if (empty($batch)) return;
         $r = $this->api->sync_products($cid, $batch);
-        if (is_wp_error($r)) { $errors[] = $r->get_error_message(); }
-        else { $synced += count($batch); }
+        if (is_wp_error($r)) { $errors[] = $r->get_error_message(); return; }
+        Haman_Sync_Counts::add($counts, is_array($r) ? ($r['result'] ?? []) : []);
     }
 
     public function sync_recent( string $cid, int $hours=25 ): void {
         if (!class_exists('WooCommerce')) return;
         $products = wc_get_products(['status'=>'publish','limit'=>self::FETCH_PAGE_SIZE,'date_modified'=>'>'.date('Y-m-d H:i:s',strtotime("-{$hours} hours"))]);
         if (empty($products)) return;
-        $synced = 0; $errors = [];
-        $this->flush_batch($cid, array_map([$this,'product_to_array'],$products), $synced, $errors);
+        $counts = Haman_Sync_Counts::empty(); $errors = [];
+        $this->flush_batch($cid, array_map([$this,'product_to_array'],$products), $counts, $errors);
     }
 
     public function product_to_array( \WC_Product $p ): array {

@@ -31,9 +31,9 @@
 
         @if ($step === 'phone')
             <form wire:submit="sendCode">
-                <div style="margin-bottom:16px;">
-                    <label style="{{ $labelStyle }}">{{ __('panel.mobile_number') }}</label>
-                    <input type="tel" wire:model="phone" placeholder="09123456789" dir="ltr" style="{{ $inputStyle }}">
+                <div style="margin-bottom:16px;" wire:key="field-phone">
+                    <label for="haman-phone" style="{{ $labelStyle }}">{{ __('panel.mobile_number') }}</label>
+                    <input id="haman-phone" name="phone" type="tel" wire:model="phone" placeholder="09123456789" dir="ltr" autocomplete="tel" style="{{ $inputStyle }}">
                     @error('phone') <span style="{{ $fieldErrStyle }}">{{ $message }}</span> @enderror
                 </div>
                 <button type="submit" style="{{ $btnStyle }}" wire:loading.attr="disabled">{{ __('common.send_otp_button') }}</button>
@@ -41,9 +41,9 @@
         @elseif ($step === 'otp')
             <form wire:submit="verifyCode">
                 <p style="font-size:13px;color:#64748B;margin:0 0 16px;">{{ __('common.otp_sent_to', ['phone' => $phone]) }}</p>
-                <div style="margin-bottom:16px;">
-                    <label style="{{ $labelStyle }}">{{ __('common.otp_code_label') }}</label>
-                    <input type="text" inputmode="numeric" wire:model="code" maxlength="5" dir="ltr"
+                <div style="margin-bottom:16px;" wire:key="field-otp">
+                    <label for="haman-otp" style="{{ $labelStyle }}">{{ __('common.otp_code_label') }}</label>
+                    <input id="haman-otp" name="otp" type="text" inputmode="numeric" wire:model="code" maxlength="5" dir="ltr" autocomplete="one-time-code"
                         style="{{ $inputStyle }} text-align:center;letter-spacing:4px;">
                     @error('code') <span style="{{ $fieldErrStyle }}">{{ $message }}</span> @enderror
                 </div>
@@ -56,29 +56,29 @@
         @elseif ($step === 'profile')
             <form wire:submit="completeProfile">
                 <p style="font-size:13px;color:#64748B;margin:0 0 16px;">{{ __('common.complete_signup_intro') }}</p>
-                <div style="margin-bottom:16px;">
-                    <label style="{{ $labelStyle }}">{{ __('panel.first_name') }}</label>
-                    <input type="text" wire:model="first_name" style="{{ $inputStyle }}">
+                <div style="margin-bottom:16px;" wire:key="field-first-name">
+                    <label for="haman-first-name" style="{{ $labelStyle }}">{{ __('panel.first_name') }}</label>
+                    <input id="haman-first-name" name="first_name" type="text" wire:model="first_name" autocomplete="given-name" style="{{ $inputStyle }}">
                     @error('first_name') <span style="{{ $fieldErrStyle }}">{{ $message }}</span> @enderror
                 </div>
-                <div style="margin-bottom:16px;">
-                    <label style="{{ $labelStyle }}">{{ __('panel.last_name') }}</label>
-                    <input type="text" wire:model="last_name" style="{{ $inputStyle }}">
+                <div style="margin-bottom:16px;" wire:key="field-last-name">
+                    <label for="haman-last-name" style="{{ $labelStyle }}">{{ __('panel.last_name') }}</label>
+                    <input id="haman-last-name" name="last_name" type="text" wire:model="last_name" autocomplete="family-name" style="{{ $inputStyle }}">
                     @error('last_name') <span style="{{ $fieldErrStyle }}">{{ $message }}</span> @enderror
                 </div>
-                <div style="margin-bottom:16px;">
-                    <label style="{{ $labelStyle }}">{{ __('panel.national_id') }}</label>
-                    <input type="text" wire:model="national_id" dir="ltr" style="{{ $inputStyle }}">
+                <div style="margin-bottom:16px;" wire:key="field-national-id">
+                    <label for="haman-national-id" style="{{ $labelStyle }}">{{ __('panel.national_id') }}</label>
+                    <input id="haman-national-id" name="national_id" type="text" wire:model="national_id" dir="ltr" autocomplete="off" style="{{ $inputStyle }}">
                     @error('national_id') <span style="{{ $fieldErrStyle }}">{{ $message }}</span> @enderror
                 </div>
-                <div style="margin-bottom:16px;">
-                    <label style="{{ $labelStyle }}">{{ __('common.email') }}</label>
-                    <input type="email" wire:model="email" dir="ltr" style="{{ $inputStyle }}">
+                <div style="margin-bottom:16px;" wire:key="field-email">
+                    <label for="haman-profile-email" style="{{ $labelStyle }}">{{ __('common.email') }}</label>
+                    <input id="haman-profile-email" name="email" type="email" wire:model="email" dir="ltr" autocomplete="email" style="{{ $inputStyle }}">
                     @error('email') <span style="{{ $fieldErrStyle }}">{{ $message }}</span> @enderror
                 </div>
-                <div style="margin-bottom:16px;">
-                    <label style="{{ $labelStyle }}">{{ __('common.address') }}</label>
-                    <textarea wire:model="address" rows="2" style="{{ $inputStyle }}"></textarea>
+                <div style="margin-bottom:16px;" wire:key="field-address">
+                    <label for="haman-address" style="{{ $labelStyle }}">{{ __('common.address') }}</label>
+                    <textarea id="haman-address" name="address" wire:model="address" rows="2" autocomplete="street-address" style="{{ $inputStyle }}"></textarea>
                     @error('address') <span style="{{ $fieldErrStyle }}">{{ $message }}</span> @enderror
                 </div>
                 <button type="submit" style="{{ $btnStyle }}" wire:loading.attr="disabled">{{ __('common.complete_and_login') }}</button>

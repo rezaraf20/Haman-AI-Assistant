@@ -92,16 +92,16 @@ class Haman_Page_Sync {
     }
 
     public function sync_all( string $cid ): array {
-        if (empty(self::enabled_post_types())) return ['synced' => 0];
+        if (empty(self::enabled_post_types())) return Haman_Sync_Counts::empty();
 
-        $page = 1; $synced = 0; $errors = []; $batch = []; $batchBytes = 0;
+        $page = 1; $counts = Haman_Sync_Counts::empty(); $errors = []; $batch = []; $batchBytes = 0;
         do {
             $posts = get_posts($this->query_args(self::FETCH_PAGE_SIZE, $page));
             foreach ($posts as $post) {
                 $item     = $this->post_to_array($post);
                 $itemSize = strlen(wp_json_encode($item));
                 if (!empty($batch) && ($batchBytes + $itemSize) > self::MAX_BATCH_BYTES) {
-                    $this->flush_batch($cid, $batch, $synced, $errors);
+                    $this->flush_batch($cid, $batch, $counts, $errors);
                     $batch = []; $batchBytes = 0;
                 }
                 $batch[]     = $item;
@@ -109,17 +109,18 @@ class Haman_Page_Sync {
             }
             $page++;
         } while (count($posts) === self::FETCH_PAGE_SIZE);
-        $this->flush_batch($cid, $batch, $synced, $errors);
-        $result = ['synced'=>$synced];
+        $this->flush_batch($cid, $batch, $counts, $errors);
+        $result = $counts;
         if (!empty($errors)) $result['errors'] = array_values(array_unique($errors));
         return $result;
     }
 
-    private function flush_batch( string $cid, array $batch, int &$synced, array &$errors ): void {
+    /** See Haman_Product_Sync::flush_batch()'s docblock — same fix, same reason. */
+    private function flush_batch( string $cid, array $batch, array &$counts, array &$errors ): void {
         if (empty($batch)) return;
         $r = $this->api->sync_pages($cid, $batch);
-        if (is_wp_error($r)) { $errors[] = $r->get_error_message(); }
-        else { $synced += count($batch); }
+        if (is_wp_error($r)) { $errors[] = $r->get_error_message(); return; }
+        Haman_Sync_Counts::add($counts, is_array($r) ? ($r['result'] ?? []) : []);
     }
 
     public function sync_recent( string $cid, int $hours=25 ): void {
@@ -128,8 +129,8 @@ class Haman_Page_Sync {
             'date_query' => [['after' => date('Y-m-d H:i:s', strtotime("-{$hours} hours"))]],
         ]));
         if (empty($posts)) return;
-        $synced = 0; $errors = [];
-        $this->flush_batch($cid, array_map([$this,'post_to_array'],$posts), $synced, $errors);
+        $counts = Haman_Sync_Counts::empty(); $errors = [];
+        $this->flush_batch($cid, array_map([$this,'post_to_array'],$posts), $counts, $errors);
     }
 
     public function post_to_array( \WP_Post $p ): array {

@@ -175,12 +175,73 @@
         d.textContent = t == null ? '' : t;
         return d.innerHTML;
     }
-    function mdToHtml(t) {
-        return esc(t)
+    // Bold/italic/link only — factored out of mdToHtml() so a markdown
+    // table's own cells get the same inline formatting as regular prose,
+    // without re-running \n -> <br> (a table's rows are joined by real
+    // <tr> tags, not <br>, and its cells never contain a literal newline).
+    function inlineMdToHtml(line) {
+        return line
             .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
             .replace(/\*(.*?)\*/g, '<em>$1</em>')
-            .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:var(--hm-primary);text-decoration:underline">$1</a>')
-            .replace(/\n/g, '<br>');
+            .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:var(--hm-primary);text-decoration:underline">$1</a>');
+    }
+
+    function isMdTableRow(line) {
+        return line.indexOf('|') !== -1 && line.trim() !== '';
+    }
+
+    // A GFM-style separator row: "---", "| --- | --- |", ":---:", etc.
+    // Requires at least one cell so a stray line of just dashes/pipes with
+    // nothing else can't be mistaken for one.
+    function isMdTableSeparator(line) {
+        return /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/.test(line);
+    }
+
+    function splitMdTableRow(line) {
+        var trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
+        return trimmed.split('|').map(function (c) { return c.trim(); });
+    }
+
+    function mdTableToHtml(headerCells, bodyRows) {
+        var thead = '<tr>' + headerCells.map(function (c) {
+            return '<th>' + inlineMdToHtml(c) + '</th>';
+        }).join('') + '</tr>';
+        var tbody = bodyRows.map(function (row) {
+            return '<tr>' + row.map(function (c) {
+                return '<td>' + inlineMdToHtml(c) + '</td>';
+            }).join('') + '</tr>';
+        }).join('');
+        return '<div class="hm-md-table-wrap"><table class="hm-md-table"><thead>' + thead
+            + '</thead><tbody>' + tbody + '</tbody></table></div>';
+    }
+
+    // A comparison question doesn't always go through the compare_products
+    // tool (it's opt-in, and even enabled, the model can still answer in
+    // plain prose) — when it doesn't, a markdown pipe-table in the model's
+    // own text used to render as literal "| a | b |" lines. Detected and
+    // converted to a real, horizontally-scrollable <table> here; everything
+    // else keeps the exact prior behavior (bold/italic/link, then \n -> <br>).
+    function mdToHtml(t) {
+        var lines = esc(t).split('\n');
+        var out = [];
+        var i = 0;
+        while (i < lines.length) {
+            if (isMdTableRow(lines[i]) && i + 1 < lines.length && isMdTableSeparator(lines[i + 1])) {
+                var header = splitMdTableRow(lines[i]);
+                var rows = [];
+                var j = i + 2;
+                while (j < lines.length && isMdTableRow(lines[j]) && !isMdTableSeparator(lines[j])) {
+                    rows.push(splitMdTableRow(lines[j]));
+                    j++;
+                }
+                out.push(mdTableToHtml(header, rows));
+                i = j;
+            } else {
+                out.push(inlineMdToHtml(lines[i]));
+                i++;
+            }
+        }
+        return out.join('<br>');
     }
 
     // ── Markup ─────────────────────────────────────────────────────────
@@ -1133,8 +1194,16 @@
         sendBtn.disabled = false;
         hideTyping();
         if (!res.ok) { addMsg(res.data && res.data.error ? res.data.error : CFG.genericErrorMessage, 'bot'); return; }
-        if (res.data.data && res.data.data.response) addMsg(res.data.data.response, 'bot');
-        if (res.data.data) renderWidgetBlocks(res.data.data.widget_blocks);
+        var d = res.data.data;
+        var hasBlocks = d && d.widget_blocks && d.widget_blocks.length;
+        if (d && d.response) addMsg(d.response, 'bot');
+        // A 200 OK with an empty response and no widget_blocks (a bad-but-
+        // "successful" upstream call, or a grounding guard that stripped a
+        // reply to nothing) must never just close the typing indicator and
+        // show the customer literally nothing — see the equivalent guard on
+        // the streaming path's 'done' handler below.
+        else if (!hasBlocks) { addMsg(CFG.genericErrorMessage, 'bot'); }
+        if (d) renderWidgetBlocks(d.widget_blocks);
     }
 
     // Reads the SSE body as it arrives, growing one bot bubble token-by-token
@@ -1168,6 +1237,17 @@
             }
             if (eventName === 'done') {
                 sendBtn.disabled = false;
+                var hadBlocks = data.widget_blocks && data.widget_blocks.length;
+                // Same gap the non-streaming handleJsonResponse() had: a
+                // well-formed 'done' event carrying zero deltas the whole
+                // stream (fullText === '') and no widget_blocks is a
+                // legitimate "server said 200/done" outcome, not the
+                // dead-connection case pump()'s own guard below already
+                // covers — so it needs the identical fallback here.
+                // Sets bubble (not just calls addMsg) so pump()'s own
+                // !bubble fallback below doesn't fire a second time once
+                // the underlying stream reader itself finishes right after.
+                if (!bubble && !hadBlocks) { hideTyping(); bubble = addMsg(CFG.genericErrorMessage, 'bot'); }
                 renderWidgetBlocks(data.widget_blocks);
                 return;
             }
