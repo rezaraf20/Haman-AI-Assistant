@@ -13,11 +13,11 @@
         @endif
 
         <x-filament::section>
-            <x-slot name="heading">موجودی کیف پول: {{ number_format($this->getWalletBalance()) }} تومان</x-slot>
+            <x-slot name="heading">موجودی کیف پول: {{ $this->getWalletBalanceDisplay() }}</x-slot>
             <form wire:submit="purchase">
                 {{ $this->form }}
                 @if (($data['type'] ?? null))
-                    <p class="mt-3 text-sm">هزینه این خرید: <strong>{{ number_format($this->getSelectedPrice()) }} تومان</strong></p>
+                    <p class="mt-3 text-sm">هزینه این خرید: <strong>{{ $this->getSelectedPriceDisplay() }}</strong></p>
                 @endif
                 <x-filament::button type="submit" class="mt-4">خرید و پرداخت از کیف پول</x-filament::button>
             </form>

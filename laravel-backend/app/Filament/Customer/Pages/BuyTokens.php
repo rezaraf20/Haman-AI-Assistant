@@ -43,7 +43,7 @@ class BuyTokens extends Page implements HasTable {
                 TextColumn::make('token_amount')->label(__('plan.token_amount'))
                     ->formatStateUsing(fn (int $state) => number_format($state)),
                 TextColumn::make('price_toman')->label(__('plan.price'))
-                    ->formatStateUsing(fn (int $state) => Money::toman($state)),
+                    ->formatStateUsing(fn (int $state) => Money::forCurrentTenant($state)),
             ])
             ->actions([
                 Action::make('buy')
@@ -52,7 +52,7 @@ class BuyTokens extends Page implements HasTable {
                     ->color('success')
                     ->requiresConfirmation()
                     ->modalDescription(fn (TokenPackage $record) => __('plan.buy_confirm_description', [
-                        'price' => number_format($record->price_toman),
+                        'price' => Money::forCurrentTenant($record->price_toman),
                         'amount' => number_format($record->token_amount),
                     ]))
                     ->action(fn (TokenPackage $record) => $this->buy($record)),

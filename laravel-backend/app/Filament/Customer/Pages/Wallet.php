@@ -1,7 +1,7 @@
 <?php
 namespace App\Filament\Customer\Pages;
 
-use App\Models\WalletTransaction;
+use App\Models\{Tenant, WalletTransaction};
 use App\Services\PaymentService;
 use Filament\Pages\Page;
 use Filament\Forms\Form;
@@ -28,8 +28,38 @@ class Wallet extends Page implements HasForms, HasTable {
 
     public ?array $data = [];
 
+    /** Tenant::find(), not auth()->user()->tenant — that relation isn't eager-loaded, and Model::preventLazyLoading() only allows a lazy load in production. */
+    private function tenant(): Tenant {
+        return Tenant::findOrFail(auth()->user()->tenant_id);
+    }
+
+    private function currency(): string {
+        return $this->tenant()->currency();
+    }
+
+    /**
+     * Toman/Zarinpal only. PaymentService::initTopup() hands the SAME
+     * integer to WalletService (as the Toman ledger credit) and to
+     * PaymentGateway::requestPayment() (as the amount to actually charge)
+     * — correct for Toman, where those are the same number, but wrong for
+     * any other currency: a Stripe request for e.g. 990000 EUR instead of
+     * a converted, sane amount. Building a real Toman-ledger/foreign-
+     * currency-charge split (plus Stripe/Paddle's redirect+webhook flow,
+     * which this codebase has never had a callback route for — only
+     * Zarinpal's Authority/Status GET redirect exists) is real payment
+     * work this task doesn't attempt. A Euro tenant sees their balance and
+     * every price correctly in Euro everywhere else in the portal; adding
+     * funds is the one action still routed through support until that
+     * gateway work is actually done.
+     */
+    public function canTopUp(): bool {
+        return $this->currency() === 'IRT';
+    }
+
     public function mount(): void {
-        $this->form->fill(['amount_toman' => 500000]);
+        if ($this->canTopUp()) {
+            $this->form->fill(['amount_toman' => 500000]);
+        }
 
         // Zarinpal redirected back here after payment — surface the outcome.
         $topup = request()->query('topup');
@@ -55,13 +85,16 @@ class Wallet extends Page implements HasForms, HasTable {
         ])->statePath('data');
     }
 
-    public function getWalletBalance(): int {
-        return (int) (auth()->user()->tenant->wallet_balance_toman ?? 0);
+    /** The live balance, in the tenant's own currency — historical transaction rows below stay in Toman, the actual ledger unit; see canTopUp()'s docblock on why those two don't have to agree. */
+    public function getWalletBalance(): string {
+        return Money::forCurrentTenant((int) ($this->tenant()->wallet_balance_toman ?? 0));
     }
 
     public function topup(): void {
+        if (!$this->canTopUp()) return;
+
         $state  = $this->form->getState();
-        $tenant = auth()->user()->tenant;
+        $tenant = $this->tenant();
 
         $result = app(PaymentService::class)->initTopup(
             $tenant,

@@ -225,8 +225,8 @@
         .notice { border: 1px solid var(--line); border-inline-start: 3px solid #b45309; background: #FFFBF5; padding: 14px 16px; border-radius: 8px; color: var(--muted); font-size: .93rem; }
 
         form label { display: block; font-size: .88rem; font-weight: 600; margin-bottom: 5px; font-family: var(--font-heading); }
-        form input, form textarea { width: 100%; padding: 11px 13px; border: 1px solid var(--line); border-radius: var(--radius-sm); font: inherit; margin-bottom: 14px; background: #fff; }
-        form input:focus, form textarea:focus { outline: 2px solid var(--brand-indigo); outline-offset: 1px; }
+        form input, form textarea, form select { width: 100%; padding: 11px 13px; border: 1px solid var(--line); border-radius: var(--radius-sm); font: inherit; margin-bottom: 14px; background: #fff; }
+        form input:focus, form textarea:focus, form select:focus { outline: 2px solid var(--brand-indigo); outline-offset: 1px; }
         .field-error { color: #b42318; font-size: .85rem; margin: -10px 0 12px; }
 
         /* ── FAQ ─────────────────────────────────────────────────────── */
@@ -463,9 +463,10 @@
                             <span class="popular-badge">{{ __('landing.pricing_popular') }}</span>
                         @endif
                         <h3>{{ $plan->display_name }}</h3>
+                        @php $amount = \App\Support\Money::convert($plan->price_monthly, $currency); @endphp
                         <div class="amount">
-                            {{ number_format((float) $plan->price_monthly) }}
-                            <span class="muted" style="font-size:.9rem;font-weight:400">{{ $currencyLabel }}</span>
+                            {{ number_format((float) $amount) }}
+                            <span class="muted" style="font-size:.9rem;font-weight:400">{{ \App\Support\Money::unitLabel($currency) }}</span>
                         </div>
                         <div class="muted" style="font-size:.85rem">{{ __('landing.pricing_per_month') }}</div>
 
@@ -501,12 +502,15 @@
                 <p class="muted" style="font-size:.92rem;text-align:center">{{ __('landing.types_subtitle') }}</p>
                 <ul class="type-list">
                     @foreach ($chatbotTypes as $type)
+                        @php $typeAmount = \App\Support\Money::convert($type->price_toman, $currency); @endphp
+                        @if ($typeAmount !== null)
                         <li>
                             <span>{{ $type->display_name }}</span>
-                            <strong>{{ number_format((int) $type->price_toman) }}
-                                <span class="muted" style="font-weight:400;font-size:.85rem">{{ $currencyLabel }}</span>
+                            <strong>{{ number_format($typeAmount) }}
+                                <span class="muted" style="font-weight:400;font-size:.85rem">{{ \App\Support\Money::unitLabel($currency) }}</span>
                             </strong>
                         </li>
+                        @endif
                     @endforeach
                 </ul>
             </div>
@@ -538,6 +542,16 @@
                     <label for="email">{{ __('landing.signup_email') }}</label>
                     <input id="email" name="email" type="email" value="{{ old('email') }}" required maxlength="255">
                     @error('email') <div class="field-error">{{ $message }}</div> @enderror
+
+                    <label for="country">{{ __('landing.signup_country') }}</label>
+                    <select id="country" name="country" required>
+                        <option value="" disabled {{ old('country') ? '' : 'selected' }}>{{ __('landing.signup_country_placeholder') }}</option>
+                        @foreach ($countries as $code => $label)
+                            <option value="{{ $code }}" {{ old('country') === $code ? 'selected' : '' }}>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                    <p class="muted" style="font-size:.82rem;margin-top:2px">{{ __('landing.signup_country_help') }}</p>
+                    @error('country') <div class="field-error">{{ $message }}</div> @enderror
 
                     <label for="password">{{ __('landing.signup_password') }}</label>
                     <input id="password" name="password" type="password" required minlength="8">

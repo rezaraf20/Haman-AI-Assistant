@@ -40,7 +40,9 @@ class MyChatbots extends Page implements HasTable {
                     ->placeholder(__('common.unlimited'))
                     ->color(fn ($record) => $record->expires_at && $record->expires_at->isPast() ? 'danger' : null),
                 TextColumn::make('monthly_price_toman')->label(__('chatbot.monthly_renewal_cost'))
-                    ->formatStateUsing(fn (int $state) => $state > 0 ? Money::toman($state) : __('chatbot.contact_support')),
+                    ->formatStateUsing(fn (int $state) => $state > 0
+                        ? Money::forCurrentTenant($state)
+                        : __('chatbot.contact_support')),
                 TextColumn::make('sync_stats')
                     ->label(__('chatbot.sync_stats_label'))
                     ->getStateUsing(fn (ChatbotIndexEntry $record) => $this->syncStatsSummary($record))
@@ -89,7 +91,9 @@ class MyChatbots extends Page implements HasTable {
                     ->color('success')
                     ->visible(fn (ChatbotIndexEntry $record) => $record->monthly_price_toman > 0)
                     ->requiresConfirmation()
-                    ->modalDescription(fn (ChatbotIndexEntry $record) => __('chatbot.renew_confirm_description', ['amount' => Money::toman($record->monthly_price_toman)]))
+                    ->modalDescription(fn (ChatbotIndexEntry $record) => __('chatbot.renew_confirm_description', [
+                        'amount' => Money::forCurrentTenant($record->monthly_price_toman),
+                    ]))
                     ->action(fn (ChatbotIndexEntry $record) => $this->renew($record)),
             ]);
     }

@@ -138,6 +138,13 @@ class TenantService
                 'slug'          => Str::slug($name) . '-' . substr($uuid, 0, 6),
                 'name'          => $name,
                 'email'         => $data['email'],
+                // Decides the tenant's currency for the rest of their time
+                // in the portal — see Tenant::currency(). Not asked at all
+                // on the phone+OTP signup path (registerViaPhone() below),
+                // which only ever accepts an Iranian mobile number, so
+                // country is left null there and Tenant::currency() already
+                // treats null as Iran.
+                'country'       => $data['country'] ?? null,
                 'plan_id'       => $plan->id,
                 'schema_name'   => $schema,
                 'status'        => 'trial',

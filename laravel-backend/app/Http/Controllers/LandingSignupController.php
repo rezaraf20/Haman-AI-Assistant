@@ -5,9 +5,10 @@ use App\Support\BrandDomains;
 use App\Mail\VerifyEmail;
 use App\Models\User;
 use App\Services\TenantService;
-use App\Support\MailSettings;
+use App\Support\{Countries, MailSettings};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{Auth, Log, Mail, URL};
+use Illuminate\Validation\Rule;
 
 /**
  * Email + password signup, as the second route in.
@@ -32,6 +33,12 @@ class LandingSignupController extends Controller
             'name'     => 'required|string|max:255',
             'email'    => 'required|email|max:255|unique:users,email',
             'password' => 'required|string|min:8|confirmed',
+            // Decides the tenant's currency for the rest of their time in
+            // the portal (Tenant::currency()) — see App\Support\Countries.
+            // A closed list, not a free-text country name: Rule::in against
+            // the exact set the dropdown offers, so a tampered request can't
+            // store a value the currency logic was never built to handle.
+            'country'  => ['required', 'string', Rule::in(array_keys(Countries::all()))],
         ]);
 
         $result = $tenants->registerViaEmail($data);

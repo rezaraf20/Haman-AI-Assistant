@@ -4,7 +4,7 @@ return [
     'all_types' => 'All',
     'any_type' => 'Any type',
     'buy_action' => 'Buy',
-    'buy_confirm_description' => ':price Toman will be deducted from your wallet and :amount tokens will be added to your balance.',
+    'buy_confirm_description' => ':price will be deducted from your wallet and :amount tokens will be added to your balance.',
     'buy_tokens_nav' => 'Buy Tokens',
     'buy_tokens_title' => 'Buy Extra Tokens',
     'chatbot_price_help' => "Charged from the customer's wallet when they self-purchase a new chatbot of this type, and used as the default monthly renewal price too.",

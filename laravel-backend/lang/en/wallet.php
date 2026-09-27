@@ -22,6 +22,12 @@ return [
     'topup_amount' => 'Top-up Amount (Toman)',
     'topup_first' => 'Please top up your wallet first.',
     'topup_init_failed' => 'Failed to start payment',
+    'topup_heading' => 'Top up wallet',
+    'topup_submit' => 'Pay and top up',
+    // Shown instead of the top-up form for a non-Iran (Euro) tenant — see
+    // Wallet::canTopUp()'s docblock for why this stays support-routed
+    // rather than pointing at an unbuilt Stripe/Paddle checkout.
+    'topup_unavailable_currency' => 'Online top-up isn\'t available in your currency yet — please contact support to add funds.',
     'transaction_plural' => 'Transactions',
     'transaction_singular' => 'Transaction',
     'transactions_nav' => 'Wallet Transactions',

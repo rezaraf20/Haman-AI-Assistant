@@ -26,6 +26,14 @@ class PublicSiteTest extends TestCase
         parent::setUp();
         Settings::forget();
 
+        // config('app.locale') is 'en', and the test client sends no
+        // Accept-Language header unless a test explicitly sets one — so
+        // every test below that doesn't pin a locale renders the English
+        // page, which needs this rate to show a real Euro price instead of
+        // "coming soon" (see Money::convert()). Only the one test that
+        // means to exercise the unconfigured-rate case unsets it.
+        Settings::set('payments.fx.eur_to_toman', 50000);
+
         // The signup limiter counts per IP per day and lives in the cache,
         // which RefreshDatabase does not touch — so without this every test
         // after the first few would be answered 429 by the previous ones.
@@ -63,7 +71,7 @@ class PublicSiteTest extends TestCase
      * test that skips the middleware would not notice if the route ever left
      * the web group.
      */
-    private function submitSignup(string $email, string $name = 'A', string $host = 'hamanai.com')
+    private function submitSignup(string $email, string $name = 'A', string $host = 'hamanai.com', string $country = 'IR')
     {
         // Signup puts the new tenant on the free plan, by slug. It is seeded
         // in every real environment but not created by these tests, and its
@@ -81,6 +89,7 @@ class PublicSiteTest extends TestCase
         // failing on the server, where it names the landing domain.
         return $this->withSession(['_token' => 'test-token'])->post("https://{$host}/signup", [
             '_token' => 'test-token',
+            'country' => $country,
             'name' => $name, 'email' => $email,
             'password' => 'password123', 'password_confirmation' => 'password123',
         ]);
@@ -95,16 +104,20 @@ class PublicSiteTest extends TestCase
 
     public function test_it_shows_the_price_from_the_plan_not_from_the_markup(): void
     {
+        // fa, pinned: Toman is a direct pass-through of price_monthly (no FX
+        // conversion), which is what this test is actually about — the
+        // number propagating from the database, not currency conversion.
+        //
         // A name no piece of static copy could contain, so this cannot pass
         // on an empty pricing table.
         $this->publishedPlan(['name' => 'PlanFromDatabase', 'price_monthly' => 990000]);
 
-        $this->get('/')->assertOk()->assertSee('PlanFromDatabase')->assertSee('990,000');
+        $this->withHeader('Accept-Language', 'fa')->get('/')->assertOk()->assertSee('PlanFromDatabase')->assertSee('990,000');
 
         // Change it the way an admin would, and the page follows.
         Plan::where('name', 'PlanFromDatabase')->update(['price_monthly' => 1490000]);
 
-        $this->get('/')->assertOk()->assertSee('1,490,000')->assertDontSee('>990,000<', false);
+        $this->withHeader('Accept-Language', 'fa')->get('/')->assertOk()->assertSee('1,490,000')->assertDontSee('>990,000<', false);
     }
 
     public function test_only_plans_marked_public_are_advertised(): void
@@ -200,7 +213,7 @@ class PublicSiteTest extends TestCase
             'price_toman' => 4650000, 'is_active' => true,
         ]);
 
-        $this->get('/')->assertOk()
+        $this->withHeader('Accept-Language', 'fa')->get('/')->assertOk()
             ->assertSee('SupportBotType')
             ->assertSee(number_format(4650000));
     }
@@ -225,14 +238,14 @@ class PublicSiteTest extends TestCase
             'price_toman' => 1000000, 'is_active' => true,
         ]);
 
-        $this->get('/')->assertOk()
+        $this->withHeader('Accept-Language', 'fa')->get('/')->assertOk()
             ->assertSee(number_format(1200000))
             ->assertSee(number_format(1000000));
 
         $plan->update(['price_monthly' => 3400000]);
         $type->update(['price_toman' => 2500000]);
 
-        $this->get('/')->assertOk()
+        $this->withHeader('Accept-Language', 'fa')->get('/')->assertOk()
             ->assertSee(number_format(3400000))
             ->assertSee(number_format(2500000))
             ->assertDontSee('>' . number_format(1200000) . '<', false);
@@ -354,42 +367,66 @@ class PublicSiteTest extends TestCase
         $this->assertStringNotContainsString('app.hamanai.com', $body);
     }
 
-    public function test_the_currency_comes_from_settings(): void
+    public function test_persian_locale_shows_toman(): void
     {
         $this->publishedPlan();
-        Settings::set('pricing.default_currency', 'EUR');
 
-        // The translated label (settings.option_EUR), not the raw setting
-        // code — see Money::currencyUnitLabel(). A visitor reads "Euro" or
-        // "یورو", never "EUR".
-        $this->get('/')->assertOk()->assertSee('Euro');
+        // Toman needs no FX rate (Money::convert()'s IRT branch is an
+        // identity), so this is true regardless of payments.fx.* — a
+        // Persian visitor always sees a real number, never "coming soon".
+        $html = $this->withHeader('Accept-Language', 'fa')->get('/')->assertOk()->getContent();
+        $this->assertStringContainsString('تومان', $html);
     }
 
-    public function test_the_currency_label_is_translated_not_the_raw_code(): void
+    public function test_english_locale_shows_euro_once_the_rate_is_configured(): void
     {
-        $this->publishedPlan();
+        $this->publishedPlan(['price_monthly' => 990000]);
+        Settings::set('payments.fx.eur_to_toman', 50000);
+
+        $html = $this->withHeader('Accept-Language', 'en')->get('/')->assertOk()->getContent();
+
+        $this->assertStringContainsString('Euro', $html);
+        $this->assertStringContainsString(number_format(990000 / 50000), $html);
+    }
+
+    public function test_english_locale_shows_coming_soon_without_a_configured_fx_rate(): void
+    {
+        // A fresh install has payments.fx.eur_to_toman = 0 — an English
+        // visitor must see an honest "coming soon", not a $0 price or a
+        // fatal division by zero. Undoes setUp()'s default rate.
+        Settings::set('payments.fx.eur_to_toman', 0);
+        $this->publishedPlan(['name' => 'RealPricedPlan', 'price_monthly' => 990000]);
+
+        $html = $this->withHeader('Accept-Language', 'en')->get('/')->assertOk()->getContent();
+
+        $this->assertStringNotContainsString('RealPricedPlan', $html);
+        $this->assertStringContainsString(__('landing.pricing_coming_soon'), $html);
+    }
+
+    public function test_the_chatbot_type_price_follows_locale_like_the_plan_price_does(): void
+    {
+        // This is the exact bug fixed previously: the plan-price grid read
+        // a currency setting while this section, two hundred lines below
+        // it, was permanently hardcoded to "Toman" regardless. Now both
+        // follow the same locale-driven currency.
         ChatbotTypePrice::create(['type' => 'faq', 'name' => 'FaqBotType', 'price_toman' => 2000000, 'is_active' => true]);
 
-        // Both the plan-price grid and the chatbot-type-price list must
-        // agree — they used to disagree, one reading the setting and the
-        // other permanently hardcoded to "Toman".
-        $html = $this->get('/')->assertOk()->getContent();
-        $this->assertStringContainsString('Toman', $html);
-        $this->assertStringNotContainsString('>IRT<', $html);
+        $this->withHeader('Accept-Language', 'fa')->get('/')->assertOk()->assertSee('تومان');
 
-        Settings::set('pricing.default_currency', 'USD');
-        $html = $this->get('/')->assertOk()->getContent();
-        $this->assertStringContainsString('US dollar', $html);
+        Settings::set('payments.fx.eur_to_toman', 50000);
+        $this->withHeader('Accept-Language', 'en')->get('/')->assertOk()->assertSee('Euro');
     }
 
     public function test_a_plan_priced_like_the_seed_default_shows_coming_soon_instead(): void
     {
         // 990 (well under the 1000 sanity threshold) is exactly the shape of
         // PlanSeeder's original placeholder values (29/99/299) — a plain
-        // number nobody has actually priced in any real currency yet.
+        // number nobody has actually priced in any real currency yet. fa,
+        // pinned explicitly: Toman needs no FX rate, so this is purely
+        // about the seed-default check, not currency availability.
         $this->publishedPlan(['name' => 'UnpricedPlan', 'price_monthly' => 990]);
 
-        $html = $this->get('/')->assertOk()->getContent();
+        $html = $this->withHeader('Accept-Language', 'fa')->get('/')->assertOk()->getContent();
 
         $this->assertStringNotContainsString('UnpricedPlan', $html);
         $this->assertStringContainsString(__('landing.pricing_coming_soon'), $html);
@@ -401,7 +438,7 @@ class PublicSiteTest extends TestCase
         // a free plan must still show it, not "coming soon".
         $this->publishedPlan(['name' => 'FreeOnlyPlan', 'price_monthly' => 0]);
 
-        $this->get('/')->assertOk()->assertSee('FreeOnlyPlan');
+        $this->withHeader('Accept-Language', 'fa')->get('/')->assertOk()->assertSee('FreeOnlyPlan');
     }
 
     public function test_one_real_priced_plan_is_enough_to_show_the_whole_grid(): void
@@ -409,7 +446,7 @@ class PublicSiteTest extends TestCase
         $this->publishedPlan(['name' => 'RealPricedPlan', 'price_monthly' => 990000]);
         $this->publishedPlan(['name' => 'StillDefaultPlan', 'slug' => 'still-default', 'price_monthly' => 99]);
 
-        $html = $this->get('/')->assertOk()->getContent();
+        $html = $this->withHeader('Accept-Language', 'fa')->get('/')->assertOk()->getContent();
 
         $this->assertStringContainsString('RealPricedPlan', $html);
         $this->assertStringContainsString('StillDefaultPlan', $html);
@@ -475,6 +512,75 @@ class PublicSiteTest extends TestCase
             fn (VerifyEmail $mail) => $mail->hasTo('new@example.test')
                 && str_contains($mail->link, '/verify-email/' . $user->id . '/'),
         );
+    }
+
+    public function test_the_chosen_country_is_saved_on_the_tenant(): void
+    {
+        $this->configureSmtp();
+        Mail::fake();
+
+        $this->submitSignup('de@example.test', 'DE Shop', 'hamanai.com', 'DE')->assertRedirect();
+
+        $tenant = \App\Models\Tenant::where('email', 'de@example.test')->first();
+        $this->assertSame('DE', $tenant->country);
+        $this->assertSame('EUR', $tenant->currency());
+    }
+
+    public function test_iran_is_saved_as_toman(): void
+    {
+        $this->configureSmtp();
+        Mail::fake();
+
+        $this->submitSignup('ir@example.test', 'IR Shop', 'hamanai.com', 'IR')->assertRedirect();
+
+        $tenant = \App\Models\Tenant::where('email', 'ir@example.test')->first();
+        $this->assertSame('IRT', $tenant->currency());
+    }
+
+    public function test_signup_is_refused_without_a_country(): void
+    {
+        $this->configureSmtp();
+        Mail::fake();
+        \App\Models\Plan::firstOrCreate(['slug' => 'free'], [
+            'name' => 'Free', 'price_monthly' => 0, 'max_chatbots' => 1,
+            'max_tokens_monthly' => 100000, 'is_active' => true, 'is_public' => false, 'sort_order' => 0,
+        ]);
+
+        $this->withSession(['_token' => 'test-token'])->post('https://hamanai.com/signup', [
+            '_token' => 'test-token', 'name' => 'No Country', 'email' => 'nocountry@example.test',
+            'password' => 'password123', 'password_confirmation' => 'password123',
+        ])->assertSessionHasErrors('country');
+
+        $this->assertNull(User::where('email', 'nocountry@example.test')->first());
+    }
+
+    public function test_signup_is_refused_for_a_country_not_in_the_list(): void
+    {
+        $this->configureSmtp();
+        Mail::fake();
+
+        $this->submitSignup('bad-country@example.test', 'Bad', 'hamanai.com', 'ZZ-NOT-REAL')
+            ->assertSessionHasErrors('country');
+    }
+
+    public function test_the_phone_otp_path_never_needs_a_country_and_defaults_to_toman(): void
+    {
+        \App\Models\Plan::firstOrCreate(['slug' => 'free'], [
+            'name' => 'Free', 'price_monthly' => 0, 'max_chatbots' => 1,
+            'max_tokens_monthly' => 100000, 'is_active' => true, 'is_public' => false, 'sort_order' => 0,
+        ]);
+
+        // registerViaPhone() only ever accepts an Iranian mobile number, so
+        // it never asks for or sets country — Tenant::currency() already
+        // treats a null country as Iran, which is exactly right here.
+        $result = app(\App\Services\TenantService::class)->registerViaPhone([
+            'first_name' => 'Ali', 'last_name' => 'Rezai', 'email' => 'ali@example.test',
+            'phone' => '09121234567', 'national_id' => '1234567890', 'address' => 'Tehran',
+            'password' => 'password123',
+        ]);
+
+        $this->assertNull($result['tenant']->country);
+        $this->assertSame('IRT', $result['tenant']->currency());
     }
 
     public function test_the_verification_link_verifies_and_a_tampered_one_does_not(): void

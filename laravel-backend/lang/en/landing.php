@@ -127,6 +127,11 @@ return [
     'signup_subtitle' => 'Create an account, or sign in with your mobile number.',
     'signup_name' => 'Name',
     'signup_email' => 'Email',
+    'signup_country' => 'Country',
+    'signup_country_placeholder' => 'Select your country',
+    // This is the one signup answer that decides the currency shown
+    // everywhere in the portal afterward — see Tenant::currency().
+    'signup_country_help' => 'This decides which currency you\'ll see in your account — Toman for Iran, Euro everywhere else.',
     'signup_password' => 'Password',
     'signup_password_confirm' => 'Confirm password',
     'signup_submit' => 'Create account',

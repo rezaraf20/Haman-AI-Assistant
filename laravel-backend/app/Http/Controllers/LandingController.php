@@ -31,16 +31,22 @@ class LandingController extends Controller
     public function index(Request $request)
     {
         $plans = $this->publicPlans();
+        // fa reads the page in Toman, every other locale in Euro — a
+        // language choice, not the admin-wide pricing.default_currency
+        // setting (that one still routes payment gateways; see
+        // PaymentGatewayManager). See Money::currencyForLocale().
+        $currency = Money::currencyForLocale();
 
         $response = response()->view('landing.index', [
             'plans'               => $plans,
-            'pricingComingSoon'   => $this->pricingLooksUnconfigured($plans),
+            'currency'            => $currency,
+            'pricingComingSoon'   => $this->pricingLooksUnconfigured($plans, $currency),
             'popularSlug'         => (string) Settings::get('pricing.popular_plan_slug'),
             'chatbotTypes'        => $this->chatbotTypePrices(),
-            'currencyLabel'       => Money::currencyUnitLabel(),
             'emailSignup'         => MailSettings::isUsable(),
             'faq'                 => $this->faq(),
             'contact'             => LandingContent::contact(),
+            'countries'           => \App\Support\Countries::all(),
         ]);
 
         // Vary on the language header: the same URL serves Persian and
@@ -77,15 +83,22 @@ class LandingController extends Controller
     }
 
     /**
-     * True when every paid, published plan still looks like PlanSeeder's
-     * placeholder (see Plan::looksLikeDefaultPrice()) — the site would
-     * otherwise advertise "29 Toman" as a real monthly price. A plan
-     * deliberately priced at 0 (Free) doesn't count either way: a free-only
-     * public lineup is a real, intentional choice, not unconfigured seed
-     * data.
+     * True when this locale's currency can't actually be shown yet — either
+     * nobody has set an FX rate for it (Money::convert() returns null for
+     * every plan, not just the cheap ones), or every paid, published plan
+     * still looks like PlanSeeder's placeholder (see Plan::
+     * looksLikeDefaultPrice()) — the site would otherwise advertise "29
+     * Toman" as a real monthly price. That second check is always in raw
+     * Toman terms regardless of $currency: whether 99 Toman looks like
+     * unedited seed data doesn't depend on what it's being displayed as. A
+     * plan deliberately priced at 0 (Free) doesn't count either way — a
+     * free-only public lineup is a real, intentional choice, not
+     * unconfigured pricing.
      */
-    private function pricingLooksUnconfigured($plans): bool
+    private function pricingLooksUnconfigured($plans, string $currency): bool
     {
+        if (Money::convert(1_000_000, $currency) === null) return true;
+
         $paidPlans = $plans->where('price_monthly', '>', 0);
 
         return $paidPlans->isNotEmpty()

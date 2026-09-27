@@ -29,7 +29,7 @@
 
         <x-filament::section>
             <div class="text-sm text-gray-500">{{ __('dashboard.customer_stats_wallet_balance') }}</div>
-            <div class="text-2xl font-bold mt-1">{{ $this->toman($d['wallet_toman']) }}</div>
+            <div class="text-2xl font-bold mt-1">{{ $this->money($d['wallet_toman']) }}</div>
         </x-filament::section>
 
         <x-filament::section>

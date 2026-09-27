@@ -2,13 +2,28 @@
 namespace App\Support;
 
 /**
- * Every amount in the database is stored as a whole-Toman integer — this
- * class is just the single place that turns that integer into displayed
- * text, so a second currency can be added later (a real conversion layer,
- * per-tenant currency, etc.) without hunting down every `. ' تومان'` /
- * `. ' T'` string concatenation scattered across the Filament resources.
- * Toman is the only supported currency today; the $currency parameter
- * exists so callers don't need to change when a second one is added.
+ * Every amount in the database is stored as a whole-Toman integer. Two
+ * unrelated audiences read it back:
+ *
+ *  - The admin panel (and every internal ledger operation — WalletService,
+ *    the *_toman columns themselves) is Toman-only, always, on purpose. See
+ *    toman()/format() below, both untouched by anything in this class past
+ *    this point. The platform's own books are kept in Toman regardless of
+ *    what any visitor or tenant sees.
+ *  - A visitor on the public site, or a tenant in their own portal, sees
+ *    Toman or Euro depending on locale (the site) or the country they gave
+ *    at signup (the portal) — see currencyForLocale() and Tenant::currency().
+ *    convert()/unitLabel()/display() below are that second, display-only
+ *    layer: a Euro number is always a live conversion of the one real
+ *    Toman value, never a second value stored anywhere, so there is nothing
+ *    for the two to drift apart from.
+ *
+ * There is no live FX fetch (payments.fx.mode's 'source' option is
+ * registered but has no consumer anywhere in this codebase) — the rate is
+ * whatever an admin has typed into payments.fx.eur_to_toman. Unset (0),
+ * convert() returns null rather than dividing by zero or inventing a rate,
+ * and every caller here treats null as "not available in this currency
+ * yet", not as a display bug to paper over.
  */
 class Money {
     public static function toman(int $amountToman): string {
@@ -22,25 +37,73 @@ class Money {
         };
     }
 
-    /**
-     * The public site's currency unit, translated for the current locale —
-     * "تومان" in fa, "Toman" in en, never the raw settings code (IRT). One
-     * setting (pricing.default_currency) drives both the plan-price grid and
-     * the chatbot-type-price list on the landing page, which used to
-     * disagree: one read this setting, the other always said "Toman"
-     * regardless of it.
-     *
-     * Reuses settings.option_{code}, the label already shown next to this
-     * same setting in the admin Pricing tab — one pair of translated labels,
-     * not a second set invented for the landing page. A currency added to
-     * SettingsRegistry's options list later without a matching settings.
-     * option_{code} label falls back to the raw code instead of a
-     * translation-missing string, so this never hard-breaks on a new value.
-     */
-    public static function currencyUnitLabel(): string {
-        $code = (string) Settings::get('pricing.default_currency');
-        $key = 'settings.option_' . $code;
+    /** fa sees Toman, everything else sees Euro — a locale choice, not the admin-wide pricing.default_currency setting (that setting still exists, for payment-gateway routing — see PaymentGatewayManager). */
+    public static function currencyForLocale(?string $locale = null): string {
+        return ($locale ?? app()->getLocale()) === 'fa' ? 'IRT' : 'EUR';
+    }
 
-        return \Illuminate\Support\Facades\Lang::has($key) ? __($key) : $code;
+    /**
+     * The raw converted number, no formatting or unit — null when EUR/USD's
+     * FX rate isn't configured. IRT is always available (identity, no rate
+     * needed) so this only ever returns null for a currency that actually
+     * requires one.
+     */
+    public static function convert(int $amountToman, string $currency): ?float {
+        $currency = strtoupper($currency);
+        if ($currency === 'IRT') return (float) $amountToman;
+
+        $rate = match ($currency) {
+            'USD' => (float) Settings::get('payments.fx.usd_to_toman'),
+            'EUR' => (float) Settings::get('payments.fx.eur_to_toman'),
+            default => 0.0,
+        };
+        if ($rate <= 0) return null;
+
+        // Rounded to a whole unit, not fractional Euros/Dollars — the only
+        // gateway calls that exist (PaymentGatewayManager::toToman(),
+        // PaymentGateway::requestPayment()) are int-amount contracts too, so
+        // a displayed price and an actually-charged amount can never
+        // silently disagree down to the cent.
+        return round($amountToman / $rate);
+    }
+
+    /**
+     * The translated unit word for a currency code — reuses settings.
+     * option_{code}, the same label already shown next to pricing.
+     * default_currency in the admin Pricing tab, so there is one pair of
+     * translated currency names, not two. Falls back to the raw code for a
+     * currency nobody has labelled yet, rather than a translation-missing
+     * string.
+     */
+    public static function unitLabel(string $currency): string {
+        $key = 'settings.option_' . strtoupper($currency);
+        return \Illuminate\Support\Facades\Lang::has($key) ? __($key) : strtoupper($currency);
+    }
+
+    /** convert() + unitLabel() in one call, for callers that don't need the number and the unit styled separately. Null exactly when convert() is. */
+    public static function display(int $amountToman, string $currency): ?string {
+        $amount = self::convert($amountToman, $currency);
+        return $amount === null ? null : Numbers::format($amount) . ' ' . self::unitLabel($currency);
+    }
+
+    /**
+     * Every Customer\Pages\* price/balance display: the currently
+     * logged-in tenant's own currency, falling back to plain Toman on the
+     * one currency (EUR/USD with no FX rate set) display() can't show —
+     * never a blank amount. The one repeated line across Wallet, BuyChatbot,
+     * BuyTokens, MyChatbots and the dashboard widget, so a fix to that
+     * fallback only ever needs to happen here.
+     */
+    public static function forCurrentTenant(int $amountToman): string {
+        // Tenant::find() on the plain tenant_id column, not auth()->user()->
+        // tenant — that relation isn't eager-loaded here, and
+        // Model::preventLazyLoading() (AppServiceProvider) only allows a
+        // lazy relation load in production, throwing everywhere else this
+        // runs, tests included.
+        $tenantId = auth()->user()?->tenant_id;
+        $currency = $tenantId ? \App\Models\Tenant::find($tenantId)?->currency() : null;
+        $currency ??= 'IRT';
+
+        return self::display($amountToman, $currency) ?? self::toman($amountToman);
     }
 }

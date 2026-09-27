@@ -42,5 +42,9 @@ class CustomerStatsOverview extends Widget {
     }
 
     public function fmt(int $n): string { return Numbers::format($n); }
-    public function toman(int $n): string { return Money::toman($n); }
+
+    /** In the tenant's own currency — see Tenant::currency(). */
+    public function money(int $amountToman): string {
+        return Money::forCurrentTenant($amountToman);
+    }
 }

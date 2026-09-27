@@ -40,7 +40,7 @@ class BuyChatbot extends Page implements HasForms {
             Select::make('type')
                 ->label(__('chatbot.type_select'))
                 ->options(fn () => ChatbotTypePrice::active()->get()->mapWithKeys(
-                    fn ($p) => [$p->type => $p->name . ' — ' . Money::toman($p->price_toman)]
+                    fn ($p) => [$p->type => $p->display_name . ' — ' . Money::forCurrentTenant($p->price_toman)]
                 ))
                 ->required()
                 ->live(),
@@ -62,6 +62,15 @@ class BuyChatbot extends Page implements HasForms {
 
     public function getWalletBalance(): int {
         return (int) (auth()->user()->tenant->wallet_balance_toman ?? 0);
+    }
+
+    /** Formatted in the tenant's own currency — getWalletBalance()/getSelectedPrice() stay raw Toman for the actual purchase-affordability comparison in purchase() below. */
+    public function getWalletBalanceDisplay(): string {
+        return Money::forCurrentTenant($this->getWalletBalance());
+    }
+
+    public function getSelectedPriceDisplay(): string {
+        return Money::forCurrentTenant($this->getSelectedPrice());
     }
 
     public function purchase(): void {
