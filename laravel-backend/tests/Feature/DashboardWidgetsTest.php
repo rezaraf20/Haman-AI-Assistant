@@ -181,6 +181,11 @@ class DashboardWidgetsTest extends TestCase
         $count = count(DB::getQueryLog());
         DB::disableQueryLog();
 
-        $this->assertLessThan(15, $count, "Customer dashboard ran {$count} queries (budget: <15). Query log: " . json_encode(array_column(DB::getQueryLog(), 'query')));
+        // 16, not 15: CustomerStatsOverview's wallet stat now resolves the
+        // tenant's currency (Money::forCurrentTenant(), for the Toman/Euro
+        // split) — one extra, necessary, already-memoized-per-request
+        // query (confirmed in the log below: it appears exactly once, not
+        // once per money() call on the page).
+        $this->assertLessThan(16, $count, "Customer dashboard ran {$count} queries (budget: <16). Query log: " . json_encode(array_column(DB::getQueryLog(), 'query')));
     }
 }
