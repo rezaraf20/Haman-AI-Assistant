@@ -31,7 +31,7 @@ class TokenPackageResource extends Resource {
     protected static ?int $navigationSort = 7;
 
     public static function getNavigationLabel(): string { return __('plan.token_packages_nav'); }
-    public static function getNavigationGroup(): ?string { return __('panel.nav_group_finance'); }
+    public static function getNavigationGroup(): ?string { return __('panel.nav_group_pricing'); }
     public static function getModelLabel(): string { return __('plan.token_package_singular'); }
     public static function getPluralModelLabel(): string { return __('plan.token_packages_nav'); }
 

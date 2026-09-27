@@ -102,11 +102,18 @@ return [
     'pricing_per_month' => 'per month',
     'pricing_cta' => 'Choose',
     'pricing_empty' => 'No plans have been published yet.',
+    // Shown instead of the price grid when every paid plan still looks like
+    // PlanSeeder's placeholder value (see Plan::PRICE_SANITY_THRESHOLD) —
+    // an unedited "29" read as a real monthly price otherwise.
+    'pricing_coming_soon' => 'Pricing is being finalized. Check back soon.',
     'pricing_popular' => 'Popular',
-    'pricing_chatbots' => ':count chatbots',
-    'pricing_tokens' => ':count tokens per month',
-    'pricing_documents' => ':count documents',
-    'pricing_domains' => ':count domains',
+    // trans_choice: singular|plural. Persian has no plural, so lang/fa/landing.php
+    // keeps these as one plain string each — trans_choice() returns a
+    // pipe-less translation as-is regardless of $count.
+    'pricing_chatbots' => ':count chatbot|:count chatbots',
+    'pricing_tokens' => ':count token per month|:count tokens per month',
+    'pricing_documents' => ':count document|:count documents',
+    'pricing_domains' => ':count domain|:count domains',
     // TODO(business): enterprise wording, and whether its price is public or
     // "contact us".
     'pricing_enterprise_note' => 'Talk to us about larger requirements.',
@@ -114,7 +121,6 @@ return [
     // ── what a chatbot itself costs ─────────────────────────────────────
     'types_title' => 'What a chatbot costs',
     'types_subtitle' => 'A plan is the monthly subscription. This is the one-off price for the chatbot itself.',
-    'toman' => 'Toman',
 
     // ── form ────────────────────────────────────────────────────────────
     'signup_title' => 'Get started',

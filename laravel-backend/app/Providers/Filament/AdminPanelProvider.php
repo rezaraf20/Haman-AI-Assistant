@@ -77,6 +77,7 @@ class AdminPanelProvider extends PanelProvider {
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\\Filament\\Widgets')
             ->navigationGroups([
                 __('panel.nav_group_customers'),
+                __('panel.nav_group_pricing'),
                 __('panel.nav_group_finance'),
                 __('panel.nav_group_support'),
                 __('panel.nav_group_infrastructure'),

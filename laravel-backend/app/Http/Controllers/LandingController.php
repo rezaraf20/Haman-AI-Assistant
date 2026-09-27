@@ -2,7 +2,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\{ChatbotTypePrice, Plan};
-use App\Support\{LandingContent, MailSettings, Settings};
+use App\Support\{LandingContent, MailSettings, Money, Settings};
 use Illuminate\Http\Request;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -30,14 +30,17 @@ class LandingController extends Controller
 
     public function index(Request $request)
     {
+        $plans = $this->publicPlans();
+
         $response = response()->view('landing.index', [
-            'plans'        => $this->publicPlans(),
-            'popularSlug'  => (string) Settings::get('pricing.popular_plan_slug'),
-            'chatbotTypes' => $this->chatbotTypePrices(),
-            'currency'     => (string) Settings::get('pricing.default_currency'),
-            'emailSignup'  => MailSettings::isUsable(),
-            'faq'          => $this->faq(),
-            'contact'      => LandingContent::contact(),
+            'plans'               => $plans,
+            'pricingComingSoon'   => $this->pricingLooksUnconfigured($plans),
+            'popularSlug'         => (string) Settings::get('pricing.popular_plan_slug'),
+            'chatbotTypes'        => $this->chatbotTypePrices(),
+            'currencyLabel'       => Money::currencyUnitLabel(),
+            'emailSignup'         => MailSettings::isUsable(),
+            'faq'                 => $this->faq(),
+            'contact'             => LandingContent::contact(),
         ]);
 
         // Vary on the language header: the same URL serves Persian and
@@ -71,6 +74,22 @@ class LandingController extends Controller
             ->where('is_public', true)
             ->orderBy('sort_order')
             ->get();
+    }
+
+    /**
+     * True when every paid, published plan still looks like PlanSeeder's
+     * placeholder (see Plan::looksLikeDefaultPrice()) — the site would
+     * otherwise advertise "29 Toman" as a real monthly price. A plan
+     * deliberately priced at 0 (Free) doesn't count either way: a free-only
+     * public lineup is a real, intentional choice, not unconfigured seed
+     * data.
+     */
+    private function pricingLooksUnconfigured($plans): bool
+    {
+        $paidPlans = $plans->where('price_monthly', '>', 0);
+
+        return $paidPlans->isNotEmpty()
+            && $paidPlans->every(fn (Plan $plan) => $plan->price_monthly < Plan::PRICE_SANITY_THRESHOLD);
     }
 
     /**

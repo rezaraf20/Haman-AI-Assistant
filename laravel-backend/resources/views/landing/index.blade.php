@@ -452,6 +452,8 @@
 
         @if ($plans->isEmpty())
             <p class="notice" style="margin-top:28px">{{ __('landing.pricing_empty') }}</p>
+        @elseif ($pricingComingSoon)
+            <p class="notice" style="margin-top:28px">{{ __('landing.pricing_coming_soon') }}</p>
         @else
             <div class="price-grid" style="margin-top:40px">
                 @foreach ($plans as $plan)
@@ -460,27 +462,27 @@
                         @if ($isPopular)
                             <span class="popular-badge">{{ __('landing.pricing_popular') }}</span>
                         @endif
-                        <h3>{{ $plan->name }}</h3>
+                        <h3>{{ $plan->display_name }}</h3>
                         <div class="amount">
                             {{ number_format((float) $plan->price_monthly) }}
-                            <span class="muted" style="font-size:.9rem;font-weight:400">{{ $currency }}</span>
+                            <span class="muted" style="font-size:.9rem;font-weight:400">{{ $currencyLabel }}</span>
                         </div>
                         <div class="muted" style="font-size:.85rem">{{ __('landing.pricing_per_month') }}</div>
 
-                        @if ($plan->description)
-                            <p class="muted" style="margin-top:12px;font-size:.92rem">{{ $plan->description }}</p>
+                        @if ($plan->display_description)
+                            <p class="muted" style="margin-top:12px;font-size:.92rem">{{ $plan->display_description }}</p>
                         @endif
 
                         <ul>
-                            <li>{{ __('landing.pricing_chatbots', ['count' => number_format((int) $plan->max_chatbots)]) }}</li>
-                            <li>{{ __('landing.pricing_tokens', ['count' => number_format((int) $plan->max_tokens_monthly)]) }}</li>
+                            <li>{{ trans_choice('landing.pricing_chatbots', (int) $plan->max_chatbots, ['count' => number_format((int) $plan->max_chatbots)]) }}</li>
+                            <li>{{ trans_choice('landing.pricing_tokens', (int) $plan->max_tokens_monthly, ['count' => number_format((int) $plan->max_tokens_monthly)]) }}</li>
                             @if ($plan->max_documents)
-                                <li>{{ __('landing.pricing_documents', ['count' => number_format((int) $plan->max_documents)]) }}</li>
+                                <li>{{ trans_choice('landing.pricing_documents', (int) $plan->max_documents, ['count' => number_format((int) $plan->max_documents)]) }}</li>
                             @endif
                             @if ($plan->max_domains)
-                                <li>{{ __('landing.pricing_domains', ['count' => number_format((int) $plan->max_domains)]) }}</li>
+                                <li>{{ trans_choice('landing.pricing_domains', (int) $plan->max_domains, ['count' => number_format((int) $plan->max_domains)]) }}</li>
                             @endif
-                            @foreach (($plan->features ?? []) as $feature)
+                            @foreach ($plan->display_features as $feature)
                                 <li>{{ $feature }}</li>
                             @endforeach
                         </ul>
@@ -500,9 +502,9 @@
                 <ul class="type-list">
                     @foreach ($chatbotTypes as $type)
                         <li>
-                            <span>{{ $type->name }}</span>
+                            <span>{{ $type->display_name }}</span>
                             <strong>{{ number_format((int) $type->price_toman) }}
-                                <span class="muted" style="font-weight:400;font-size:.85rem">{{ __('landing.toman') }}</span>
+                                <span class="muted" style="font-weight:400;font-size:.85rem">{{ $currencyLabel }}</span>
                             </strong>
                         </li>
                     @endforeach

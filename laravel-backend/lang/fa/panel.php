@@ -16,6 +16,7 @@ return [
     'dashboard_nav' => 'داشبورد',
     'dashboard_title' => 'داشبورد',
     'nav_group_customers' => 'مشتریان و چت‌بات‌ها',
+    'nav_group_pricing' => 'قیمت‌گذاری و پلن‌ها',
     'nav_group_finance' => 'مالی',
     'nav_group_support' => 'پشتیبانی',
     'nav_group_infrastructure' => 'زیرساخت',

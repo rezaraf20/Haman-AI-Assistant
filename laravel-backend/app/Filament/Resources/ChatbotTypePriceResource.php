@@ -6,7 +6,7 @@ use App\Support\PlatformAccess;
 use App\Models\ChatbotTypePrice;
 use App\Enums\ChatbotType;
 use Filament\Forms\Form;
-use Filament\Forms\Components\{TextInput, Select, Toggle};
+use Filament\Forms\Components\{Grid, TextInput, Select, Toggle};
 use Filament\Resources\Resource;
 use Filament\Tables\Table;
 use Filament\Tables\Columns\{TextColumn, IconColumn};
@@ -31,7 +31,7 @@ class ChatbotTypePriceResource extends Resource {
     protected static ?int $navigationSort = 6;
 
     public static function getNavigationLabel(): string { return __('plan.chatbot_pricing_nav'); }
-    public static function getNavigationGroup(): ?string { return __('panel.nav_group_finance'); }
+    public static function getNavigationGroup(): ?string { return __('panel.nav_group_pricing'); }
     public static function getModelLabel(): string { return __('plan.chatbot_price_singular'); }
     public static function getPluralModelLabel(): string { return __('plan.chatbot_pricing_nav'); }
 
@@ -46,7 +46,12 @@ class ChatbotTypePriceResource extends Resource {
                 ))
                 ->required()
                 ->unique(ignoreRecord: true),
-            TextInput::make('name')->label(__('common.name'))->required()->maxLength(255)->placeholder(__('plan.chatbot_price_name_placeholder')),
+            Grid::make(2)->schema([
+                TextInput::make('name')->label(__('plan.name_fa'))->required()->maxLength(255)
+                    ->placeholder(__('plan.chatbot_price_name_placeholder')),
+                TextInput::make('name_en')->label(__('plan.name_en'))->maxLength(255)
+                    ->helperText(__('plan.name_en_help')),
+            ]),
             TextInput::make('price_toman')->label(__('plan.price_toman'))->numeric()->required()
                 ->helperText(__('plan.chatbot_price_help')),
             Toggle::make('is_active')->label(__('plan.self_purchasable'))->default(true),

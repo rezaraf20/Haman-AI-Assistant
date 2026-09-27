@@ -13,6 +13,7 @@ return [
     'dashboard_nav' => 'Dashboard',
     'dashboard_title' => 'Dashboard',
     'nav_group_customers' => 'Customers & Chatbots',
+    'nav_group_pricing' => 'Pricing & Plans',
     'nav_group_finance' => 'Finance',
     'nav_group_support' => 'Support',
     'nav_group_infrastructure' => 'Infrastructure',

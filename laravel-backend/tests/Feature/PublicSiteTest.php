@@ -34,9 +34,16 @@ class PublicSiteTest extends TestCase
 
     private function publishedPlan(array $attrs = []): Plan
     {
+        // Deliberately above Plan::PRICE_SANITY_THRESHOLD (1000) — a price
+        // below it reads as PlanSeeder's untouched placeholder and now hides
+        // the whole pricing grid behind "coming soon" (see
+        // test_a_plan_priced_like_the_seed_default_shows_coming_soon_instead).
+        // A fixture representing "an admin set a real price" has to clear
+        // that bar, or it accidentally exercises that fallback instead of
+        // whatever the test actually means to check.
         return Plan::create(array_merge([
             'name' => 'Growth', 'slug' => 'growth-' . Str::random(5),
-            'price_monthly' => 99, 'max_chatbots' => 5, 'max_tokens_monthly' => 2000000,
+            'price_monthly' => 990000, 'max_chatbots' => 5, 'max_tokens_monthly' => 2000000,
             'is_active' => true, 'is_public' => true, 'sort_order' => 2,
         ], $attrs));
     }
@@ -90,14 +97,14 @@ class PublicSiteTest extends TestCase
     {
         // A name no piece of static copy could contain, so this cannot pass
         // on an empty pricing table.
-        $this->publishedPlan(['name' => 'PlanFromDatabase', 'price_monthly' => 99]);
+        $this->publishedPlan(['name' => 'PlanFromDatabase', 'price_monthly' => 990000]);
 
-        $this->get('/')->assertOk()->assertSee('PlanFromDatabase')->assertSee('99');
+        $this->get('/')->assertOk()->assertSee('PlanFromDatabase')->assertSee('990,000');
 
         // Change it the way an admin would, and the page follows.
-        Plan::where('name', 'PlanFromDatabase')->update(['price_monthly' => 149]);
+        Plan::where('name', 'PlanFromDatabase')->update(['price_monthly' => 1490000]);
 
-        $this->get('/')->assertOk()->assertSee('149')->assertDontSee('>99<', false);
+        $this->get('/')->assertOk()->assertSee('1,490,000')->assertDontSee('>990,000<', false);
     }
 
     public function test_only_plans_marked_public_are_advertised(): void
@@ -110,6 +117,78 @@ class PublicSiteTest extends TestCase
         ]);
 
         $this->get('/')->assertOk()->assertSee('ShownPlan')->assertDontSee('HiddenPlan');
+    }
+
+    public function test_a_plans_english_name_shows_only_on_the_english_page(): void
+    {
+        $this->publishedPlan(['name' => 'رشد', 'name_en' => 'Growth Plan']);
+
+        $this->withHeader('Accept-Language', 'fa')->get('/')->assertOk()->assertSee('رشد')->assertDontSee('Growth Plan');
+        $this->withHeader('Accept-Language', 'en')->get('/')->assertOk()->assertSee('Growth Plan')->assertDontSee('رشد');
+    }
+
+    public function test_a_plan_with_no_english_name_falls_back_to_the_persian_one(): void
+    {
+        $this->publishedPlan(['name' => 'پلن بدون ترجمه']);
+
+        $this->withHeader('Accept-Language', 'en')->get('/')->assertOk()->assertSee('پلن بدون ترجمه');
+    }
+
+    public function test_a_chatbot_types_english_name_shows_only_on_the_english_page(): void
+    {
+        ChatbotTypePrice::create([
+            'type' => 'support', 'name' => 'پشتیبانی', 'name_en' => 'Support',
+            'price_toman' => 500000, 'is_active' => true,
+        ]);
+
+        $this->withHeader('Accept-Language', 'fa')->get('/')->assertOk()->assertSee('پشتیبانی')->assertDontSee('Support');
+        $this->withHeader('Accept-Language', 'en')->get('/')->assertOk()->assertSee('Support');
+    }
+
+    public function test_only_non_empty_feature_strings_are_shown(): void
+    {
+        $plan = $this->publishedPlan(['name' => 'FeaturedPlan']);
+        $plan->update(['features' => [
+            ['fa' => 'پشتیبانی ۲۴ ساعته', 'en' => '24/7 support'],
+            // The pre-cleanup shape (an internal flag, never a real
+            // display string) — must never reach the page as a bare "1".
+            ['woocommerce' => true],
+            ['fa' => '', 'en' => ''],
+            'a plain legacy string',
+        ]]);
+
+        $html = $this->withHeader('Accept-Language', 'en')->get('/')->assertOk()->getContent();
+
+        $this->assertStringContainsString('24/7 support', $html);
+        $this->assertStringContainsString('a plain legacy string', $html);
+        $this->assertStringNotContainsString('<li>1</li>', $html);
+    }
+
+    public function test_a_single_chatbot_limit_reads_as_singular_in_english(): void
+    {
+        $this->publishedPlan(['max_chatbots' => 1]);
+
+        $html = $this->withHeader('Accept-Language', 'en')->get('/')->assertOk()->getContent();
+
+        $this->assertStringContainsString('1 chatbot', $html);
+        $this->assertStringNotContainsString('1 chatbots', $html);
+    }
+
+    public function test_multiple_chatbots_reads_as_plural_in_english(): void
+    {
+        $this->publishedPlan(['max_chatbots' => 5]);
+
+        $this->withHeader('Accept-Language', 'en')->get('/')->assertOk()->assertSee('5 chatbots');
+    }
+
+    public function test_a_single_domain_limit_reads_as_singular_in_english(): void
+    {
+        $this->publishedPlan(['max_domains' => 1]);
+
+        $html = $this->withHeader('Accept-Language', 'en')->get('/')->assertOk()->getContent();
+
+        $this->assertStringContainsString('1 domain', $html);
+        $this->assertStringNotContainsString('1 domains', $html);
     }
 
     public function test_the_price_of_a_chatbot_comes_from_the_table_the_panel_charges_from(): void
@@ -140,23 +219,23 @@ class PublicSiteTest extends TestCase
     {
         // The acceptance criterion: the page reads the tables the panel
         // writes, with nothing in between that could hold a stale number.
-        $plan = $this->publishedPlan(['name' => 'LivePricePlan', 'price_monthly' => 120]);
+        $plan = $this->publishedPlan(['name' => 'LivePricePlan', 'price_monthly' => 1200000]);
         $type = ChatbotTypePrice::create([
             'type' => 'sales', 'name' => 'LiveTypePrice',
             'price_toman' => 1000000, 'is_active' => true,
         ]);
 
         $this->get('/')->assertOk()
-            ->assertSee('120')
+            ->assertSee(number_format(1200000))
             ->assertSee(number_format(1000000));
 
-        $plan->update(['price_monthly' => 340]);
+        $plan->update(['price_monthly' => 3400000]);
         $type->update(['price_toman' => 2500000]);
 
         $this->get('/')->assertOk()
-            ->assertSee('340')
+            ->assertSee(number_format(3400000))
             ->assertSee(number_format(2500000))
-            ->assertDontSee('>120<', false);
+            ->assertDontSee('>' . number_format(1200000) . '<', false);
     }
 
     public function test_the_page_is_cached_briefly_and_varies_on_language(): void
@@ -280,7 +359,60 @@ class PublicSiteTest extends TestCase
         $this->publishedPlan();
         Settings::set('pricing.default_currency', 'EUR');
 
-        $this->get('/')->assertOk()->assertSee('EUR');
+        // The translated label (settings.option_EUR), not the raw setting
+        // code — see Money::currencyUnitLabel(). A visitor reads "Euro" or
+        // "یورو", never "EUR".
+        $this->get('/')->assertOk()->assertSee('Euro');
+    }
+
+    public function test_the_currency_label_is_translated_not_the_raw_code(): void
+    {
+        $this->publishedPlan();
+        ChatbotTypePrice::create(['type' => 'faq', 'name' => 'FaqBotType', 'price_toman' => 2000000, 'is_active' => true]);
+
+        // Both the plan-price grid and the chatbot-type-price list must
+        // agree — they used to disagree, one reading the setting and the
+        // other permanently hardcoded to "Toman".
+        $html = $this->get('/')->assertOk()->getContent();
+        $this->assertStringContainsString('Toman', $html);
+        $this->assertStringNotContainsString('>IRT<', $html);
+
+        Settings::set('pricing.default_currency', 'USD');
+        $html = $this->get('/')->assertOk()->getContent();
+        $this->assertStringContainsString('US dollar', $html);
+    }
+
+    public function test_a_plan_priced_like_the_seed_default_shows_coming_soon_instead(): void
+    {
+        // 990 (well under the 1000 sanity threshold) is exactly the shape of
+        // PlanSeeder's original placeholder values (29/99/299) — a plain
+        // number nobody has actually priced in any real currency yet.
+        $this->publishedPlan(['name' => 'UnpricedPlan', 'price_monthly' => 990]);
+
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $this->assertStringNotContainsString('UnpricedPlan', $html);
+        $this->assertStringContainsString(__('landing.pricing_coming_soon'), $html);
+    }
+
+    public function test_a_free_only_lineup_is_not_treated_as_unconfigured(): void
+    {
+        // Free (0) is a deliberate, real price — a site that only publishes
+        // a free plan must still show it, not "coming soon".
+        $this->publishedPlan(['name' => 'FreeOnlyPlan', 'price_monthly' => 0]);
+
+        $this->get('/')->assertOk()->assertSee('FreeOnlyPlan');
+    }
+
+    public function test_one_real_priced_plan_is_enough_to_show_the_whole_grid(): void
+    {
+        $this->publishedPlan(['name' => 'RealPricedPlan', 'price_monthly' => 990000]);
+        $this->publishedPlan(['name' => 'StillDefaultPlan', 'slug' => 'still-default', 'price_monthly' => 99]);
+
+        $html = $this->get('/')->assertOk()->getContent();
+
+        $this->assertStringContainsString('RealPricedPlan', $html);
+        $this->assertStringContainsString('StillDefaultPlan', $html);
     }
 
     public function test_it_makes_no_unsupported_claim(): void
