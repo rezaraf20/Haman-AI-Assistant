@@ -69,18 +69,26 @@ class PlanResource extends Resource
                         ->hintIcon(fn (Get $get) => self::formPriceLooksDefault($get) ? 'heroicon-o-exclamation-triangle' : null)
                         ->hintColor('warning')
                         ->hint(fn (Get $get) => self::formPriceLooksDefault($get) ? __('plans.price_looks_default') : null),
+                    // Defaults mirror the plans table's own column defaults
+                    // (2025_01_01_000001_create_plans_table.php) — every one
+                    // of these columns is NOT NULL. Filament submits an
+                    // untouched numeric field as null, not "omitted", so
+                    // without a matching ->default() here the DB's own
+                    // default never gets a chance to apply and creating a
+                    // plan with any of these left blank 500s instead of
+                    // falling back sensibly.
                     TextInput::make('price_yearly')->label(__('plans.price_yearly'))
-                        ->numeric()->minValue(0),
+                        ->numeric()->minValue(0)->default(0),
                 ])->columns(2),
 
             Section::make(__('plans.section_limits'))->schema([
                 Grid::make(3)->schema([
-                    TextInput::make('max_chatbots')->label(__('plans.max_chatbots'))->numeric()->minValue(0),
-                    TextInput::make('max_tokens_monthly')->label(__('plans.max_tokens'))->numeric()->minValue(0),
-                    TextInput::make('max_documents')->label(__('plans.max_documents'))->numeric()->minValue(0),
-                    TextInput::make('max_messages_monthly')->label(__('plans.max_messages'))->numeric()->minValue(0),
-                    TextInput::make('max_domains')->label(__('plans.max_domains'))->numeric()->minValue(0),
-                    TextInput::make('model_tier')->label(__('plans.model_tier'))->maxLength(50),
+                    TextInput::make('max_chatbots')->label(__('plans.max_chatbots'))->numeric()->minValue(0)->default(1),
+                    TextInput::make('max_tokens_monthly')->label(__('plans.max_tokens'))->numeric()->minValue(0)->default(100000),
+                    TextInput::make('max_documents')->label(__('plans.max_documents'))->numeric()->minValue(0)->default(50),
+                    TextInput::make('max_messages_monthly')->label(__('plans.max_messages'))->numeric()->minValue(0)->default(1000),
+                    TextInput::make('max_domains')->label(__('plans.max_domains'))->numeric()->minValue(0)->default(1),
+                    TextInput::make('model_tier')->label(__('plans.model_tier'))->maxLength(50)->default('gemini-1.5-flash'),
                 ]),
                 Repeater::make('features')
                     ->label(__('plans.features'))
