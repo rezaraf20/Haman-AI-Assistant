@@ -45,9 +45,14 @@ abstract class TestCase extends BaseTestCase
         // happens to share a key, and Settings::$cache -- a private static
         // property, not the Cache facade, so it survives even a fresh
         // cache store -- serving one test's Settings::set() to the next.
-        // Cache::flush() only touches the array-store instance this process
-        // is using (CACHE_STORE is forced to "array" in phpunit.xml), never
-        // a shared Redis, so this cannot bleed into anything real.
+        // Cache::flush() is only safe here because CACHE_STORE=array is
+        // passed as a real -e flag on every documented test invocation (see
+        // DEPLOY.md) -- phpunit.xml's own <env> entry for it does NOT
+        // reliably win against a container env var already set by
+        // env_file, the same precedence gap DEPLOY.md documents for
+        // QUEUE_CONNECTION/SESSION_DRIVER/ZARINPAL_MERCHANT_ID. Running
+        // this suite without that flag list would make Cache::flush() hit
+        // the real shared Redis 'cache' connection instead.
         Cache::flush();
         Settings::forget();
     }

@@ -395,12 +395,19 @@ docker compose run --rm --no-deps \
   -e APP_ENV=testing \
   -e DB_DATABASE=haman_test -e DB_USERNAME=haman_test -e DB_PASSWORD=haman_test \
   -e CACHE_STORE=array -e SESSION_DRIVER=array -e QUEUE_CONNECTION=sync -e MAIL_MAILER=array \
+  -e ZARINPAL_MERCHANT_ID= -e ZARINPAL_SANDBOX=true \
   --entrypoint sh laravel -c "php artisan config:clear >/dev/null 2>&1; php artisan test"
 ```
 
-یک تست روی سرور همیشه رد می‌شود و ایراد کد نیست: `zarinpal reports configured once it
-has a merchant id`. چون `ZARINPAL_MERCHANT_ID` واقعی در `.env` سرور هست، آن تنظیم از
-قبل «پیکربندی‌شده» دیده می‌شود. در CI این متغیر وجود ندارد و تست سبز است.
+`ZARINPAL_MERCHANT_ID`/`ZARINPAL_SANDBOX` are in the same `-e` list for the same reason
+as everything above them: the server's real `.env` has a live merchant ID (so
+`create_platform_settings_table`'s migration seeds the test row as "already
+configured"), and `<env>` in phpunit.xml can't override it once it's already a real
+container variable, same as `CACHE_STORE`/`QUEUE_CONNECTION`/`SESSION_DRIVER`. Without
+this pair, exactly one test fails on the server and nowhere else:
+`zarinpal reports configured once it has a merchant id` — not a code bug, just this
+same env-precedence gap reaching one more variable. With the full flag list above, the
+suite is clean on the server too.
 
 ---
 

@@ -55,5 +55,27 @@
              string property, so config('haman.ai_service.secret') must
              resolve to *something* for the service to even construct. -->
         <env name="AI_SERVICE_SECRET" value="test-secret" force="true"/>
+        <!-- create_platform_settings_table's migration seeds the single
+             settings row straight from these two at migration time, "so
+             existing sandbox config isn't silently reset" on a real deploy.
+             That same migration runs for `php artisan test` too, so on any
+             host whose real .env happens to carry a live Zarinpal merchant
+             ID (the production server, never a CI runner with no real
+             secrets), PlatformSettingsTest's "not configured yet" assertion
+             started life already false — deterministically, regardless of
+             test order or caching, and only where a real secret exists to
+             leak.
+
+             This entry alone does NOT fix that on the server: a container
+             env var already set via docker-compose's env_file wins over an
+             <env> here even with force="true" — the same gap DEPLOY.md
+             documents for CACHE_STORE/QUEUE_CONNECTION/SESSION_DRIVER. It's
+             kept anyway because it's what makes a bare `vendor/bin/phpunit`
+             (CI, or any host with no real secret to leak) correct without
+             extra flags. The server run needs the actual fix, an explicit
+             `-e ZARINPAL_MERCHANT_ID= -e ZARINPAL_SANDBOX=true` on the
+             docker command itself — see DEPLOY.md's test-running section. -->
+        <env name="ZARINPAL_MERCHANT_ID" value="" force="true"/>
+        <env name="ZARINPAL_SANDBOX" value="true" force="true"/>
     </php>
 </phpunit>
