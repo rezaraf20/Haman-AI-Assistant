@@ -83,7 +83,12 @@ from .registry import Tool, register
 
 logger = logging.getLogger(__name__)
 
-LIVE_QUERY_TIMEOUT_SECONDS = 3
+# khonehrangi.ir's own live-query route reliably takes 3.4-4.1s to answer
+# even a rejected (bad-signature) request -- measured directly, not assumed
+# -- so the old 3s cutoff failed nearly every product-tool call on that site
+# specifically. Raised with headroom for slower stores; see MAX_TOTAL_SECONDS
+# in tool_calling_service.py, sized to still fit two calls at this timeout.
+LIVE_QUERY_TIMEOUT_SECONDS = 8
 MAX_SEARCH_LIMIT = 10
 
 # A part number/SKU is never free-form text — mirrors App\Support\

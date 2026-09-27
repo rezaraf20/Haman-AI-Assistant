@@ -1,7 +1,9 @@
 <?php
 namespace Tests;
 
+use App\Support\Settings;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -33,5 +35,20 @@ abstract class TestCase extends BaseTestCase
                 . 'This suite drops tables.'
             );
         }
+
+        // RefreshDatabase resets the database between tests, but PHPUnit
+        // reuses the same application instance for the whole run, so
+        // anything cached outside the database survives across test
+        // methods unless it is cleared here too. Two real cross-test
+        // failures traced to exactly this: RateLimiter::hit() (login/IP and
+        // order-status/IP throttles) piling up hits across every test that
+        // happens to share a key, and Settings::$cache -- a private static
+        // property, not the Cache facade, so it survives even a fresh
+        // cache store -- serving one test's Settings::set() to the next.
+        // Cache::flush() only touches the array-store instance this process
+        // is using (CACHE_STORE is forced to "array" in phpunit.xml), never
+        // a shared Redis, so this cannot bleed into anything real.
+        Cache::flush();
+        Settings::forget();
     }
 }

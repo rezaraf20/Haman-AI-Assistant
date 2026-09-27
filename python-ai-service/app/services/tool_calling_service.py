@@ -44,7 +44,10 @@ logger = logging.getLogger(__name__)
 # the registry's declared default. Read once per turn rather than per
 # iteration so the budget cannot shift underneath a loop already running.
 MAX_TOOL_CALLS_PER_MESSAGE = 3
-MAX_TOTAL_SECONDS = 12.0
+# Room for two live-query calls at product_tools.LIVE_QUERY_TIMEOUT_SECONDS
+# (8s) plus the LLM calls around them, so a slow store's second tool attempt
+# isn't cut off by the overall budget before it can even time out cleanly.
+MAX_TOTAL_SECONDS = 20.0
 
 # Separate from every other rate limit in this app (chat-session/chat-
 # message on the Laravel side, the WordPress plugin's own live-query
