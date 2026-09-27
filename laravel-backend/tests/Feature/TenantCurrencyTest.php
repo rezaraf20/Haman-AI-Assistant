@@ -23,6 +23,7 @@ class TenantCurrencyTest extends TestCase
     {
         parent::setUp();
         Settings::forget();
+        Money::forget();
     }
 
     private function portalUser(?string $country = null, int $walletBalanceToman = 0): User
@@ -126,6 +127,7 @@ class TenantCurrencyTest extends TestCase
         $deUser = $this->portalUser('DE');
         Settings::set('payments.fx.eur_to_toman', 50000);
         $this->actingAs($deUser, 'web');
+        Money::forget(); // the currency lookup above is memoized per process, not per actingAs() switch.
         $this->assertStringContainsString(__('settings.option_EUR'), Money::forCurrentTenant(990000));
     }
 

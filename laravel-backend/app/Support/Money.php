@@ -86,6 +86,8 @@ class Money {
         return $amount === null ? null : Numbers::format($amount) . ' ' . self::unitLabel($currency);
     }
 
+    private static ?string $currentTenantCurrencyCache = null;
+
     /**
      * Every Customer\Pages\* price/balance display: the currently
      * logged-in tenant's own currency, falling back to plain Toman on the
@@ -93,17 +95,31 @@ class Money {
      * never a blank amount. The one repeated line across Wallet, BuyChatbot,
      * BuyTokens, MyChatbots and the dashboard widget, so a fix to that
      * fallback only ever needs to happen here.
+     *
+     * The currency lookup itself is memoized per request — a customer
+     * dashboard can call this several times over (wallet stat, chatbot
+     * list, buy-tokens table…), and re-querying the tenants table on every
+     * one of them is exactly the kind of per-call cost that blew
+     * DashboardWidgetsTest's query budget once before (see Brand::$cache
+     * for the same fix on a different class). forget() clears it the same
+     * way Settings::forget() and Brand::forget() do, for tests that change
+     * the underlying tenant row mid-test.
      */
     public static function forCurrentTenant(int $amountToman): string {
-        // Tenant::find() on the plain tenant_id column, not auth()->user()->
-        // tenant — that relation isn't eager-loaded here, and
-        // Model::preventLazyLoading() (AppServiceProvider) only allows a
-        // lazy relation load in production, throwing everywhere else this
-        // runs, tests included.
-        $tenantId = auth()->user()?->tenant_id;
-        $currency = $tenantId ? \App\Models\Tenant::find($tenantId)?->currency() : null;
-        $currency ??= 'IRT';
+        if (self::$currentTenantCurrencyCache === null) {
+            // Tenant::find() on the plain tenant_id column, not auth()->
+            // user()->tenant — that relation isn't eager-loaded here, and
+            // Model::preventLazyLoading() (AppServiceProvider) only allows
+            // a lazy relation load in production, throwing everywhere else
+            // this runs, tests included.
+            $tenantId = auth()->user()?->tenant_id;
+            self::$currentTenantCurrencyCache = ($tenantId ? \App\Models\Tenant::find($tenantId)?->currency() : null) ?? 'IRT';
+        }
 
-        return self::display($amountToman, $currency) ?? self::toman($amountToman);
+        return self::display($amountToman, self::$currentTenantCurrencyCache) ?? self::toman($amountToman);
+    }
+
+    public static function forget(): void {
+        self::$currentTenantCurrencyCache = null;
     }
 }

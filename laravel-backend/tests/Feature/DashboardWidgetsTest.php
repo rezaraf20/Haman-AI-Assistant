@@ -20,6 +20,20 @@ class DashboardWidgetsTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // CustomerStatsOverview (rendered by /portal below) reads the
+        // logged-in tenant's currency through Money::forCurrentTenant(),
+        // which memoizes it statically per request — see that class for
+        // why. RefreshDatabase resets the database between the three tests
+        // below, which each create a different tenant, but not that PHP
+        // static, so it has to be dropped by hand the same way
+        // Settings::forget()/Brand::forget() already are elsewhere.
+        \App\Support\Money::forget();
+    }
+
     private function makeTenantWithUser(): array
     {
         $plan = Plan::create([
