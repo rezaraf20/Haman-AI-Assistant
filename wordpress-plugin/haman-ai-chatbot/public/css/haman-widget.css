@@ -754,6 +754,15 @@
 .hm-typing span:nth-child(2) { animation-delay: .15s; }
 .hm-typing span:nth-child(3) { animation-delay: .3s; }
 
+/* Shown next to the dots once a reply is taking long enough (see
+   CHECKING_LABEL_DELAY_MS in haman-widget.js) that a customer might wonder
+   if anything is happening — most often while a stock/price tool call is
+   in flight on a slow store. */
+.hm-typing-label {
+    font-size: 12px;
+    color: #8A93A6;
+}
+
 @keyframes hm-typing-bounce {
     0%, 60%, 100% { transform: translateY(0); opacity: .5; }
     30% { transform: translateY(-4px); opacity: 1; }

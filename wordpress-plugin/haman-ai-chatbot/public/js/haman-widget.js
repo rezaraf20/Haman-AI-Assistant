@@ -315,6 +315,12 @@
     // pageview. This flag tracks the real thing that must only happen once.
     var sessionInitStarted = false;
     var typingEl = null;
+    var typingLabelTimer = null;
+    // A normal reply's first token arrives well under this; a tool call
+    // hitting a slow store's live-query endpoint (see
+    // LIVE_QUERY_TIMEOUT_SECONDS, product_tools.py) can take several
+    // seconds, which is exactly when the plain dots stop being enough.
+    var CHECKING_LABEL_DELAY_MS = 2500;
 
     // ── Scroll-to-bottom affordance ───────────────────────────────────
     var scrollBtn = document.createElement('button');
@@ -407,8 +413,18 @@
         typingEl.innerHTML = '<span></span><span></span><span></span>';
         msgs.appendChild(typingEl);
         scrollToBottom(false);
+
+        typingLabelTimer = setTimeout(function () {
+            if (!typingEl || !CFG.checkingAvailabilityMessage) return;
+            var label = document.createElement('span');
+            label.className = 'hm-typing-label';
+            label.textContent = CFG.checkingAvailabilityMessage;
+            typingEl.appendChild(label);
+            scrollToBottom(false);
+        }, CHECKING_LABEL_DELAY_MS);
     }
     function hideTyping() {
+        if (typingLabelTimer) { clearTimeout(typingLabelTimer); typingLabelTimer = null; }
         if (typingEl && typingEl.parentNode) typingEl.parentNode.removeChild(typingEl);
         typingEl = null;
     }
@@ -1038,6 +1054,7 @@
         if (wc.unavailable_message) CFG.unavailableMessage = wc.unavailable_message;
         if (wc.generic_error_message) CFG.genericErrorMessage = wc.generic_error_message;
         if (wc.connection_error_message) CFG.connectionErrorMessage = wc.connection_error_message;
+        if (wc.checking_availability_message) CFG.checkingAvailabilityMessage = wc.checking_availability_message;
         if (wc.primary_color) { CFG.primaryColor = wc.primary_color; setThemeVars(wc.primary_color); }
         if (wc.position) { CFG.position = wc.position; hostEl.setAttribute('data-position', wc.position); }
         if (wc.avatar_url && wc.avatar_url !== CFG.avatarUrl) {

@@ -82,12 +82,14 @@ class Haman_Public {
             'unavailableMessage'     => 'چت‌بات در حال حاضر در دسترس نیست. لطفاً بعداً دوباره تلاش کنید.',
             'genericErrorMessage'    => 'خطایی رخ داد.',
             'connectionErrorMessage' => 'ارتباط با سرور برقرار نشد. لطفاً دوباره تلاش کنید.',
+            'checkingAvailabilityMessage' => 'در حال بررسی موجودی...',
         ] : [
             'sendButtonLabel'        => 'Send',
             'placeholder'            => 'Write your message...',
             'unavailableMessage'     => "The chatbot isn't available right now. Please try again later.",
             'genericErrorMessage'    => 'Something went wrong.',
             'connectionErrorMessage' => 'Could not connect to the server. Please try again.',
+            'checkingAvailabilityMessage' => 'Checking availability...',
         ];
         $i18n = $is_fa ? [
             'dialogLabel'          => 'گفتگو با پشتیبانی هوشمند',
@@ -202,6 +204,7 @@ class Haman_Public {
             'unavailableMessage'     => $l10n_defaults['unavailableMessage'],
             'genericErrorMessage'    => $l10n_defaults['genericErrorMessage'],
             'connectionErrorMessage' => $l10n_defaults['connectionErrorMessage'],
+            'checkingAvailabilityMessage' => $l10n_defaults['checkingAvailabilityMessage'],
             'quickQuestions' => [],
             // Brand blue — mirrors config('haman.brand.primary_color') on
             // the server (laravel-backend/config/haman.php), enforced by

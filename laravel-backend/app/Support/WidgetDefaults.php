@@ -130,6 +130,15 @@ class WidgetDefaults {
             'unavailable_message'    => 'چت‌بات در حال حاضر در دسترس نیست. لطفاً بعداً دوباره تلاش کنید.',
             'generic_error_message'  => 'خطایی رخ داد.',
             'connection_error_message' => 'ارتباط با سرور برقرار نشد. لطفاً دوباره تلاش کنید.',
+            // Shown in place of the plain typing dots once a reply has taken
+            // long enough that a customer might wonder if anything is
+            // happening — specifically while a product/stock tool call is
+            // in flight, which on a slow store can take several seconds
+            // (see LIVE_QUERY_TIMEOUT_SECONDS, product_tools.py). Purely a
+            // client-side timer swap (haman-widget.js) — no new
+            // request/response shape, so this reaches the widget the same
+            // way every other string on this page does.
+            'checking_availability_message' => 'در حال بررسی موجودی...',
             // Used server-side by ChatService as the last-resort bot
             // "response" text (only when the chatbot has no fallback_response
             // of its own) — distinct from the client-side widget strings
@@ -163,6 +172,7 @@ class WidgetDefaults {
             'unavailable_message'    => "The chatbot isn't available right now. Please try again later.",
             'generic_error_message'  => 'Something went wrong.',
             'connection_error_message' => 'Could not connect to the server. Please try again.',
+            'checking_availability_message' => 'Checking availability...',
             'quota_exceeded_response'   => 'Sorry, your account has reached its monthly usage limit. Please contact support to upgrade your plan.',
             'processing_error_response' => 'Sorry, I could not process your request.',
             'lead_capture_prompt'  => "I don't have an answer for that right now. Leave your phone number or email and our team will get back to you shortly.",

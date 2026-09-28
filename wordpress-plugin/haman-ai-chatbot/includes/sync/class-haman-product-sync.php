@@ -21,11 +21,38 @@ class Haman_Product_Sync {
 
     public function __construct( private Haman_Api_Client $api ) {}
 
+    /**
+     * A real store (khonehrangi.ir) proved this necessary: sync_all()'s
+     * first page is the exact same query -- status=publish, limit=50,
+     * page=1 -- on every single run, forever. A store with a persistent
+     * object cache (Redis, Memcached, ...) caches WooCommerce's product
+     * query results keyed by exactly those arguments, and WooCommerce only
+     * busts that cache on a product create/update/delete -- never because
+     * "a while has passed" or "an admin asked for a full resync". One
+     * measurement: khonehrangi.ir's wc_get_products() returned only 6
+     * products through this call while the SAME site's own Store API
+     * (wp-json/wc/store/v1/products, a different code path with different
+     * query args) correctly reported 173 -- proof the catalogue was fine
+     * and this one query shape was the one being served a stale answer.
+     * bump_query_version() forces WooCommerce to treat every cached
+     * product-query transient as expired before the loop below runs a
+     * single query, which is the mechanism WooCommerce itself uses
+     * in wc_delete_product_transients() -- this borrows that, rather than
+     * reaching for a raw cache-flush this plugin has no business doing on
+     * a customer's site.
+     */
+    private function bump_query_version(): void {
+        if (class_exists('WC_Cache_Helper')) {
+            WC_Cache_Helper::get_transient_version('product_query', true);
+        }
+    }
+
     public function sync_all( string $cid ): array {
         if (!class_exists('WooCommerce')) return ['skipped'=>'WooCommerce not active'];
+        $this->bump_query_version();
         $page=1; $counts=Haman_Sync_Counts::empty(); $errors=[]; $batch=[]; $batchBytes=0;
         do {
-            $products = wc_get_products(['status'=>'publish','limit'=>self::FETCH_PAGE_SIZE,'page'=>$page,'return'=>'objects']);
+            $products = wc_get_products(['status'=>'publish','limit'=>self::FETCH_PAGE_SIZE,'page'=>$page,'return'=>'objects','cache_results'=>false]);
             foreach ($products as $product) {
                 $item     = $this->product_to_array($product);
                 $itemSize = strlen(wp_json_encode($item));
@@ -62,7 +89,7 @@ class Haman_Product_Sync {
 
     public function sync_recent( string $cid, int $hours=25 ): void {
         if (!class_exists('WooCommerce')) return;
-        $products = wc_get_products(['status'=>'publish','limit'=>self::FETCH_PAGE_SIZE,'date_modified'=>'>'.date('Y-m-d H:i:s',strtotime("-{$hours} hours"))]);
+        $products = wc_get_products(['status'=>'publish','limit'=>self::FETCH_PAGE_SIZE,'date_modified'=>'>'.date('Y-m-d H:i:s',strtotime("-{$hours} hours")),'cache_results'=>false]);
         if (empty($products)) return;
         $counts = Haman_Sync_Counts::empty(); $errors = [];
         $this->flush_batch($cid, array_map([$this,'product_to_array'],$products), $counts, $errors);

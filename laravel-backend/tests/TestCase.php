@@ -36,6 +36,34 @@ abstract class TestCase extends BaseTestCase
             );
         }
 
+        // The same class of mistake, for the stores Cache::flush() below
+        // actually touches. There is no separate "test Redis" the way there
+        // is a separate haman_test database -- cache/session/queue all sit
+        // on the SAME physical Redis as production, distinguished only by
+        // which store/driver is selected. So the invariant checked here
+        // isn't "is this Redis production" (nothing here could tell), it's
+        // "are these three drivers the safe, isolated values a test run
+        // requires" -- exactly the three that silently resolved to
+        // production's redis tonight when the documented -e flags were
+        // missing (see DEPLOY.md), with Cache::flush() below then running
+        // against real, shared production cache data instead of a private
+        // in-process store. A test suite must never be able to do that
+        // again regardless of how it was invoked.
+        $unsafe = array_filter([
+            'CACHE_STORE (config(cache.default))'     => config('cache.default') !== 'array',
+            'SESSION_DRIVER (config(session.driver))' => config('session.driver') !== 'array',
+            'QUEUE_CONNECTION (config(queue.default))' => config('queue.default') !== 'sync',
+        ]);
+        if ($unsafe) {
+            throw new RuntimeException(
+                'Refusing to run tests: ' . implode(', ', array_keys($unsafe)) . ' '
+                . (count($unsafe) === 1 ? 'is' : 'are') . " not set to the safe test value.\n"
+                . 'This usually means the suite was started without the full -e flag list DEPLOY.md documents '
+                . "(docker-compose's env_file wins over phpunit.xml's <env> here) -- run it exactly as documented there, "
+                . 'never with docker compose exec on the deployed container.'
+            );
+        }
+
         // RefreshDatabase resets the database between tests, but PHPUnit
         // reuses the same application instance for the whole run, so
         // anything cached outside the database survives across test

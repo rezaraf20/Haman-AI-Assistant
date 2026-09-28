@@ -116,4 +116,66 @@ class SyncResultReportingTest extends TestCase
         $r->assertJsonPath('data.result.new', 1);
         $this->assertIsArray($r->json('data.result'), 'the pages endpoint must carry the same result breakdown the products endpoint does');
     }
+
+    /**
+     * Real reported concern: 20 sync_jobs rows from June had
+     * items_failed === items_total and an EMPTY error_log — a failure that
+     * leaves no trace of why is a bug regardless of what actually caused
+     * it. This proves the CURRENT code does not have that gap: a name over
+     * products.name's VARCHAR(500) column limit passes Laravel validation
+     * (no max: rule on it) but fails at the database, inside
+     * SyncService::syncProducts()'s per-item try/catch — the real
+     * exception message must land in error_log, not be swallowed.
+     */
+    public function test_a_per_item_database_failure_is_recorded_in_error_log_not_swallowed(): void
+    {
+        Bus::fake([EmbedDocumentJob::class]);
+        ['chatbotId' => $chatbotId, 'rawKey' => $rawKey] = $this->makeTenantWithChatbot();
+
+        $products = [
+            ['id' => 1, 'name' => 'A Perfectly Normal Product'],
+            ['id' => 2, 'name' => str_repeat('x', 600)], // exceeds VARCHAR(500)
+        ];
+
+        $r = $this->postJson('/api/v1/sync/products', ['chatbot_id' => $chatbotId, 'products' => $products], ['Authorization' => "Bearer {$rawKey}"]);
+        $r->assertStatus(202);
+
+        $r->assertJsonPath('data.result.new', 1);
+        $r->assertJsonPath('data.result.failed', 1);
+
+        $jobId = $r->json('data.id');
+        $job = \App\Models\Tenant\SyncJob::find($jobId);
+
+        $this->assertNotEmpty($job->error_log, 'a failed item must leave a real error behind, not an empty array');
+        $this->assertSame(2, $job->error_log[0]['item'] ?? null, 'error_log must identify WHICH item failed');
+        $this->assertNotEmpty($job->error_log[0]['error'] ?? '', 'error_log must carry the real exception message, not a blank string');
+    }
+
+    /**
+     * The same guarantee, but when every single item in the batch fails —
+     * this is exactly the shape the 20 real June rows had (items_failed ===
+     * items_total). status must reflect a genuine failure, and error_log
+     * must still carry one real message per failed item, never [].
+     */
+    public function test_a_batch_where_every_item_fails_still_leaves_a_real_error_log(): void
+    {
+        Bus::fake([EmbedDocumentJob::class]);
+        ['chatbotId' => $chatbotId, 'rawKey' => $rawKey] = $this->makeTenantWithChatbot();
+
+        $products = [
+            ['id' => 1, 'name' => str_repeat('a', 600)],
+            ['id' => 2, 'name' => str_repeat('b', 600)],
+        ];
+
+        $r = $this->postJson('/api/v1/sync/products', ['chatbot_id' => $chatbotId, 'products' => $products], ['Authorization' => "Bearer {$rawKey}"]);
+
+        $r->assertJsonPath('data.result.failed', 2);
+        $r->assertJsonPath('data.status', 'failed');
+
+        $job = \App\Models\Tenant\SyncJob::find($r->json('data.id'));
+        $this->assertCount(2, $job->error_log, 'every failed item must have its own error_log entry, not a single swallowed batch error');
+        foreach ($job->error_log as $entry) {
+            $this->assertNotEmpty($entry['error'] ?? '', 'each error_log entry must carry a real message');
+        }
+    }
 }
