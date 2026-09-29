@@ -15,6 +15,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from app.services.tools import product_tools
+from tests._safe_http_test_utils import fake_live_query
 
 
 class RecommendProductsValidationTest(unittest.TestCase):
@@ -49,7 +50,7 @@ class RecommendProductsPricingSafetyTest(unittest.TestCase):
         db = MagicMock()
         site_row = MagicMock(primary_domain="shop.example.com", webhook_secret="s3cret")
         db.execute.return_value.fetchone.return_value = site_row
-        with patch("app.services.tools.product_tools._requests.post", side_effect=product_tools._requests.RequestException("timed out")):
+        with fake_live_query(side_effect=product_tools._requests.RequestException("timed out")):
             result = product_tools.recommend_products(db, "chatbot-1", need="oily skin")
         self.assertFalse(result["live"])
         self.assertEqual(result["products"], [])
@@ -69,7 +70,7 @@ class RecommendProductsPricingSafetyTest(unittest.TestCase):
                 {"product_id": 4, "name": "Extra one WP shouldn't send", "price": 1, "on_sale": False, "stock_status": "instock", "short_description": "", "image": None},
             ],
         }
-        with patch("app.services.tools.product_tools._requests.post", return_value=fake_response):
+        with fake_live_query(return_value=fake_response):
             result = product_tools.recommend_products(db, "chatbot-1", need="oily skin")
 
         self.assertTrue(result["live"])
@@ -89,7 +90,7 @@ class RecommendProductsPricingSafetyTest(unittest.TestCase):
         db.execute.return_value.fetchone.return_value = site_row
         fake_response = MagicMock(status_code=200)
         fake_response.json.return_value = {"currency": "IRT", "products": []}
-        with patch("app.services.tools.product_tools._requests.post", return_value=fake_response) as mock_post:
+        with fake_live_query(return_value=fake_response) as mock_post:
             product_tools.recommend_products(db, "chatbot-1", need="oily skin")
         sent_body = mock_post.call_args.kwargs["data"].decode()
         self.assertNotIn("in_stock_only", sent_body)  # not a toggle at all — WordPress hardcodes it
@@ -140,7 +141,7 @@ class CompareProductsPricingSafetyTest(unittest.TestCase):
         db = MagicMock()
         site_row = MagicMock(primary_domain="shop.example.com", webhook_secret="s3cret")
         db.execute.return_value.fetchone.return_value = site_row
-        with patch("app.services.tools.product_tools._requests.post", side_effect=product_tools._requests.RequestException("down")):
+        with fake_live_query(side_effect=product_tools._requests.RequestException("down")):
             result = product_tools.compare_products(db, "chatbot-1", product_ids=[1, 2])
         self.assertFalse(result["live"])
         self.assertEqual(result["products"], [])
@@ -161,7 +162,7 @@ class CompareProductsPricingSafetyTest(unittest.TestCase):
                  "attributes": {"Volume": "100ml"}},  # no Scent at all
             ],
         }
-        with patch("app.services.tools.product_tools._requests.post", return_value=fake_response):
+        with fake_live_query(return_value=fake_response):
             result = product_tools.compare_products(db, "chatbot-1", product_ids=[1, 2])
 
         self.assertTrue(result["live"])
@@ -183,7 +184,7 @@ class CompareProductsPricingSafetyTest(unittest.TestCase):
                 {"product_id": 999, "found": False},
             ],
         }
-        with patch("app.services.tools.product_tools._requests.post", return_value=fake_response):
+        with fake_live_query(return_value=fake_response):
             result = product_tools.compare_products(db, "chatbot-1", product_ids=[1, 999])
 
         self.assertTrue(result["live"])

@@ -12,6 +12,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from app.services.tools import product_tools
+from tests._safe_http_test_utils import fake_live_query
 
 
 class PaymentLinkValidationTest(unittest.TestCase):
@@ -110,8 +111,7 @@ class PaymentLinkPricingSafetyTest(unittest.TestCase):
         db = MagicMock()
         site_row = MagicMock(primary_domain="example.test", webhook_secret="s3cret")
         db.execute.return_value.fetchone.return_value = site_row
-        with patch("app.services.tools.product_tools._requests.post",
-                   side_effect=product_tools._requests.RequestException("timed out")):
+        with fake_live_query(side_effect=product_tools._requests.RequestException("timed out")):
             result = product_tools.create_payment_link(db, "chatbot-1", items=[{"product_id": 12}])
         self.assertEqual(result["error"], "live_check_unavailable")
 
@@ -121,7 +121,7 @@ class PaymentLinkPricingSafetyTest(unittest.TestCase):
         db.execute.return_value.fetchone.return_value = site_row
         fake_response = MagicMock(status_code=200)
         fake_response.json.return_value = {"error": "out_of_stock"}
-        with patch("app.services.tools.product_tools._requests.post", return_value=fake_response):
+        with fake_live_query(return_value=fake_response):
             result = product_tools.create_payment_link(db, "chatbot-1", items=[{"product_id": 12}])
         self.assertEqual(result["error"], "out_of_stock")
 
@@ -135,7 +135,7 @@ class PaymentLinkPricingSafetyTest(unittest.TestCase):
             "total": 90000,
             "currency": "IRT",
         }
-        with patch("app.services.tools.product_tools._requests.post", return_value=fake_response) as mock_post:
+        with fake_live_query(return_value=fake_response) as mock_post:
             result = product_tools.create_payment_link(
                 db, "chatbot-1", items=[{"product_id": 12}], customer={"name": "Ali"},
             )
@@ -153,7 +153,7 @@ class PaymentLinkPricingSafetyTest(unittest.TestCase):
         db.execute.return_value.fetchone.return_value = site_row
         fake_response = MagicMock(status_code=200)
         fake_response.json.return_value = {"items": [], "total": 0}
-        with patch("app.services.tools.product_tools._requests.post", return_value=fake_response):
+        with fake_live_query(return_value=fake_response):
             result = product_tools.create_payment_link(db, "chatbot-1", items=[{"product_id": 12}])
         self.assertEqual(result["currency"], "IRT")
 
@@ -163,7 +163,7 @@ class PaymentLinkPricingSafetyTest(unittest.TestCase):
         db.execute.return_value.fetchone.return_value = site_row
         fake_response = MagicMock(status_code=200)
         fake_response.json.return_value = {"items": [], "total": 0, "currency": "IRT"}
-        with patch("app.services.tools.product_tools._requests.post", return_value=fake_response):
+        with fake_live_query(return_value=fake_response):
             result = product_tools.create_payment_link(db, "chatbot-1", items=[{"product_id": 12}])
         self.assertIsNone(result["customer"])
 

@@ -22,6 +22,7 @@ from unittest.mock import MagicMock, patch
 from app.services.tools.registry import Tool, register, get_enabled_tools, to_openai_schema, _REGISTRY
 from app.services.tools import product_tools
 from app.services import tool_calling_service
+from tests._safe_http_test_utils import fake_live_query
 
 
 class RegistryTest(unittest.TestCase):
@@ -96,7 +97,7 @@ class ProductToolsValidationTest(unittest.TestCase):
 
         fake_response = MagicMock(status_code=200)
         fake_response.json.return_value = {"count": 0, "currency": "IRT", "results": []}
-        with patch("app.services.tools.product_tools._requests.post", return_value=fake_response) as mock_post:
+        with fake_live_query(return_value=fake_response) as mock_post:
             product_tools.search_products(db, "chatbot-1", query="x" * 500)
 
         sent_body = mock_post.call_args.kwargs["data"].decode()
@@ -139,7 +140,7 @@ class ProductToolsPricingSafetyTest(unittest.TestCase):
         site_row = MagicMock(primary_domain="shop.example.com", webhook_secret="s3cret")
         db.execute.return_value.fetchone.return_value = site_row
 
-        with patch("app.services.tools.product_tools._requests.post", side_effect=product_tools._requests.RequestException("timed out")):
+        with fake_live_query(side_effect=product_tools._requests.RequestException("timed out")):
             result = product_tools.get_product_availability(db, "chatbot-1", product_id=42)
 
         self.assertFalse(result["live"])
@@ -156,7 +157,7 @@ class ProductToolsPricingSafetyTest(unittest.TestCase):
         db.execute.return_value.fetchone.return_value = site_row
 
         fake_response = MagicMock(status_code=500, text="Internal Server Error")
-        with patch("app.services.tools.product_tools._requests.post", return_value=fake_response):
+        with fake_live_query(return_value=fake_response):
             result = product_tools.get_product_availability(db, "chatbot-1", sku="LM358N")
 
         self.assertFalse(result["live"])
@@ -174,7 +175,7 @@ class ProductToolsPricingSafetyTest(unittest.TestCase):
             "price": 15000, "regular_price": 18000, "sale_price": 15000, "on_sale": True,
             "is_variable": False, "currency": "IRT",
         }
-        with patch("app.services.tools.product_tools._requests.post", return_value=fake_response):
+        with fake_live_query(return_value=fake_response):
             result = product_tools.get_product_availability(db, "chatbot-1", sku="LM358N")
 
         self.assertTrue(result["live"])
@@ -201,7 +202,7 @@ class ProductToolsPricingSafetyTest(unittest.TestCase):
             "count": 1, "currency": "IRT",
             "results": [{"product_id": 7, "name": "Red Shoes", "sku": "SHOE-RED", "price": 200000, "on_sale": False, "stock_status": "instock", "is_variable": False}],
         }
-        with patch("app.services.tools.product_tools._requests.post", return_value=fake_response):
+        with fake_live_query(return_value=fake_response):
             result = product_tools.search_products(db, "chatbot-1", query="shoes", in_stock_only=True)
 
         self.assertTrue(result["live"])
@@ -212,7 +213,7 @@ class ProductToolsPricingSafetyTest(unittest.TestCase):
         site_row = MagicMock(primary_domain="shop.example.com", webhook_secret="s3cret")
         db.execute.return_value.fetchone.return_value = site_row
 
-        with patch("app.services.tools.product_tools._requests.post", side_effect=product_tools._requests.RequestException("connection refused")):
+        with fake_live_query(side_effect=product_tools._requests.RequestException("connection refused")):
             result = product_tools.get_product_variants(db, "chatbot-1", product_id=99)
 
         self.assertFalse(result["live"])
@@ -232,7 +233,7 @@ class ProductToolsPricingSafetyTest(unittest.TestCase):
                 {"variation_id": 102, "attributes": {"attribute_pa_size": "L"}, "sku": "TS-L", "stock_status": "outofstock", "stock_quantity": 0, "price": 100000, "regular_price": 100000, "sale_price": None},
             ],
         }
-        with patch("app.services.tools.product_tools._requests.post", return_value=fake_response):
+        with fake_live_query(return_value=fake_response):
             result = product_tools.get_product_variants(db, "chatbot-1", product_id=99)
 
         self.assertTrue(result["live"])
