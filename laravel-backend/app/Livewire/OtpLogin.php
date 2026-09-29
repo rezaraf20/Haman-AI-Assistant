@@ -120,6 +120,22 @@ class OtpLogin extends Component {
             'address'     => __('common.address'),
         ]);
 
+        // Same shared per-IP daily cap as EmailLogin::submitRegister() — this
+        // also creates a tenant and a trial chatbot, so without its own
+        // check here an attacker could get a second, separate daily budget
+        // just by switching from the email form to the phone one.
+        // withinIpBudget() above only bounds SMS sends, a different cost —
+        // sendCode/resendCode being capped does not make this check
+        // redundant, since verifyCode() only requires ONE successful send
+        // per tenant, well under that budget.
+        $cap = (int) Settings::get('limits.register_per_ip_per_day');
+        $key = 'register:' . request()->ip();
+        if ($cap > 0 && RateLimiter::tooManyAttempts($key, $cap)) {
+            $this->error = __('validation.too_many_attempts', ['seconds' => RateLimiter::availableIn($key)]);
+            return;
+        }
+        RateLimiter::hit($key, 86400);
+
         $result = $tenantService->registerViaPhone([
             'phone'       => $this->phone,
             'first_name'  => $this->first_name,
