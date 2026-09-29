@@ -22,15 +22,23 @@ class EmbedDocumentJob implements ShouldQueue {
 
     public function handle(AiGatewayService $ai): void {
         DB::statement("SET search_path TO {$this->schemaName}, public");
-        $doc = Document::findOrFail($this->documentId);
-        $doc->update(['status'=>'processing']);
         try {
-            $ai->embedDocument($this->documentId, $this->chatbotId, $this->schemaName);
-            $doc->update(['status'=>'indexed','indexed_at'=>now()]);
-        } catch (\Throwable $e) {
-            $doc->increment('retry_count');
-            $doc->update(['status'=>$doc->retry_count>=3?'failed':'pending','error_message'=>$e->getMessage()]);
-            throw $e;
+            $doc = Document::findOrFail($this->documentId);
+            $doc->update(['status'=>'processing']);
+            try {
+                $ai->embedDocument($this->documentId, $this->chatbotId, $this->schemaName);
+                $doc->update(['status'=>'indexed','indexed_at'=>now()]);
+            } catch (\Throwable $e) {
+                $doc->increment('retry_count');
+                $doc->update(['status'=>$doc->retry_count>=3?'failed':'pending','error_message'=>$e->getMessage()]);
+                throw $e;
+            }
+        } finally {
+            // Queue workers reuse one DB connection across jobs — leaving
+            // search_path pointed at this tenant's schema would leak into
+            // whatever job runs next on this worker, same reason every
+            // other SET search_path in this app resets in a finally.
+            DB::statement('SET search_path TO public');
         }
     }
 
