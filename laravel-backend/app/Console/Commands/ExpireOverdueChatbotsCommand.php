@@ -13,7 +13,7 @@ class ExpireOverdueChatbotsCommand extends Command {
             ->where('expires_at', '<', now())
             ->get();
         foreach ($overdue as $entry) {
-            $entry->update(['is_active' => false]);
+            $entry->update(['is_active' => false, 'disabled_reason' => 'expired']);
             $this->line("Suspended {$entry->chatbot_id} ({$entry->name}) — expired {$entry->expires_at}");
         }
         $this->info("Suspended {$overdue->count()} overdue chatbot(s)");

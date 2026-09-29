@@ -320,6 +320,7 @@ class Settings extends Page implements HasForms
             'otp'       => __('settings.limits_otp'),
             'documents' => __('settings.limits_documents'),
             'retrieval' => __('settings.limits_retrieval'),
+            'trial'     => __('settings.limits_trial'),
         ];
 
         $sections = [];

@@ -36,6 +36,17 @@ class MyChatbots extends Page implements HasTable {
                 TextColumn::make('name')->label(__('common.name'))->default(__('panel.chatbot_no_name')),
                 TextColumn::make('primary_domain')->label(__('common.domain'))->placeholder('—'),
                 IconColumn::make('is_active')->boolean()->label(__('common.active')),
+                // Only meaningful (and only ever set) while is_active is
+                // false — see ExpireOverdueChatbotsCommand and
+                // EnforceTrialMessageLimitCommand, the two things that set
+                // it. A merchant seeing a bare inactive icon with no reason
+                // has no way to tell "your trial ended" from "we suspended
+                // this" without a support ticket.
+                TextColumn::make('disabled_reason')
+                    ->label(__('chatbot.status_label'))
+                    ->visible(fn (ChatbotIndexEntry $record) => !$record->is_active && $record->disabled_reason)
+                    ->formatStateUsing(fn (?string $state) => $state ? __('chatbot.disabled_reason_' . $state) : null)
+                    ->color('danger'),
                 TextColumn::make('expires_at')->label(__('chatbot.expiry_date'))->formatStateUsing(fn ($state) => Jalali::date($state))
                     ->placeholder(__('common.unlimited'))
                     ->color(fn ($record) => $record->expires_at && $record->expires_at->isPast() ? 'danger' : null),
@@ -95,6 +106,19 @@ class MyChatbots extends Page implements HasTable {
                         'amount' => Money::forCurrentTenant($record->monthly_price_toman),
                     ]))
                     ->action(fn (ChatbotIndexEntry $record) => $this->renew($record)),
+                // A trial chatbot (monthly_price_toman = 0, since it was
+                // never bought) has nothing to "renew" from the wallet once
+                // its time/message cap is reached — the only real next step
+                // is buying a full one, same flow as any other first
+                // purchase. renew's own action above already covers every
+                // paid chatbot, so this only shows for the one case it
+                // can't: a suspended trial.
+                Action::make('upgrade')
+                    ->label(__('chatbot.upgrade_action'))
+                    ->icon('heroicon-o-arrow-up-circle')
+                    ->color('success')
+                    ->visible(fn (ChatbotIndexEntry $record) => !$record->is_active && $record->monthly_price_toman == 0)
+                    ->url(fn () => BuyChatbot::getUrl()),
             ]);
     }
 

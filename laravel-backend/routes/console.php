@@ -2,6 +2,11 @@
 use Illuminate\Support\Facades\Schedule;
 Schedule::command('haman:reset-usage')->monthlyOn(1, '00:00');
 Schedule::command('chatbots:expire-overdue')->dailyAt('01:00');
+// The message-count half of a trial chatbot's cap (see TenantService::
+// createTrialChatbot()) — hourly rather than daily since an abusive trial
+// could otherwise run up real LLM cost for most of a day before the nightly
+// expiry check would ever look at it.
+Schedule::command('trial-chatbots:enforce-message-limit')->hourly();
 Schedule::command('wallet:reconcile')->dailyAt('02:00');
 // Feeds analytics_daily (per-tenant) + platform_daily_stats (public) — the
 // admin/customer dashboard widgets read from these instead of aggregating

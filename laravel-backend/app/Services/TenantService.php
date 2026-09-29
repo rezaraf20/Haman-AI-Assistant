@@ -2,6 +2,8 @@
 namespace App\Services;
 
 use App\Models\{Tenant, Plan, User, ApiKey};
+use App\Models\Tenant\Chatbot;
+use App\Support\Settings;
 use Illuminate\Support\Facades\{DB, Hash};
 use Illuminate\Support\Str;
 
@@ -108,6 +110,8 @@ class TenantService
                 'email_verified_at' => now(),
             ]);
 
+            $this->createTrialChatbot($tenant, $user, 'fa');
+
             return ['tenant' => $tenant, 'user' => $user];
         });
     }
@@ -168,8 +172,70 @@ class TenantService
                 'email_verified_at' => now(),
             ]);
 
+            $this->createTrialChatbot($tenant, $user, 'en');
+
             return ['tenant' => $tenant, 'user' => $user];
         });
+    }
+
+    /**
+     * Every new tenant gets one working chatbot immediately, on both
+     * self-signup paths, so "sign up" and "have something to test/install"
+     * are the same moment — BuyChatbot's own purchase flow needs wallet
+     * balance a brand-new trial tenant does not have, which was otherwise a
+     * hard stop before anything existed to configure at all. Mirrors
+     * BuyChatbot::purchase()'s three-row shape (chatbot, chatbot_index,
+     * bound API key) deliberately: a trial chatbot is an ordinary chatbot in
+     * every way except type='trial' and the time/message caps
+     * ExpireOverdueChatbotsCommand / EnforceTrialMessageLimitCommand enforce
+     * against it the same way an unpaid renewal would be. Called from
+     * inside registerViaEmail()/registerViaPhone()'s own transaction, so a
+     * failure here rolls the whole signup back rather than leaving a tenant
+     * with no chatbot and no way to reach one without support's help.
+     */
+    private function createTrialChatbot(Tenant $tenant, User $user, string $language): void
+    {
+        DB::statement("SET search_path TO {$tenant->schema_name}, public");
+        $chatbot = Chatbot::create([
+            'id'                  => (string) Str::uuid(),
+            'name'                => $language === 'fa' ? 'چت‌بات آزمایشی' : 'Trial Assistant', // i18n:widget
+            'type'                => 'trial',
+            'status'              => 'active',
+            'is_active'           => true,
+            'embedding_model'     => 'models/text-embedding-004',
+            'llm_model'           => 'gemini-1.5-flash',
+            'temperature'         => 0.3,
+            'retrieval_top_k'     => 8,
+            'retrieval_threshold' => 0.60,
+            'memory_window'       => 6,
+            'language'            => $language,
+            'response_language'   => $language,
+        ]);
+        DB::statement("SET search_path TO public");
+
+        DB::table('chatbot_index')->insert([
+            'chatbot_id'          => $chatbot->id,
+            'tenant_id'           => $tenant->id,
+            'schema_name'         => $tenant->schema_name,
+            'is_active'           => true,
+            'name'                => $chatbot->name,
+            // Left null on purpose, not asked for at signup: the first
+            // plugin connection fills it in itself (ChatbotController's own
+            // "first domain wins" write, whenNull('primary_domain')), and
+            // ValidateChatbotDomain enforces nothing while it is unset — see
+            // that middleware's own docblock. A trial merchant reaches a
+            // working widget without ever typing a domain by hand.
+            'primary_domain'      => null,
+            'expires_at'          => now()->addDays((int) Settings::get('limits.trial_chatbot_duration_days')),
+            'monthly_price_toman' => 0,
+        ]);
+
+        ApiKey::generate(
+            tenantId: $tenant->id,
+            chatbotId: $chatbot->id,
+            name: __('chatbot.wp_plugin_key_name', ['name' => $chatbot->name]),
+            createdBy: $user->id,
+        );
     }
 
     public function createSchema(string $schemaName): void

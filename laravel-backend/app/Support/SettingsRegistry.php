@@ -246,6 +246,19 @@ class SettingsRegistry
                 'tab' => 'limits', 'group' => 'retrieval', 'type' => 'float', 'default' => 0.50,
             ],
 
+            // The trial chatbot every signup gets automatically (see
+            // TenantService::createTrialChatbot()) — how long it stays active
+            // and how many customer messages it may answer before
+            // EnforceTrialMessageLimitCommand / ExpireOverdueChatbotsCommand
+            // deactivate it. Admin-configurable rather than hardcoded so
+            // pricing/growth can tune the trial without a deploy.
+            'limits.trial_chatbot_duration_days' => [
+                'tab' => 'limits', 'group' => 'trial', 'type' => 'int', 'default' => 14,
+            ],
+            'limits.trial_chatbot_message_limit' => [
+                'tab' => 'limits', 'group' => 'trial', 'type' => 'int', 'default' => 200,
+            ],
+
             // ── Tab 6: system ────────────────────────────────────────────
             'system.retention_event_payload_days' => [
                 'tab' => 'system', 'group' => 'retention', 'type' => 'int', 'default' => 90,
