@@ -45,8 +45,13 @@ php artisan migrate --force
 # Fix all existing tenant schemas (adds missing columns)
 php artisan haman:fix-tenants 2>/dev/null || true
 
-# Seed plans
-php artisan db:seed --force 2>/dev/null || true
+# Seed plans. Deliberately NOT `|| true`/silenced: PlanSeeder used to fail
+# on every single deploy (delete() on a plan row real tenants already
+# referenced, a foreign key violation) and nothing ever surfaced it — `set
+# -e` above means a real failure here now stops the container from starting
+# at all, which is the point: a seeder failure should be loud and block a
+# bad deploy, not vanish into a log nobody reads.
+php artisan db:seed --force
 
 # Clear and rebuild cache
 php artisan config:cache 2>/dev/null || true

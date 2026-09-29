@@ -1,8 +1,7 @@
 <?php
 namespace Database\Seeders;
+use App\Models\Plan;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class PlanSeeder extends Seeder {
     public function run(): void {
@@ -22,26 +21,29 @@ class PlanSeeder extends Seeder {
             ['id' => '00000000-0000-0000-0000-000000000003', 'name'=>'Growth',     'slug'=>'growth',     'price_monthly'=>99,  'max_chatbots'=>5, 'max_tokens_monthly'=>2000000, 'max_documents'=>1000, 'max_messages_monthly'=>10000, 'features'=>[], 'sort_order'=>2],
             ['id' => '00000000-0000-0000-0000-000000000004', 'name'=>'Enterprise', 'slug'=>'enterprise', 'price_monthly'=>299, 'max_chatbots'=>20,'max_tokens_monthly'=>10000000,'max_documents'=>5000, 'max_messages_monthly'=>50000, 'features'=>[], 'sort_order'=>3],
         ];
+
+        // updateOrCreate, not delete()-then-insert(): this runs on every
+        // single deploy (docker-entrypoint.sh), and delete() on a 'slug'
+        // already referenced by a real tenant's plan_id throws a foreign
+        // key violation — silently, since the entrypoint swallowed it —
+        // meaning the seeder had been failing on every deploy since the
+        // first tenant signed up, with nothing surfacing that. Matching on
+        // 'id' (not 'slug') keeps every existing tenants.plan_id reference
+        // intact even if a slug were ever renamed.
         foreach ($plans as $p) {
-
-    DB::table('plans')->where('slug', $p['slug'])->delete();
-
-    DB::table('plans')->insert([
-        'id' => $p['id'],
-        'name' => $p['name'],
-        'slug' => $p['slug'],
-        'price_monthly' => $p['price_monthly'],
-        'max_chatbots' => $p['max_chatbots'],
-        'max_tokens_monthly' => $p['max_tokens_monthly'],
-        'max_documents' => $p['max_documents'],
-        'max_messages_monthly' => $p['max_messages_monthly'],
-        'features' => json_encode($p['features']),
-        'sort_order' => $p['sort_order'],
-        'is_active' => true,
-        'price_yearly' => $p['price_monthly'] * 10,
-        'created_at' => now(),
-        'updated_at' => now(),
-    ]);
-}
+            Plan::updateOrCreate(['id' => $p['id']], [
+                'name'                 => $p['name'],
+                'slug'                 => $p['slug'],
+                'price_monthly'        => $p['price_monthly'],
+                'price_yearly'         => $p['price_monthly'] * 10,
+                'max_chatbots'         => $p['max_chatbots'],
+                'max_tokens_monthly'   => $p['max_tokens_monthly'],
+                'max_documents'        => $p['max_documents'],
+                'max_messages_monthly' => $p['max_messages_monthly'],
+                'features'             => $p['features'],
+                'sort_order'           => $p['sort_order'],
+                'is_active'            => true,
+            ]);
+        }
     }
 }

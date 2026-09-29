@@ -36,19 +36,21 @@ class TrialChatbotSignupTest extends TestCase
     }
 
     /**
-     * The actual end-to-end proof this was asked for: not just that rows
-     * exist, but that a real, unauthenticated browser request — exactly what
-     * the widget itself sends — gets a real 201 and a real conversation,
-     * with zero manual setup in between signup and this call.
+     * The phone path's OTP challenge already proves the contact detail
+     * before registerViaPhone() is ever reached (see OtpLogin::verifyCode()),
+     * so this is the one path that genuinely goes signup -> working widget
+     * in a single unbroken step. The email path's version of this same
+     * proof (test_an_email_trial_chatbot_works_once_verified below) needs
+     * an explicit verification step in between — see
+     * TenantService::createTrialChatbot()'s email_verified_at gate.
      */
-    public function test_a_real_email_signup_reaches_a_working_widget_session(): void
+    public function test_a_real_phone_signup_reaches_a_working_widget_session_immediately(): void
     {
-        $result = app(TenantService::class)->registerViaEmail([
-            'name' => 'Jane Doe', 'email' => 'jane@example.test', 'password' => 'password123',
+        $result = app(TenantService::class)->registerViaPhone([
+            'phone' => '09121234567', 'first_name' => 'Ali', 'last_name' => 'Rezaei',
+            'email' => 'ali@example.test', 'national_id' => null, 'address' => null,
         ]);
-        $tenant = $result['tenant'];
-
-        $chatbotId = DB::table('chatbot_index')->where('tenant_id', $tenant->id)->value('chatbot_id');
+        $chatbotId = DB::table('chatbot_index')->where('tenant_id', $result['tenant']->id)->value('chatbot_id');
         $this->assertNotNull($chatbotId, 'signup did not create a chatbot_index row at all');
 
         $response = $this->postJson('/api/v1/chat/session', [
@@ -60,7 +62,42 @@ class TrialChatbotSignupTest extends TestCase
         $this->assertNotNull($response->json('data.conversation_id'), 'a real widget session did not get back a conversation id');
     }
 
-    public function test_registering_via_email_creates_an_active_trial_chatbot_with_sane_defaults(): void
+    /** The abuse vector this closes: an unverified email must not reach a live widget at all. */
+    public function test_an_unverified_email_trial_chatbot_does_not_answer_chat_requests(): void
+    {
+        $result = app(TenantService::class)->registerViaEmail([
+            'name' => 'Jane Doe', 'email' => 'jane@example.test', 'password' => 'password123',
+        ]);
+        $chatbotId = DB::table('chatbot_index')->where('tenant_id', $result['tenant']->id)->value('chatbot_id');
+
+        $response = $this->postJson('/api/v1/chat/session', [
+            'chatbot_id' => $chatbotId,
+            'session_id' => 'sess-unverified-1',
+        ], ['Origin' => 'https://any-domain-at-all.test']);
+
+        $response->assertStatus(404);
+    }
+
+    /** Same proof as the phone test, but for email: reachable only after the verification step actually runs. */
+    public function test_an_email_trial_chatbot_works_once_verified(): void
+    {
+        $result = app(TenantService::class)->registerViaEmail([
+            'name' => 'Jane Doe', 'email' => 'verified@example.test', 'password' => 'password123',
+        ]);
+        $tenant = $result['tenant'];
+        $result['user']->forceFill(['email_verified_at' => now()])->save();
+        app(TenantService::class)->activatePendingTrialChatbot($tenant);
+
+        $chatbotId = DB::table('chatbot_index')->where('tenant_id', $tenant->id)->value('chatbot_id');
+        $response = $this->postJson('/api/v1/chat/session', [
+            'chatbot_id' => $chatbotId,
+            'session_id' => 'sess-verified-1',
+        ], ['Origin' => 'https://any-domain-at-all.test']);
+
+        $response->assertStatus(201);
+    }
+
+    public function test_registering_via_email_creates_an_inactive_pending_verification_trial_chatbot_with_sane_defaults(): void
     {
         Settings::set('limits.trial_chatbot_duration_days', 14);
         $result = app(TenantService::class)->registerViaEmail([
@@ -70,9 +107,9 @@ class TrialChatbotSignupTest extends TestCase
 
         $index = ChatbotIndexEntry::where('tenant_id', $tenant->id)->first();
         $this->assertNotNull($index);
-        $this->assertTrue($index->is_active);
+        $this->assertFalse((bool) $index->is_active, 'an email trial chatbot must start inactive, pending verification');
+        $this->assertEquals('pending_verification', $index->disabled_reason);
         $this->assertNull($index->primary_domain, 'a trial chatbot must not force the merchant to type a domain at signup');
-        $this->assertNull($index->disabled_reason);
         $this->assertEquals(0, $index->monthly_price_toman);
         $this->assertNotNull($index->expires_at);
         $this->assertEqualsWithDelta(now()->addDays(14)->timestamp, $index->expires_at->timestamp, 60);
@@ -82,7 +119,7 @@ class TrialChatbotSignupTest extends TestCase
         DB::statement('SET search_path TO public');
         $this->assertNotNull($chatbot);
         $this->assertEquals('trial', $chatbot->type);
-        $this->assertTrue($chatbot->is_active);
+        $this->assertFalse((bool) $chatbot->is_active);
         $this->assertEquals('en', $chatbot->language);
 
         $key = ApiKey::where('tenant_id', $tenant->id)->where('chatbot_id', $index->chatbot_id)->first();
@@ -90,23 +127,61 @@ class TrialChatbotSignupTest extends TestCase
         $this->assertEquals($result['user']->id, $key->created_by);
     }
 
-    public function test_registering_via_phone_creates_a_persian_trial_chatbot(): void
+    public function test_registering_via_phone_creates_an_active_persian_trial_chatbot_immediately(): void
     {
         $result = app(TenantService::class)->registerViaPhone([
             'phone' => '09121234567', 'first_name' => 'Ali', 'last_name' => 'Rezaei',
-            'email' => 'ali@example.test', 'national_id' => null, 'address' => null,
+            'email' => 'ali2@example.test', 'national_id' => null, 'address' => null,
         ]);
         $tenant = $result['tenant'];
 
         $index = ChatbotIndexEntry::where('tenant_id', $tenant->id)->first();
         $this->assertNotNull($index);
-        $this->assertTrue($index->is_active);
+        $this->assertTrue((bool) $index->is_active, 'the phone path is already verified by a real OTP challenge before this point — no extra gate needed');
+        $this->assertNull($index->disabled_reason);
 
         DB::statement("SET search_path TO {$tenant->schema_name}, public");
         $chatbot = Chatbot::find($index->chatbot_id);
         DB::statement('SET search_path TO public');
+        $this->assertTrue((bool) $chatbot->is_active);
         $this->assertEquals('trial', $chatbot->type);
         $this->assertEquals('fa', $chatbot->language);
+    }
+
+    public function test_verifying_the_email_activates_the_pending_trial_chatbot(): void
+    {
+        $result = app(TenantService::class)->registerViaEmail([
+            'name' => 'Verify Me', 'email' => 'verifyme@example.test', 'password' => 'password123',
+        ]);
+        $tenant = $result['tenant'];
+
+        app(TenantService::class)->activatePendingTrialChatbot($tenant);
+
+        $index = ChatbotIndexEntry::where('tenant_id', $tenant->id)->first();
+        $this->assertTrue((bool) $index->is_active);
+        $this->assertNull($index->disabled_reason);
+
+        DB::statement("SET search_path TO {$tenant->schema_name}, public");
+        $chatbot = Chatbot::find($index->chatbot_id);
+        DB::statement('SET search_path TO public');
+        $this->assertTrue((bool) $chatbot->is_active);
+    }
+
+    /** A chatbot suspended for an unrelated reason (expired, over the message cap) must never be silently revived by a stale verification link. */
+    public function test_activating_a_pending_trial_chatbot_never_revives_one_suspended_for_a_different_reason(): void
+    {
+        $result = app(TenantService::class)->registerViaEmail([
+            'name' => 'Already Suspended', 'email' => 'suspended@example.test', 'password' => 'password123',
+        ]);
+        $tenant = $result['tenant'];
+        $index = ChatbotIndexEntry::where('tenant_id', $tenant->id)->first();
+        $index->update(['disabled_reason' => 'trial_message_limit_reached']);
+
+        app(TenantService::class)->activatePendingTrialChatbot($tenant);
+
+        $fresh = ChatbotIndexEntry::where('chatbot_id', $index->chatbot_id)->first();
+        $this->assertFalse((bool) $fresh->is_active);
+        $this->assertEquals('trial_message_limit_reached', $fresh->disabled_reason);
     }
 
     /** Proves the duration is genuinely read from settings, not a hardcoded 14. */
@@ -122,10 +197,20 @@ class TrialChatbotSignupTest extends TestCase
         $this->assertEqualsWithDelta(now()->addDays(5)->timestamp, $index->expires_at->timestamp, 60);
     }
 
+    /**
+     * An already-active trial chatbot, for the enforcement-command tests
+     * below — they test "does this command correctly suspend a chatbot
+     * that started active," which the (unrelated) email-verification gate
+     * would otherwise get in the way of. The phone path is always active
+     * immediately (see test_registering_via_phone_creates_an_active_
+     * persian_trial_chatbot_immediately above), so it sidesteps that
+     * entirely without faking a verification step these tests aren't about.
+     */
     private function makeTrialChatbot(): array
     {
-        $result = app(TenantService::class)->registerViaEmail([
-            'name' => 'Cap Test', 'email' => Str::random(10) . '@example.test', 'password' => 'password123',
+        $result = app(TenantService::class)->registerViaPhone([
+            'phone' => '0912' . random_int(1000000, 9999999), 'first_name' => 'Cap', 'last_name' => 'Test',
+            'email' => Str::random(10) . '@example.test', 'national_id' => null, 'address' => null,
         ]);
         $tenant = $result['tenant'];
         $index = ChatbotIndexEntry::where('tenant_id', $tenant->id)->first();

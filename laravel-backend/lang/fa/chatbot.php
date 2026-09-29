@@ -79,6 +79,8 @@ return [
     'status_label' => 'وضعیت',
     'disabled_reason_expired' => 'مدت اعتبار این چت‌بات تمام شده است.',
     'disabled_reason_trial_message_limit_reached' => 'سقف پیام دوره‌ی آزمایشی رایگان شما پر شده است.',
+    'disabled_reason_pending_verification' => 'برای فعال‌سازی، ایمیل خود را تأیید کنید.',
+    'disabled_reason_admin_suspended' => 'این چت‌بات توسط پشتیبانی غیرفعال شده است.',
     'upgrade_action' => 'ارتقا به چت‌بات کامل',
     'singular' => 'چت‌بات',
     'site_domain' => 'دامنه سایت',

@@ -7,6 +7,10 @@ Schedule::command('chatbots:expire-overdue')->dailyAt('01:00');
 // could otherwise run up real LLM cost for most of a day before the nightly
 // expiry check would ever look at it.
 Schedule::command('trial-chatbots:enforce-message-limit')->hourly();
+// Catches many trials adding up (each under its own cap) rather than one
+// chatbot going over — see the command's own docblock for why this is
+// hourly, not daily.
+Schedule::command('trial-chatbots:check-daily-cost')->hourly();
 Schedule::command('wallet:reconcile')->dailyAt('02:00');
 // Feeds analytics_daily (per-tenant) + platform_daily_stats (public) — the
 // admin/customer dashboard widgets read from these instead of aggregating

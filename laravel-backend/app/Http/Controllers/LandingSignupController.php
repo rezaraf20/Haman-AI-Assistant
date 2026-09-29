@@ -44,11 +44,6 @@ class LandingSignupController extends Controller
         $result = $tenants->registerViaEmail($data);
         $user = $result['user'];
 
-        // Unverified until they click the link: registerViaEmail stamps
-        // email_verified_at for the phone-less signup path, which is not
-        // what we want when the address is the only identifier we have.
-        $user->forceFill(['email_verified_at' => null])->save();
-
         $this->sendVerification($user);
 
         Auth::guard('web')->login($user, remember: true);
@@ -89,6 +84,12 @@ class LandingSignupController extends Controller
 
         if (!$user->email_verified_at) {
             $user->forceFill(['email_verified_at' => now()])->save();
+            // The other half of createTrialChatbot()'s verification gate —
+            // this is the one real click that turns "signed up" into "has
+            // a working widget."
+            if ($user->tenant) {
+                app(TenantService::class)->activatePendingTrialChatbot($user->tenant);
+            }
         }
 
         if (!Auth::check()) {

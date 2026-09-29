@@ -168,6 +168,7 @@ return [
     'field_limits_rerank_threshold' => 'Default rerank threshold',
     'field_limits_trial_chatbot_duration_days' => 'Trial chatbot duration (days)',
     'field_limits_trial_chatbot_message_limit' => 'Trial chatbot message limit',
+    'field_limits_trial_daily_cost_alert_toman' => 'Trial daily cost alert threshold (toman)',
     'field_system_retention_event_payload_days' => 'Event detail retention (days)',
     'field_system_retention_activity_log_months' => 'Activity log detail retention (months)',
     'field_system_disk_warn_percent' => 'Disk usage warning threshold (%)',

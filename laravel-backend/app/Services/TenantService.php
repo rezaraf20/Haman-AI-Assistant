@@ -169,7 +169,17 @@ class TenantService
                 'name'              => $name,
                 'role'              => 'owner',
                 'locale'            => 'en',
-                'email_verified_at' => now(),
+                // Unlike registerViaPhone(), where the phone number is
+                // already proven by a real OTP challenge before this method
+                // is even reached, nothing here has verified this address
+                // belongs to whoever submitted the form — left null so
+                // createTrialChatbot() creates an inactive chatbot instead
+                // of handing 200 free LLM messages to any email typed into
+                // a box. The caller (LandingSignupController::register() /
+                // EmailLogin::submitRegister()) sends the verification
+                // email; TenantService::activatePendingTrialChatbot() flips
+                // it active once verify() actually sets this column.
+                'email_verified_at' => null,
             ]);
 
             $this->createTrialChatbot($tenant, $user, 'en');
@@ -195,13 +205,21 @@ class TenantService
      */
     private function createTrialChatbot(Tenant $tenant, User $user, string $language): void
     {
+        // Phone signups reach this already proven (a real OTP challenge, see
+        // OtpLogin::verifyCode(), completes before registerViaPhone() is
+        // even called) — email_verified_at is set to now() there too, but
+        // as a "this contact detail is trusted" marker, not the actual
+        // verification gate. Email signups leave it null until a real click
+        // on an emailed link — see registerViaEmail()'s own comment.
+        $active = $user->email_verified_at !== null;
+
         DB::statement("SET search_path TO {$tenant->schema_name}, public");
         $chatbot = Chatbot::create([
             'id'                  => (string) Str::uuid(),
             'name'                => $language === 'fa' ? 'چت‌بات آزمایشی' : 'Trial Assistant', // i18n:widget
             'type'                => 'trial',
             'status'              => 'active',
-            'is_active'           => true,
+            'is_active'           => $active,
             'embedding_model'     => 'models/text-embedding-004',
             'llm_model'           => 'gemini-1.5-flash',
             'temperature'         => 0.3,
@@ -217,7 +235,8 @@ class TenantService
             'chatbot_id'          => $chatbot->id,
             'tenant_id'           => $tenant->id,
             'schema_name'         => $tenant->schema_name,
-            'is_active'           => true,
+            'is_active'           => $active,
+            'disabled_reason'     => $active ? null : 'pending_verification',
             'name'                => $chatbot->name,
             // Left null on purpose, not asked for at signup: the first
             // plugin connection fills it in itself (ChatbotController's own
@@ -236,6 +255,38 @@ class TenantService
             name: __('chatbot.wp_plugin_key_name', ['name' => $chatbot->name]),
             createdBy: $user->id,
         );
+    }
+
+    /**
+     * The other half of createTrialChatbot()'s email-verification gate —
+     * called once, from wherever a user's email actually gets verified
+     * (LandingSignupController::verify(), reused by EmailLogin's signup
+     * flow too since both send the same VerifyEmail link). Scoped to
+     * disabled_reason='pending_verification' specifically, not just
+     * "reactivate every inactive chatbot for this tenant": a trial that was
+     * later suspended for expiring or hitting its message cap must not be
+     * silently revived just because the owner clicked an old verification
+     * link.
+     */
+    public function activatePendingTrialChatbot(Tenant $tenant): void
+    {
+        $entries = DB::table('chatbot_index')
+            ->where('tenant_id', $tenant->id)
+            ->where('disabled_reason', 'pending_verification')
+            ->get(['chatbot_id']);
+
+        if ($entries->isEmpty()) return;
+
+        DB::table('chatbot_index')
+            ->where('tenant_id', $tenant->id)
+            ->where('disabled_reason', 'pending_verification')
+            ->update(['is_active' => true, 'disabled_reason' => null]);
+
+        DB::statement("SET search_path TO {$tenant->schema_name}, public");
+        foreach ($entries as $entry) {
+            DB::table('chatbots')->where('id', $entry->chatbot_id)->update(['is_active' => true]);
+        }
+        DB::statement('SET search_path TO public');
     }
 
     public function createSchema(string $schemaName): void

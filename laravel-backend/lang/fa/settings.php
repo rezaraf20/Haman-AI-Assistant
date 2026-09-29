@@ -168,6 +168,7 @@ return [
     'field_limits_rerank_threshold' => 'آستانه‌ی rerank پیش‌فرض',
     'field_limits_trial_chatbot_duration_days' => 'مدت اعتبار چت‌بات آزمایشی (روز)',
     'field_limits_trial_chatbot_message_limit' => 'سقف پیام چت‌بات آزمایشی',
+    'field_limits_trial_daily_cost_alert_toman' => 'آستانه‌ی هشدار هزینه‌ی روزانه‌ی آزمایشی‌ها (تومان)',
     'field_system_retention_event_payload_days' => 'نگهداشت جزئیات رویداد (روز)',
     'field_system_retention_activity_log_months' => 'نگهداشت جزئیات لاگ فعالیت (ماه)',
     'field_system_disk_warn_percent' => 'آستانه‌ی هشدار فضای دیسک (٪)',

@@ -258,6 +258,14 @@ class SettingsRegistry
             'limits.trial_chatbot_message_limit' => [
                 'tab' => 'limits', 'group' => 'trial', 'type' => 'int', 'default' => 200,
             ],
+            // Read by CheckTrialCostCommand (hourly): how much real LLM
+            // cost, summed across every trial chatbot, in one calendar day,
+            // is worth an admin notification — the automatic time/message
+            // caps already bound any ONE trial's damage, this catches many
+            // trials adding up, or one somehow slipping past its own cap.
+            'limits.trial_daily_cost_alert_toman' => [
+                'tab' => 'limits', 'group' => 'trial', 'type' => 'int', 'default' => 200000,
+            ],
 
             // ── Tab 6: system ────────────────────────────────────────────
             'system.retention_event_payload_days' => [

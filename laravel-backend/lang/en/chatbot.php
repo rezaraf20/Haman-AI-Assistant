@@ -79,6 +79,8 @@ return [
     'status_label' => 'Status',
     'disabled_reason_expired' => 'This chatbot\'s active period has ended.',
     'disabled_reason_trial_message_limit_reached' => 'Your free trial\'s message limit has been reached.',
+    'disabled_reason_pending_verification' => 'Verify your email to activate this chatbot.',
+    'disabled_reason_admin_suspended' => 'This chatbot was deactivated by support.',
     'upgrade_action' => 'Upgrade to a full chatbot',
     'singular' => 'Chatbot',
     'site_domain' => 'Site Domain',

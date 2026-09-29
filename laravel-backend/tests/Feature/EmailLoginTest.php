@@ -4,8 +4,9 @@ namespace Tests\Feature;
 use Tests\TestCase;
 use App\Models\{User, Plan};
 use App\Livewire\EmailLogin;
+use App\Support\Settings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\{Hash, Mail};
 use Livewire\Livewire;
 
 /**
@@ -45,8 +46,17 @@ class EmailLoginTest extends TestCase
         $response->assertSeeLivewire(\App\Livewire\OtpLogin::class);
     }
 
+    private function configureSmtp(): void
+    {
+        Settings::set('mail.host', 'smtp.example.test');
+        Settings::set('mail.from_address', 'bot@example.test');
+    }
+
     public function test_registering_via_email_creates_tenant_and_logs_in(): void
     {
+        $this->configureSmtp();
+        Mail::fake();
+
         Livewire::test(EmailLogin::class)
             ->set('mode', 'register')
             ->set('name', 'Jane Doe')
@@ -62,6 +72,75 @@ class EmailLoginTest extends TestCase
         $this->assertEquals('Jane', $user->first_name);
         $this->assertEquals('Doe', $user->last_name);
         $this->assertAuthenticatedAs($user, 'web');
+        $this->assertNull($user->email_verified_at, 'a Livewire signup must not be pre-verified any more than the landing page one is');
+        Mail::assertSentCount(1);
+    }
+
+    /** Real abuse vector this closes: an unverified email used to get an immediately-active trial chatbot with 200 free LLM messages. */
+    public function test_the_trial_chatbot_is_inactive_until_the_email_is_verified(): void
+    {
+        $this->configureSmtp();
+        Mail::fake();
+
+        Livewire::test(EmailLogin::class)
+            ->set('mode', 'register')
+            ->set('name', 'Pending User')
+            ->set('email', 'pending@example.test')
+            ->set('password', 'password123')
+            ->set('password_confirmation', 'password123')
+            ->call('submitRegister');
+
+        $user = User::where('email', 'pending@example.test')->first();
+        $index = \Illuminate\Support\Facades\DB::table('chatbot_index')->where('tenant_id', $user->tenant_id)->first();
+        $this->assertFalse((bool) $index->is_active, 'the trial chatbot must not be active before the email is verified');
+        $this->assertEquals('pending_verification', $index->disabled_reason);
+    }
+
+    public function test_registration_is_refused_without_smtp_configured(): void
+    {
+        Mail::fake();
+
+        Livewire::test(EmailLogin::class)
+            ->set('mode', 'register')
+            ->set('name', 'No Smtp')
+            ->set('email', 'nosmtp@example.test')
+            ->set('password', 'password123')
+            ->set('password_confirmation', 'password123')
+            ->call('submitRegister')
+            ->assertSet('error', __('auth_email.smtp_unavailable'));
+
+        $this->assertNull(User::where('email', 'nosmtp@example.test')->first(), 'no account should be created when verification could never be sent');
+        Mail::assertNothingSent();
+    }
+
+    /** The exact scenario asked for: two signups from one IP, the second refused. */
+    public function test_a_second_signup_from_the_same_ip_in_one_day_is_refused(): void
+    {
+        $this->configureSmtp();
+        Mail::fake();
+        Settings::set('limits.register_per_ip_per_day', 1);
+
+        Livewire::test(EmailLogin::class)
+            ->set('mode', 'register')
+            ->set('name', 'First User')
+            ->set('email', 'first@example.test')
+            ->set('password', 'password123')
+            ->set('password_confirmation', 'password123')
+            ->call('submitRegister')
+            ->assertRedirect('/portal');
+
+        $second = Livewire::test(EmailLogin::class)
+            ->set('mode', 'register')
+            ->set('name', 'Second User')
+            ->set('email', 'second@example.test')
+            ->set('password', 'password123')
+            ->set('password_confirmation', 'password123')
+            ->call('submitRegister');
+
+        $this->assertNotEmpty($second->get('error'), 'a second signup over the per-IP daily cap must show an error, not silently succeed or fail');
+
+        $this->assertNotNull(User::where('email', 'first@example.test')->first());
+        $this->assertNull(User::where('email', 'second@example.test')->first(), 'a second signup from the same IP, over the daily cap, must not create a tenant');
     }
 
     public function test_registering_with_duplicate_email_fails_validation(): void

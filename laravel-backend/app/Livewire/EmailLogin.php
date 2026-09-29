@@ -1,11 +1,12 @@
 <?php
 namespace App\Livewire;
 
+use App\Http\Controllers\LandingSignupController;
 use App\Models\User;
 use App\Services\TenantService;
 use Illuminate\Support\Facades\{Auth, Hash};
 use Livewire\Component;
-use App\Support\Settings;
+use App\Support\{MailSettings, Settings};
 use Illuminate\Support\Facades\RateLimiter;
 
 // Email+password login/signup for the customer portal (/portal) —
@@ -95,13 +96,44 @@ class EmailLogin extends Component {
             'password' => 'required|string|min:8|confirmed',
         ]);
 
+        // Registration creates a tenant AND a Postgres schema full of
+        // tables — AppServiceProvider's own 'register' rate limiter already
+        // covers LandingSignupController's route, but a Livewire action
+        // arrives on /livewire/update (same reason OtpLogin keeps its own
+        // withinIpBudget() for SMS below), so this route-level throttle
+        // never saw this path at all. Keyed identically to that limiter
+        // ('register:' . ip) so both signup surfaces draw from ONE shared
+        // daily cap per IP, not two separate ones an attacker could stack.
+        $cap = (int) Settings::get('limits.register_per_ip_per_day');
+        $key = 'register:' . request()->ip();
+        if ($cap > 0 && RateLimiter::tooManyAttempts($key, $cap)) {
+            $this->error = __('validation.too_many_attempts', ['seconds' => RateLimiter::availableIn($key)]);
+            return;
+        }
+
+        // Same posture as LandingSignupController::register(): refuse
+        // outright rather than create an account nobody can ever verify —
+        // and now that a trial chatbot depends on that verification
+        // actually happening (see TenantService::createTrialChatbot()),
+        // silently creating an unverifiable, permanently-inactive one would
+        // be worse than refusing up front.
+        if (!MailSettings::isUsable()) {
+            $this->error = __('auth_email.smtp_unavailable');
+            return;
+        }
+
+        RateLimiter::hit($key, 86400);
+
         $result = $tenantService->registerViaEmail([
             'name'     => $this->name,
             'email'    => $this->email,
             'password' => $this->password,
         ]);
+        $user = $result['user'];
 
-        Auth::guard('web')->login($result['user'], remember: true);
+        app(LandingSignupController::class)->sendVerification($user);
+
+        Auth::guard('web')->login($user, remember: true);
         $this->redirect('/portal', navigate: false);
     }
 
