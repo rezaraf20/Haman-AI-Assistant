@@ -2,7 +2,6 @@
 namespace App\Services;
 
 use App\Support\PluginLegacy;
-use Illuminate\Support\Facades\Http;
 
 /**
  * One HMAC-signed call into a tenant's own WordPress plugin live-query
@@ -65,10 +64,12 @@ class LiveQueryClient
         $response = null;
         foreach (PluginLegacy::namespaces() as $namespace) {
             try {
-                $response = Http::withBody($body, 'application/json')
-                    ->withHeaders(['X-Haman-Signature' => $signature])
-                    ->timeout(self::TIMEOUT_SECONDS)
-                    ->post(self::scheme($domain) . "://{$domain}/wp-json/{$namespace}/live-query");
+                $response = SafeHttpClient::post(
+                    self::scheme($domain) . "://{$domain}/wp-json/{$namespace}/live-query",
+                    $body,
+                    ['X-Haman-Signature' => $signature],
+                    self::TIMEOUT_SECONDS,
+                );
             } catch (\Throwable $e) {
                 return null;
             }

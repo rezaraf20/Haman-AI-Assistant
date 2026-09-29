@@ -78,6 +78,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.services.plugin_legacy import NAMESPACES
+from app.services.safe_http import SafeHttpError, safe_post
 
 from .registry import Tool, register
 
@@ -177,12 +178,15 @@ def _query_live(domain: str, secret: str, action: str, params: dict) -> Optional
     # is not retried -- see plugin_legacy for when this stops.
     for namespace in NAMESPACES:
         try:
-            resp = _requests.post(
+            resp = safe_post(
                 f"{_scheme(domain)}://{domain}/wp-json/{namespace}/live-query",
                 data=body.encode(),
                 headers={"Content-Type": "application/json", "X-Haman-Signature": signature},
                 timeout=LIVE_QUERY_TIMEOUT_SECONDS,
             )
+        except SafeHttpError as e:
+            logger.warning(f"Live query ({action}) to {domain} refused: {e}")
+            return None
         except _requests.RequestException as e:
             logger.warning(f"Live query ({action}) to {domain} failed: {e}")
             return None
