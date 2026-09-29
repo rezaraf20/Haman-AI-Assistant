@@ -94,7 +94,7 @@ class TrialChatbotSignupTest extends TestCase
     {
         $result = app(TenantService::class)->registerViaPhone([
             'phone' => '09121234567', 'first_name' => 'Ali', 'last_name' => 'Rezaei',
-            'email' => null, 'national_id' => null, 'address' => null,
+            'email' => 'ali@example.test', 'national_id' => null, 'address' => null,
         ]);
         $tenant = $result['tenant'];
 
@@ -190,9 +190,18 @@ class TrialChatbotSignupTest extends TestCase
         $tenant->update(['schema_name' => $schema]);
         app(TenantService::class)->createSchema($schema);
 
+        // Raw insert, not Chatbot::create(): 'id' isn't in Chatbot::$fillable
+        // (deliberately, same as every model using HasUuid), so a mass-assign
+        // create() silently drops a pre-generated id and HasUuid mints a
+        // different one instead — fine when the caller reads $model->id
+        // back afterward (as createTrialChatbot() does), wrong here where
+        // $chatbotId must be the exact id the later inserts reference.
         $chatbotId = (string) Str::uuid();
         DB::statement("SET search_path TO {$schema}, public");
-        Chatbot::create(['id' => $chatbotId, 'name' => 'Paid Bot', 'type' => 'support', 'status' => 'active', 'is_active' => true, 'language' => 'en']);
+        DB::table('chatbots')->insert([
+            'id' => $chatbotId, 'name' => 'Paid Bot', 'type' => 'support', 'status' => 'active',
+            'is_active' => true, 'language' => 'en', 'created_at' => now(), 'updated_at' => now(),
+        ]);
         DB::statement('SET search_path TO public');
         DB::table('chatbot_index')->insert([
             'chatbot_id' => $chatbotId, 'tenant_id' => $tenant->id, 'schema_name' => $schema,
