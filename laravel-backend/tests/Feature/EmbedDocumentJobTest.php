@@ -17,6 +17,13 @@ use Illuminate\Support\Str;
  * ran next on that worker would silently run against the wrong schema.
  * Same class of bug every other cross-schema loop in this app already
  * guards against with a finally block.
+ *
+ * handle() restores whatever search_path was active before it ran, rather
+ * than hardcoding 'public' — SyncService dispatches this job mid-loop while
+ * QUEUE_CONNECTION=sync runs it inline on the caller's own connection (every
+ * test, see DEPLOY.md), and SyncService's own loop still needs its tenant
+ * schema active afterward. A real queued dispatch starts from 'public'
+ * anyway, so the two cases land on the same correct behaviour either way.
  */
 class EmbedDocumentJobTest extends TestCase
 {
@@ -46,7 +53,8 @@ class EmbedDocumentJobTest extends TestCase
         ]);
         $doc = Document::create([
             'chatbot_id' => $chatbotId, 'source_type' => 'manual', 'title' => 'Doc',
-            'raw_content' => 'Some content.', 'language' => 'en', 'status' => 'pending',
+            'raw_content' => 'Some content.', 'content_hash' => hash('sha256', 'Some content.'),
+            'language' => 'en', 'status' => 'pending',
         ]);
         DB::statement('SET search_path TO public');
 
@@ -98,5 +106,24 @@ class EmbedDocumentJobTest extends TestCase
         DB::statement('SET search_path TO public');
         $this->assertEquals('pending', $doc->status);
         $this->assertEquals(1, $doc->retry_count);
+    }
+
+    /** The exact regression this caused: SyncService dispatches this job mid-loop with QUEUE_CONNECTION=sync, and still needs its own tenant schema active for the rest of that loop afterward. */
+    public function test_dispatched_synchronously_from_within_a_tenant_schema_context_restores_it_not_public(): void
+    {
+        ['schema' => $schema, 'chatbotId' => $chatbotId, 'documentId' => $documentId] = $this->makeTenantWithDocument();
+
+        $this->mock(AiGatewayService::class, function ($mock) {
+            $mock->shouldReceive('embedDocument')->once()->andReturn(null);
+        });
+
+        // Simulates SyncService's own state right before it dispatches this
+        // job: already scoped to the tenant schema for its own queries.
+        DB::statement("SET search_path TO {$schema}, public");
+
+        (new EmbedDocumentJob($documentId, $chatbotId, $schema))->handle(app(AiGatewayService::class));
+
+        $this->assertSame($schema, $this->currentSchema(), "the caller's own tenant schema must still be active after a synchronous dispatch, not reset to public out from under it");
+        DB::statement('SET search_path TO public');
     }
 }

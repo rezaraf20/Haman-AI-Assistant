@@ -21,6 +21,15 @@ class EmbedDocumentJob implements ShouldQueue {
     }
 
     public function handle(AiGatewayService $ai): void {
+        // Restored in finally, not hardcoded back to 'public': with
+        // QUEUE_CONNECTION=sync (every test run, see DEPLOY.md), dispatch()
+        // runs handle() inline on the CALLER's own connection — SyncService
+        // dispatches this mid-loop while still relying on its own tenant
+        // schema being active for the rest of that loop. A worker's real,
+        // queued dispatch starts from 'public' anyway, so restoring "what it
+        // was before" gives the same end state there — it's the strictly
+        // more correct rule either way, not a special case for sync.
+        $previousSchema = DB::selectOne('select current_schema() as schema')->schema;
         DB::statement("SET search_path TO {$this->schemaName}, public");
         try {
             $doc = Document::findOrFail($this->documentId);
@@ -34,11 +43,7 @@ class EmbedDocumentJob implements ShouldQueue {
                 throw $e;
             }
         } finally {
-            // Queue workers reuse one DB connection across jobs — leaving
-            // search_path pointed at this tenant's schema would leak into
-            // whatever job runs next on this worker, same reason every
-            // other SET search_path in this app resets in a finally.
-            DB::statement('SET search_path TO public');
+            DB::statement("SET search_path TO {$previousSchema}, public");
         }
     }
 
