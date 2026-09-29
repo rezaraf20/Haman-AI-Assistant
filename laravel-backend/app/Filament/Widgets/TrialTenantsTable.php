@@ -26,7 +26,10 @@ class TrialTenantsTable extends Widget {
 
     protected static string $view = 'filament.widgets.trial-tenants-table';
     protected int|string|array $columnSpan = 'full';
-    protected static bool $isLazy = false;
+    // Unlike PlatformStatsOverview, nothing here needs to be on-screen the
+    // instant the dashboard paints — Filament's default lazy loading (a
+    // separate Livewire round-trip) keeps this per-tenant-schema loop off
+    // the initial page load, so it stays cheap as the tenant count grows.
 
     private const CACHE_KEY = 'dashboard:admin:trial-tenants';
 
@@ -37,9 +40,19 @@ class TrialTenantsTable extends Widget {
                 foreach (Tenant::active()->get() as $tenant) {
                     try {
                         DB::statement("SET search_path TO {$tenant->schema_name}, public");
-                        $bots = DB::table('chatbots')->where('type', 'trial')->get(['id', 'name', 'is_active']);
+                        $bots = DB::table('chatbots')->where('type', 'trial')->get(['id', 'name']);
 
                         foreach ($bots as $bot) {
+                            // chatbot_index.is_active, not the tenant-schema
+                            // mirror: ExpireOverdueChatbotsCommand and
+                            // EnforceTrialMessageLimitCommand only flip the
+                            // public index when they suspend a trial, so the
+                            // index is the one column guaranteed to be
+                            // current — it's also what ValidateChatbotDomain
+                            // itself gates real chat requests on.
+                            $index = DB::table('chatbot_index')->where('chatbot_id', $bot->id)->first(['is_active']);
+                            if (!$index || !$index->is_active) continue;
+
                             $usage = DB::table('messages')->where('chatbot_id', $bot->id)
                                 ->selectRaw("COALESCE(SUM(cost_toman),0) AS cost, COALESCE(SUM(total_tokens),0) AS tokens, COUNT(*) FILTER (WHERE role = 'user') AS msg_count")
                                 ->first();
@@ -47,7 +60,7 @@ class TrialTenantsTable extends Widget {
                             $rows[] = [
                                 'tenant_name'   => $tenant->name,
                                 'chatbot_id'    => $bot->id,
-                                'is_active'     => (bool) $bot->is_active,
+                                'is_active'     => true,
                                 'tokens'        => (int) ($usage->tokens ?? 0),
                                 'cost_toman'    => (float) ($usage->cost ?? 0),
                                 'message_count' => (int) ($usage->msg_count ?? 0),
@@ -65,11 +78,10 @@ class TrialTenantsTable extends Widget {
                 DB::statement('SET search_path TO public');
             }
 
-            // Only active ones are actionable here; the count of suspended
+            // Only active ones were ever added above; the count of suspended
             // ones is implicit (EnforceTrialMessageLimitCommand /
             // ExpireOverdueChatbotsCommand already handled them). Costliest
             // first, since that's the one an admin most needs to see.
-            $rows = array_values(array_filter($rows, fn ($r) => $r['is_active']));
             usort($rows, fn ($a, $b) => $b['cost_toman'] <=> $a['cost_toman']);
             return $rows;
         });

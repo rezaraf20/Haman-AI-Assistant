@@ -13,11 +13,15 @@ class PlatformSetting extends Model {
         // Everything the settings page grew to hold. Only values that differ
         // from their declared default live here — see SettingsRegistry.
         'values',
+        // Not a setting — internal bookkeeping for CheckTrialCostCommand,
+        // same role as LlmProviderProfile.disabled_notified_at.
+        'trial_cost_alert_sent_at',
     ];
     protected $casts = [
         'zarinpal_sandbox' => 'boolean',
         'melipayamak_use_pattern' => 'boolean',
         'values' => 'array',
+        'trial_cost_alert_sent_at' => 'datetime',
     ];
 
     // Always exactly one row — created by migration, never deleted. Callers

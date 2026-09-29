@@ -1,12 +1,12 @@
 <?php
 namespace App\Console\Commands;
 
-use App\Models\{Tenant, User};
+use App\Models\{PlatformSetting, Tenant, User};
 use App\Models\Tenant\{Chatbot, Message};
 use App\Support\{Money, Settings};
 use Filament\Notifications\Notification;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\{Cache, DB, Log};
+use Illuminate\Support\Facades\{DB, Log};
 
 /**
  * The automatic per-chatbot caps (ExpireOverdueChatbotsCommand,
@@ -25,8 +25,8 @@ class CheckTrialCostCommand extends Command {
         $threshold = (int) Settings::get('limits.trial_daily_cost_alert_toman');
         if ($threshold <= 0) return;
 
-        $alertKey = 'trial-cost-alert-sent:' . now()->toDateString();
-        if (Cache::has($alertKey)) return;
+        $settings = PlatformSetting::current();
+        if ($settings->trial_cost_alert_sent_at?->isToday()) return;
 
         $total = 0.0;
         try {
@@ -68,9 +68,9 @@ class CheckTrialCostCommand extends Command {
                 ->sendToDatabase($admin);
         }
 
-        // Once per calendar day, not once per hourly run — expires just
-        // past midnight so tomorrow's genuine spike still alerts fresh.
-        Cache::put($alertKey, true, now()->endOfDay()->diffInSeconds(now()) + 60);
+        // Once per calendar day, not once per hourly run — isToday() above
+        // naturally allows a fresh alert once tomorrow's date arrives.
+        $settings->update(['trial_cost_alert_sent_at' => now()]);
         $this->line("Alerted {$admins->count()} admin(s): trial cost today is " . Money::toman((int) $total));
     }
 }
