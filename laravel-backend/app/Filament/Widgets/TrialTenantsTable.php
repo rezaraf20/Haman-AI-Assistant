@@ -91,17 +91,7 @@ class TrialTenantsTable extends Widget {
     public function deactivate(string $chatbotId): void {
         PlatformAccess::authorize('tenant_lifecycle');
 
-        $schema = DB::table('chatbot_index')->where('chatbot_id', $chatbotId)->value('schema_name');
-        if (!$schema) return;
-
-        DB::table('chatbot_index')->where('chatbot_id', $chatbotId)->update([
-            'is_active'       => false,
-            'disabled_reason' => 'admin_suspended',
-        ]);
-
-        DB::statement("SET search_path TO {$schema}, public");
-        DB::table('chatbots')->where('id', $chatbotId)->update(['is_active' => false]);
-        DB::statement('SET search_path TO public');
+        if (!app(\App\Services\TenantService::class)->setChatbotActive($chatbotId, false, 'admin_suspended')) return;
 
         Cache::forget(self::CACHE_KEY);
         Notification::make()->title(__('dashboard.admin_table_trial_tenants_deactivated'))->success()->send();

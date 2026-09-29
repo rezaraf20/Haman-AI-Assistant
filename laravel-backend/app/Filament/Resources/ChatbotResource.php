@@ -150,7 +150,7 @@ class ChatbotResource extends Resource {
                     ->modalDescription(__('chatbot.suspend_description'))
                     ->action(function (ChatbotIndexEntry $record) {
                         PlatformAccess::authorize('tenant_lifecycle');
-                        $record->update(['is_active' => false]);
+                        app(\App\Services\TenantService::class)->setChatbotActive($record->chatbot_id, false, 'admin_suspended');
                         Notification::make()->title(__('chatbot.suspended_notice', ['name' => $record->name]))->success()->send();
                     }),
                 Action::make('reactivate')
@@ -161,7 +161,7 @@ class ChatbotResource extends Resource {
                         && PlatformAccess::allows('tenant_lifecycle'))
                     ->action(function (ChatbotIndexEntry $record) {
                         PlatformAccess::authorize('tenant_lifecycle');
-                        $record->update(['is_active' => true]);
+                        app(\App\Services\TenantService::class)->setChatbotActive($record->chatbot_id, true, null);
                         Notification::make()->title(__('chatbot.reactivated_notice', ['name' => $record->name]))->success()->send();
                     }),
                 Action::make('edit')->label(__('common.edit'))->url(fn (ChatbotIndexEntry $record) => static::getUrl('edit', ['record' => $record])),

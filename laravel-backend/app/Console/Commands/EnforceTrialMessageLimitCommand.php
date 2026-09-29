@@ -1,8 +1,9 @@
 <?php
 namespace App\Console\Commands;
 
-use App\Models\{ChatbotIndexEntry, Tenant};
+use App\Models\Tenant;
 use App\Models\Tenant\{Chatbot, Message};
+use App\Services\TenantService;
 use App\Support\Settings;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -22,11 +23,11 @@ class EnforceTrialMessageLimitCommand extends Command {
     protected $signature   = 'trial-chatbots:enforce-message-limit';
     protected $description = 'Suspend trial chatbots that have answered more than the configured message cap';
 
-    public function handle(): void {
+    public function handle(TenantService $tenantService): void {
         $limit = (int) Settings::get('limits.trial_chatbot_message_limit');
         $suspended = 0;
 
-        Tenant::active()->chunk(20, function ($tenants) use ($limit, &$suspended) {
+        Tenant::active()->chunk(20, function ($tenants) use ($limit, &$suspended, $tenantService) {
             foreach ($tenants as $tenant) {
                 DB::statement("SET search_path TO {$tenant->schema_name}, public");
 
@@ -35,11 +36,10 @@ class EnforceTrialMessageLimitCommand extends Command {
                     $count = Message::where('chatbot_id', $bot->id)->where('role', 'user')->count();
                     if ($count < $limit) continue;
 
-                    DB::statement('SET search_path TO public');
-                    ChatbotIndexEntry::where('chatbot_id', $bot->id)->update([
-                        'is_active'       => false,
-                        'disabled_reason' => 'trial_message_limit_reached',
-                    ]);
+                    // setChatbotActive() leaves search_path on 'public' when
+                    // it returns, so it must be set back to this tenant's
+                    // schema before the loop's next Message::where() call.
+                    $tenantService->setChatbotActive($bot->id, false, 'trial_message_limit_reached');
                     DB::statement("SET search_path TO {$tenant->schema_name}, public");
                     $suspended++;
                     $this->line("Suspended {$bot->id} ({$bot->name}) — {$count}/{$limit} messages");

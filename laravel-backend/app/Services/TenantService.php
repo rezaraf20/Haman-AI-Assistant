@@ -289,6 +289,35 @@ class TenantService
         DB::statement('SET search_path TO public');
     }
 
+    /**
+     * The one place that flips a chatbot's active flag — chatbot_index (what
+     * ValidateChatbotDomain actually gates real chat requests on) and the
+     * tenant-schema chatbots.is_active mirror, always together.
+     *
+     * Before this existed, ExpireOverdueChatbotsCommand, EnforceTrialMessage
+     * LimitCommand and ChatbotResource's admin suspend/reactivate actions
+     * each updated chatbot_index alone — three independent places that could
+     * (and did) leave the tenant-schema copy stale forever, since nothing
+     * else ever re-reads chatbot_index to correct it. Every one of those now
+     * calls this instead of writing the two tables by hand.
+     */
+    public function setChatbotActive(string $chatbotId, bool $active, ?string $disabledReason = null): bool
+    {
+        $schema = DB::table('chatbot_index')->where('chatbot_id', $chatbotId)->value('schema_name');
+        if (!$schema) return false;
+
+        DB::table('chatbot_index')->where('chatbot_id', $chatbotId)->update([
+            'is_active'       => $active,
+            'disabled_reason' => $disabledReason,
+        ]);
+
+        DB::statement("SET search_path TO {$schema}, public");
+        DB::table('chatbots')->where('id', $chatbotId)->update(['is_active' => $active]);
+        DB::statement('SET search_path TO public');
+
+        return true;
+    }
+
     public function createSchema(string $schemaName): void
     {
         DB::statement("CREATE SCHEMA IF NOT EXISTS {$schemaName}");
