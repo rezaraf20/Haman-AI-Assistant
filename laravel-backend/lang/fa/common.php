@@ -3,6 +3,9 @@
 // words that mean the same thing everywhere they appear, so they live here
 // once instead of being duplicated (and risking drift) in every domain file.
 return [
+    'access_denied' => 'دسترسی مجاز نیست',
+    'access_denied_message' => 'شما اجازه‌ی دیدن این صفحه را ندارید.',
+    'account_suspended_message' => 'حساب شما معلق شده است. برای رفع این مشکل با پشتیبانی تماس بگیرید.',
     'active' => 'فعال',
     'address' => 'آدرس',
     'auth_title' => 'ورود / ثبت‌نام',

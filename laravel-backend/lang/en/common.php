@@ -1,5 +1,8 @@
 <?php
 return [
+    'access_denied' => 'Access Denied',
+    'access_denied_message' => "You don't have permission to view this page.",
+    'account_suspended_message' => 'Your account has been suspended. Contact support to resolve this.',
     'active' => 'Active',
     'address' => 'Address',
     'auth_title' => 'Log In / Sign Up',

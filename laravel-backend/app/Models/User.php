@@ -80,8 +80,15 @@ class User extends Authenticatable implements FilamentUser {
             'admin'    => \App\Support\PlatformAccess::isStaff($this),
             // Any authenticated tenant user, not just the tenant's owner-role
             // user — the customer panel is scoped per-tenant by tenant_id
-            // everywhere it queries data, not by role.
-            'customer' => (bool) $this->tenant_id,
+            // everywhere it queries data, not by role. tenant->isAccessible()
+            // is the same check AuthController::login() already uses for the
+            // token API (status in ['active','trial']) — a suspended tenant
+            // was locked out of the API but a still-valid /portal session
+            // cookie kept reaching the full Filament panel regardless, since
+            // this check only ever looked at whether a tenant_id existed at
+            // all. Read on every request, same as platform_is_active above,
+            // so suspending a tenant takes effect immediately.
+            'customer' => (bool) $this->tenant_id && ($this->tenant?->isAccessible() ?? false),
             default    => false,
         };
     }
