@@ -43,10 +43,18 @@ class LandingController extends Controller
         // for real — previously pricingComingSoon only hid the WHOLE grid,
         // and only when EVERY paid plan looked unedited, so a real price
         // sitting right next to an unedited "29 Toman" one still went live.
+        //
+        // Passed separately from $plans, not in its place: the view's own
+        // "no plans published yet" check needs the ORIGINAL list — filtering
+        // out every still-default plan can leave this one empty even when
+        // real plans exist (just none of them priced yet), which must show
+        // "pricing coming soon", not the unrelated "nothing published at
+        // all" message.
         $visiblePlans = $plans->reject(fn (Plan $plan) => $plan->looksLikeDefaultPrice());
 
         $response = response()->view('landing.index', [
-            'plans'               => $visiblePlans,
+            'plans'               => $plans,
+            'visiblePlans'        => $visiblePlans,
             'currency'            => $currency,
             'pricingComingSoon'   => $this->pricingLooksUnconfigured($plans, $currency),
             'popularSlug'         => (string) Settings::get('pricing.popular_plan_slug'),

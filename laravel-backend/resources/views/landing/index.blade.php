@@ -456,7 +456,7 @@
             <p class="notice" style="margin-top:28px">{{ __('landing.pricing_coming_soon') }}</p>
         @else
             <div class="price-grid" style="margin-top:40px">
-                @foreach ($plans as $plan)
+                @foreach ($visiblePlans as $plan)
                     @php $isPopular = $popularSlug !== '' && $plan->slug === $popularSlug; @endphp
                     <div class="price {{ $isPopular ? 'popular' : '' }}">
                         @if ($isPopular)
