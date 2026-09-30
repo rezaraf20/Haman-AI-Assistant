@@ -43,7 +43,7 @@ class TokenPackageResource extends Resource {
                 ->label(__('chatbot.type'))
                 ->options(array_combine(
                     array_map(fn ($c) => $c->value, ChatbotType::cases()),
-                    array_map(fn ($c) => ucfirst($c->value), ChatbotType::cases()),
+                    array_map(fn ($c) => $c->label(), ChatbotType::cases()),
                 ))
                 ->placeholder(__('plan.any_type'))
                 ->helperText(__('plan.token_package_type_help')),
@@ -57,7 +57,8 @@ class TokenPackageResource extends Resource {
         return $table
             ->columns([
                 TextColumn::make('name')->label(__('common.name')),
-                TextColumn::make('chatbot_type')->label(__('chatbot.type'))->badge()->placeholder(__('plan.all_types')),
+                TextColumn::make('chatbot_type')->label(__('chatbot.type'))->badge()->placeholder(__('plan.all_types'))
+                    ->formatStateUsing(fn (?string $state) => $state ? ChatbotType::from($state)->label() : null),
                 TextColumn::make('token_amount')->label(__('plan.token_amount'))->formatStateUsing(fn (int $state) => number_format($state)),
                 TextColumn::make('price_toman')->label(__('plan.price'))
                     ->formatStateUsing(fn (int $state) => Money::toman($state)),

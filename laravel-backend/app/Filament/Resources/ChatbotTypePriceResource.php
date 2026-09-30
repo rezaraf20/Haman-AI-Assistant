@@ -42,7 +42,7 @@ class ChatbotTypePriceResource extends Resource {
                 ->label(__('chatbot.type'))
                 ->options(array_combine(
                     array_map(fn ($c) => $c->value, ChatbotType::cases()),
-                    array_map(fn ($c) => ucfirst($c->value), ChatbotType::cases()),
+                    array_map(fn ($c) => $c->label(), ChatbotType::cases()),
                 ))
                 ->required()
                 ->unique(ignoreRecord: true),
@@ -61,7 +61,8 @@ class ChatbotTypePriceResource extends Resource {
     public static function table(Table $table): Table {
         return $table
             ->columns([
-                TextColumn::make('type')->label(__('chatbot.type'))->badge(),
+                TextColumn::make('type')->label(__('chatbot.type'))->badge()
+                    ->formatStateUsing(fn (string $state) => ChatbotType::from($state)->label()),
                 TextColumn::make('name')->label(__('common.name')),
                 TextColumn::make('price_toman')->label(__('plan.price'))
                     ->formatStateUsing(fn (int $state) => Money::toman($state)),

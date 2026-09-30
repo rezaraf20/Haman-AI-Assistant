@@ -5,7 +5,7 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                     <p class="text-sm text-gray-500">موجودی کیف پول</p>
-                    <p class="text-2xl font-bold">{{ number_format($this->getWalletBalance()) }} تومان</p>
+                    <p class="text-2xl font-bold">{{ \App\Support\Money::forCurrentTenant($this->getWalletBalance()) }}</p>
                 </div>
                 <div>
                     <p class="text-sm text-gray-500">موجودی توکن اضافه (خریداری‌شده)</p>

@@ -1,7 +1,7 @@
 <?php
 namespace Tests\Feature;
 
-use App\Filament\Customer\Pages\{BuyChatbot, Wallet};
+use App\Filament\Customer\Pages\{BuyChatbot, BuyTokens, Wallet};
 use App\Models\{ChatbotTypePrice, Plan, Tenant, User};
 use App\Services\TenantService;
 use App\Support\{Money, Settings};
@@ -164,6 +164,32 @@ class TenantCurrencyTest extends TestCase
             ->assertOk()
             ->assertSee('100')
             ->assertSee(__('settings.option_EUR'));
+    }
+
+    /** Same balance, same value, as test_wallet_balance_shows_in_tomans_for_an_iran_tenant — this page used to hardcode "تومان" instead of going through Money, so it agreed with Wallet.php only for an Iran tenant, by coincidence. */
+    public function test_buy_tokens_wallet_balance_shows_in_tomans_for_an_iran_tenant(): void
+    {
+        $user = $this->portalUser('IR', 5_000_000);
+        $this->actingAs($user, 'web');
+
+        Livewire::test(BuyTokens::class)
+            ->assertOk()
+            ->assertSee('5,000,000')
+            ->assertSee(__('settings.option_IRT'));
+    }
+
+    /** The actual regression: a non-Iran tenant's balance must read in Euro here too, not the hardcoded "تومان" this page used to always print regardless of currency. */
+    public function test_buy_tokens_wallet_balance_shows_in_euros_for_a_non_iran_tenant(): void
+    {
+        Settings::set('payments.fx.eur_to_toman', 50000);
+        $user = $this->portalUser('DE', 5_000_000);
+        $this->actingAs($user, 'web');
+
+        Livewire::test(BuyTokens::class)
+            ->assertOk()
+            ->assertSee('100')
+            ->assertSee(__('settings.option_EUR'))
+            ->assertDontSee('تومان');
     }
 
     public function test_topup_is_available_for_an_iran_tenant(): void

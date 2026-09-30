@@ -98,6 +98,17 @@ return [
     'type' => 'Type',
     'type_select' => 'Chatbot Type',
     'type_unavailable' => "This chatbot type isn't available for purchase right now",
+    // The ChatbotType enum's own labels — every admin selector/badge that
+    // shows the raw type (not a ChatbotTypePrice catalogue row's own
+    // bilingual name) used to print App\Enums\ChatbotType's bare English
+    // value (ucfirst($case->value)) regardless of locale.
+    'type_support' => 'Support',
+    'type_sales' => 'Sales',
+    'type_faq' => 'FAQ',
+    'type_woocommerce' => 'WooCommerce',
+    'type_hr' => 'HR',
+    'type_custom' => 'Custom',
+    'type_trial' => 'Trial',
     'usage_nav' => 'Usage',
     'usage_of' => ':used of :limit',
     'welcome_message_label' => 'Welcome Message',

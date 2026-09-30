@@ -61,7 +61,7 @@ class ChatbotResource extends Resource {
                 ->label(__('chatbot.type'))
                 ->options(array_combine(
                     array_map(fn ($c) => $c->value, ChatbotType::cases()),
-                    array_map(fn ($c) => ucfirst($c->value), ChatbotType::cases()),
+                    array_map(fn ($c) => $c->label(), ChatbotType::cases()),
                 ))
                 ->required()
                 ->visibleOn('create'),
