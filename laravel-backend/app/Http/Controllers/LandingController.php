@@ -37,8 +37,16 @@ class LandingController extends Controller
         // PaymentGatewayManager). See Money::currencyForLocale().
         $currency = Money::currencyForLocale();
 
+        // Individually held back, not an all-or-nothing gate: a plan that
+        // still looks like PlanSeeder's untouched default price no longer
+        // reaches the page even when a sibling plan has already been priced
+        // for real — previously pricingComingSoon only hid the WHOLE grid,
+        // and only when EVERY paid plan looked unedited, so a real price
+        // sitting right next to an unedited "29 Toman" one still went live.
+        $visiblePlans = $plans->reject(fn (Plan $plan) => $plan->looksLikeDefaultPrice());
+
         $response = response()->view('landing.index', [
-            'plans'               => $plans,
+            'plans'               => $visiblePlans,
             'currency'            => $currency,
             'pricingComingSoon'   => $this->pricingLooksUnconfigured($plans, $currency),
             'popularSlug'         => (string) Settings::get('pricing.popular_plan_slug'),
@@ -101,8 +109,13 @@ class LandingController extends Controller
 
         $paidPlans = $plans->where('price_monthly', '>', 0);
 
+        // Against the FULL list (before index() filters individual defaults
+        // out of what the view actually renders) — only "coming soon" when
+        // NOTHING paid survives, i.e. every published paid plan still looks
+        // untouched. One real price among several defaults means the grid
+        // shows that one plan, not the fallback.
         return $paidPlans->isNotEmpty()
-            && $paidPlans->every(fn (Plan $plan) => $plan->price_monthly < Plan::PRICE_SANITY_THRESHOLD);
+            && $paidPlans->every(fn (Plan $plan) => $plan->looksLikeDefaultPrice());
     }
 
     /**

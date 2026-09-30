@@ -22,16 +22,21 @@ class PlanSeeder extends Seeder {
             ['id' => '00000000-0000-0000-0000-000000000004', 'name'=>'Enterprise', 'slug'=>'enterprise', 'price_monthly'=>299, 'max_chatbots'=>20,'max_tokens_monthly'=>10000000,'max_documents'=>5000, 'max_messages_monthly'=>50000, 'features'=>[], 'sort_order'=>3],
         ];
 
-        // updateOrCreate, not delete()-then-insert(): this runs on every
-        // single deploy (docker-entrypoint.sh), and delete() on a 'slug'
-        // already referenced by a real tenant's plan_id throws a foreign
-        // key violation — silently, since the entrypoint swallowed it —
-        // meaning the seeder had been failing on every deploy since the
-        // first tenant signed up, with nothing surfacing that. Matching on
-        // 'id' (not 'slug') keeps every existing tenants.plan_id reference
-        // intact even if a slug were ever renamed.
+        // firstOrCreate, not updateOrCreate: this runs on every single
+        // deploy (docker-entrypoint.sh), and updateOrCreate was unconditionally
+        // overwriting price_monthly/price_yearly/name/slug/every max_*
+        // limit/features/sort_order/is_active back to these placeholder
+        // values on EVERY deploy — silently reverting any admin's real price
+        // edit made through PlanResource the moment the next deploy ran.
+        // That's the direct, confirmed cause of wrong prices reaching the
+        // public pricing page (see the 2026-09-30 pricing/currency audit).
+        // firstOrCreate only ever writes these defaults once, the first time
+        // each row's id doesn't exist yet — after that, an admin's edits
+        // (including deliberately disabling a plan) are never touched again.
+        // Matching on 'id' (not 'slug') keeps every existing tenants.plan_id
+        // reference intact even if a slug were ever renamed.
         foreach ($plans as $p) {
-            Plan::updateOrCreate(['id' => $p['id']], [
+            Plan::firstOrCreate(['id' => $p['id']], [
                 'name'                 => $p['name'],
                 'slug'                 => $p['slug'],
                 'price_monthly'        => $p['price_monthly'],

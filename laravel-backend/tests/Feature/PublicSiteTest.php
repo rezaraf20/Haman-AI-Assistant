@@ -441,7 +441,17 @@ class PublicSiteTest extends TestCase
         $this->withHeader('Accept-Language', 'fa')->get('/')->assertOk()->assertSee('FreeOnlyPlan');
     }
 
-    public function test_one_real_priced_plan_is_enough_to_show_the_whole_grid(): void
+    /**
+     * Individually held back now, not all-or-nothing: a real price next to
+     * an unedited default sibling used to bring the whole grid live
+     * (including the wrong "99 Toman"-looking price) the moment ANY plan
+     * was configured — exactly how a genuinely wrong price reached the
+     * public page in practice. Now each plan is judged on its own: the
+     * ready one shows, the unedited one is held back until an admin prices
+     * it, and "coming soon" only replaces the whole grid when NOTHING paid
+     * is ready yet (see pricingLooksUnconfigured()).
+     */
+    public function test_a_real_priced_plan_shows_even_next_to_a_still_default_sibling(): void
     {
         $this->publishedPlan(['name' => 'RealPricedPlan', 'price_monthly' => 990000]);
         $this->publishedPlan(['name' => 'StillDefaultPlan', 'slug' => 'still-default', 'price_monthly' => 99]);
@@ -449,7 +459,7 @@ class PublicSiteTest extends TestCase
         $html = $this->withHeader('Accept-Language', 'fa')->get('/')->assertOk()->getContent();
 
         $this->assertStringContainsString('RealPricedPlan', $html);
-        $this->assertStringContainsString('StillDefaultPlan', $html);
+        $this->assertStringNotContainsString('StillDefaultPlan', $html);
     }
 
     public function test_it_makes_no_unsupported_claim(): void
