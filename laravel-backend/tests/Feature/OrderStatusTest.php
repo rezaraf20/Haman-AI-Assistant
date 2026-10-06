@@ -37,6 +37,10 @@ class OrderStatusTest extends TestCase
             'name' => 'Test Plan', 'slug' => 'test-' . Str::random(8),
             'price_monthly' => 0, 'max_chatbots' => 1, 'max_tokens_monthly' => 1000000,
             'is_active' => true, 'sort_order' => 0,
+            // Chatbot::effectiveTools() intersects this with the chatbot's own
+            // enabled_tools below — without it here, the plan allows nothing
+            // and every request in this file 403s regardless of OTP logic.
+            'allowed_tools' => ['get_order_status'],
         ]);
         $tenant = Tenant::create([
             'slug' => 'test-' . Str::random(8), 'name' => 'Test Tenant',

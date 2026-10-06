@@ -106,4 +106,25 @@ class ChatbotToolsTest extends TestCase
 
         $this->assertSame('none', ChatbotTools::cost('compare_products'));
     }
+
+    public function test_default_enabled_names_matches_the_catalogues_own_flags_before_any_override(): void
+    {
+        $expected = array_keys(array_filter(
+            ChatbotTools::CATALOGUE,
+            fn (array $def) => $def['default_enabled'],
+        ));
+
+        $this->assertEqualsCanonicalizing($expected, ChatbotTools::defaultEnabledNames());
+        $this->assertNotContains('get_order_status', ChatbotTools::defaultEnabledNames(),
+            'Order status must start off — it exposes a real order to an unverified visitor.');
+        $this->assertContains('search_products', ChatbotTools::defaultEnabledNames());
+    }
+
+    public function test_every_catalogue_entry_declares_default_enabled(): void
+    {
+        foreach (ChatbotTools::CATALOGUE as $name => $definition) {
+            $this->assertArrayHasKey('default_enabled', $definition, "{$name} has no default_enabled flag.");
+            $this->assertIsBool($definition['default_enabled']);
+        }
+    }
 }

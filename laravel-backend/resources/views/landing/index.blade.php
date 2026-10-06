@@ -80,6 +80,21 @@
         .lang-switch a { padding: 5px 12px; border-radius: 99px; color: var(--muted); }
         .lang-switch a.active { background: #fff; color: var(--ink); box-shadow: var(--shadow); }
         @media (max-width: 860px) { nav.links { display: none; } }
+        /* Pre-existing bug, found while checking the pricing page at phone
+           width for the tool-comparison table below: nav.links hiding above
+           is the ONLY narrow-width rule this header had. The language
+           switcher and the separate login link are nav.links' SIBLINGS, not
+           its children, so hiding nav.links alone doesn't free any space —
+           logo + two-pill lang switch + login link + CTA button all still
+           compete for one row, and the CTA button loses, overflowing off
+           the left edge (confirmed via document.documentElement.scrollWidth
+           exceeding clientWidth at 390px, independent of anything the new
+           table/cards below do). Hiding the login link here is safe: the
+           same destination is also reachable from every pricing card's own
+           "shuru" CTA and the page's own sign-up form. */
+        @media (max-width: 640px) {
+            header .wrap > a.nav-link { display: none; }
+        }
 
         .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 22px; border-radius: 10px; font-weight: 600; font-size: .95rem; font-family: var(--font-heading); border: 1px solid transparent; cursor: pointer; white-space: nowrap; transition: transform .15s ease, box-shadow .15s ease; }
         .btn-primary { background: var(--brand-gradient); color: #fff; box-shadow: 0 6px 20px rgba(72,112,248,.28); }
@@ -217,6 +232,33 @@
         .price li { padding: 7px 0; color: var(--muted); font-size: .92rem; border-bottom: 1px dashed var(--line); }
         .price li:last-child { border-bottom: 0; }
         .price .btn { margin-top: auto; }
+
+        /* ── tool comparison table ──────────────────────────────────── */
+        /* Two markups, shown one at a time by width via plain CSS
+           (no JS) — a four-plus-column table reads fine once there's room
+           for a horizontal scroll, but position: sticky on <th>/<td> is
+           genuinely unreliable across engines (a real Chromium headless
+           case of it visually failing is what moved this away from a
+           sticky-first-column single table). Below ~640px, one card per
+           tool with its own per-plan rows is both simpler and more
+           robust than fighting sticky table cells on a phone screen. */
+        .tool-compare-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); margin-top: 32px; -webkit-overflow-scrolling: touch; }
+        .tool-compare { width: 100%; min-width: 480px; border-collapse: separate; border-spacing: 0; font-size: .9rem; }
+        .tool-compare th, .tool-compare td { padding: 12px 16px; text-align: center; border-bottom: 1px solid var(--line); white-space: nowrap; }
+        .tool-compare tbody tr:last-child th, .tool-compare tbody tr:last-child td { border-bottom: 0; }
+        .tool-compare thead th { font-family: var(--font-heading); font-weight: 600; color: var(--ink); background: var(--soft); }
+        .tool-compare th:first-child, .tool-compare td:first-child { text-align: start; font-weight: 600; }
+        .tool-yes { color: #16794c; font-weight: 700; }
+        .tool-no { color: var(--line); }
+
+        .tool-compare-cards { display: none; margin-top: 32px; }
+        .tool-compare-card { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 14px 16px; margin-top: 10px; }
+        .tool-compare-card .name { font-weight: 600; font-family: var(--font-heading); font-size: .92rem; margin-bottom: 8px; }
+        .tool-compare-card .row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; font-size: .88rem; color: var(--muted); }
+        @media (max-width: 640px) {
+            .tool-compare-wrap { display: none; }
+            .tool-compare-cards { display: block; }
+        }
 
         .type-list { list-style: none; margin: 14px 0 0; padding: 0; max-width: 520px; }
         .type-list li { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
@@ -494,6 +536,61 @@
             </div>
 
             <p class="muted center" style="margin-top:24px;font-size:.9rem">{{ __('landing.pricing_enterprise_note') }}</p>
+
+            {{-- Built only from plans.allowed_tools — see LandingController
+                 ::toolComparisonRows(). No hardcoded feature array here. --}}
+            @if (!empty($toolRows))
+                <h3 class="center" style="margin-top:56px">{{ __('landing.tool_compare_title') }}</h3>
+
+                {{-- >=641px: a table, scrollable horizontally if it's wider than the viewport. --}}
+                <div class="tool-compare-wrap">
+                    <table class="tool-compare">
+                        <thead>
+                            <tr>
+                                <th>{{ __('landing.tool_compare_feature') }}</th>
+                                @foreach ($visiblePlans as $plan)
+                                    <th>{{ $plan->display_name }}</th>
+                                @endforeach
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($toolRows as $toolName)
+                                <tr>
+                                    <th scope="row">{{ \App\Support\ChatbotTools::label($toolName) }}</th>
+                                    @foreach ($visiblePlans as $plan)
+                                        <td>
+                                            @if (in_array($toolName, $plan->allowed_tools ?? [], true))
+                                                <span class="tool-yes" aria-label="{{ __('landing.tool_compare_yes') }}">&#10003;</span>
+                                            @else
+                                                <span class="tool-no" aria-label="{{ __('landing.tool_compare_no') }}">&mdash;</span>
+                                            @endif
+                                        </td>
+                                    @endforeach
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+
+                {{-- <=640px: one card per tool, same data, no horizontal scroll at all. --}}
+                <div class="tool-compare-cards">
+                    @foreach ($toolRows as $toolName)
+                        <div class="tool-compare-card">
+                            <div class="name">{{ \App\Support\ChatbotTools::label($toolName) }}</div>
+                            @foreach ($visiblePlans as $plan)
+                                <div class="row">
+                                    <span>{{ $plan->display_name }}</span>
+                                    @if (in_array($toolName, $plan->allowed_tools ?? [], true))
+                                        <span class="tool-yes" aria-label="{{ __('landing.tool_compare_yes') }}">&#10003;</span>
+                                    @else
+                                        <span class="tool-no" aria-label="{{ __('landing.tool_compare_no') }}">&mdash;</span>
+                                    @endif
+                                </div>
+                            @endforeach
+                        </div>
+                    @endforeach
+                </div>
+            @endif
         @endif
 
         @if ($chatbotTypes->isNotEmpty())

@@ -11,6 +11,12 @@ Schedule::command('trial-chatbots:enforce-message-limit')->hourly();
 // chatbot going over — see the command's own docblock for why this is
 // hourly, not daily.
 Schedule::command('trial-chatbots:check-daily-cost')->hourly();
+// Trial-plan expiry (-> free), trial-ending reminders, and scheduled
+// end-of-cycle plan downgrades — see ProcessPlanTransitionsCommand's own
+// docblock. Daily, not hourly: unlike the cost spike this same "trial"
+// word means for the OTHER (per-chatbot) trial mechanism above, a plan
+// transition firing a few hours late has no real cost consequence.
+Schedule::command('plans:process-transitions')->dailyAt('05:00');
 Schedule::command('wallet:reconcile')->dailyAt('02:00');
 // Feeds analytics_daily (per-tenant) + platform_daily_stats (public) — the
 // admin/customer dashboard widgets read from these instead of aggregating

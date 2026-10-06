@@ -63,6 +63,18 @@ class BuyTokens extends Page implements HasTable {
     private function buy(TokenPackage $package): void {
         $tenant = Tenant::where('id', auth()->user()->tenant_id)->lockForUpdate()->first();
 
+        // The whole point of the free tier: a tenant who wants more tokens
+        // upgrades, they don't top up around the limit. Checked server-side
+        // here, not just by hiding the button, since this is the one place
+        // that actually spends money.
+        if (!($tenant->plan->can_purchase_tokens ?? true)) {
+            Notification::make()
+                ->title(__('plan.token_purchase_requires_upgrade'))
+                ->danger()
+                ->send();
+            return;
+        }
+
         if ($tenant->wallet_balance_toman < $package->price_toman) {
             Notification::make()
                 ->title(__('wallet.insufficient_balance'))

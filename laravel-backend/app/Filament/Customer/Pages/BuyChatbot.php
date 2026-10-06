@@ -85,6 +85,19 @@ class BuyChatbot extends Page implements HasForms {
         $tenant = Tenant::where('id', auth()->user()->tenant_id)->lockForUpdate()->first();
         $price  = $priceRow->price_toman;
 
+        DB::statement("SET search_path TO {$tenant->schema_name}, public");
+        $currentChatbots = Chatbot::count();
+        DB::statement('SET search_path TO public');
+
+        if (!app(\App\Services\QuotaService::class)->canCreateChatbot($tenant, $currentChatbots)) {
+            Notification::make()
+                ->title(__('plan.chatbot_limit_reached'))
+                ->body(__('plan.chatbot_limit_reached_body', ['limit' => $tenant->plan->max_chatbots]))
+                ->danger()
+                ->send();
+            return;
+        }
+
         if ($tenant->wallet_balance_toman < $price) {
             Notification::make()
                 ->title(__('wallet.insufficient_balance'))

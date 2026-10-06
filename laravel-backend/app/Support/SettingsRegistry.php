@@ -163,6 +163,12 @@ class SettingsRegistry
             'pricing.popular_plan_slug' => [
                 'tab' => 'pricing', 'group' => 'currency', 'type' => 'string', 'default' => '',
             ],
+            // price_yearly = price_monthly * (12 - this) — PlanSeeder's own
+            // fallback if this isn't reachable yet. 2 matches the
+            // traditional "two months free" framing (pay for 10 of 12).
+            'pricing.annual_discount_months' => [
+                'tab' => 'pricing', 'group' => 'currency', 'type' => 'float', 'default' => 2.0,
+            ],
 
             // ── Tab 5: limits ────────────────────────────────────────────
             // Defaults below are the values these were hardcoded to before
@@ -246,6 +252,44 @@ class SettingsRegistry
                 'tab' => 'limits', 'group' => 'retrieval', 'type' => 'float', 'default' => 0.50,
             ],
 
+            // Which tools a chatbot that has never had enabled_tools set
+            // (database NULL) starts with switched on — read by
+            // ChatbotTools::defaultEnabledNames(), intersected with the
+            // tenant's plan.allowed_tools by Chatbot::effectiveTools(). The
+            // 'default' below is each tool's own default_enabled flag in
+            // ChatbotTools::CATALOGUE, so raising/lowering it here is the
+            // one and only way to change it — the panel, not a deploy.
+            'tools.default_enabled.search_products' => [
+                'tab' => 'limits', 'group' => 'tools', 'type' => 'bool', 'default' => true,
+            ],
+            'tools.default_enabled.recommend_products' => [
+                'tab' => 'limits', 'group' => 'tools', 'type' => 'bool', 'default' => true,
+            ],
+            'tools.default_enabled.compare_products' => [
+                'tab' => 'limits', 'group' => 'tools', 'type' => 'bool', 'default' => true,
+            ],
+            'tools.default_enabled.get_product_variants' => [
+                'tab' => 'limits', 'group' => 'tools', 'type' => 'bool', 'default' => true,
+            ],
+            'tools.default_enabled.get_product_availability' => [
+                'tab' => 'limits', 'group' => 'tools', 'type' => 'bool', 'default' => true,
+            ],
+            'tools.default_enabled.build_cart_url' => [
+                'tab' => 'limits', 'group' => 'tools', 'type' => 'bool', 'default' => true,
+            ],
+            'tools.default_enabled.add_to_cart' => [
+                'tab' => 'limits', 'group' => 'tools', 'type' => 'bool', 'default' => true,
+            ],
+            'tools.default_enabled.create_payment_link' => [
+                'tab' => 'limits', 'group' => 'tools', 'type' => 'bool', 'default' => true,
+            ],
+            // Off by default: a customer's order details should not be
+            // readable in chat until their identity is actually verified
+            // (the OTP step) — a merchant turns this on deliberately.
+            'tools.default_enabled.get_order_status' => [
+                'tab' => 'limits', 'group' => 'tools', 'type' => 'bool', 'default' => false,
+            ],
+
             // The trial chatbot every signup gets automatically (see
             // TenantService::createTrialChatbot()) — how long it stays active
             // and how many customer messages it may answer before
@@ -253,7 +297,7 @@ class SettingsRegistry
             // deactivate it. Admin-configurable rather than hardcoded so
             // pricing/growth can tune the trial without a deploy.
             'limits.trial_chatbot_duration_days' => [
-                'tab' => 'limits', 'group' => 'trial', 'type' => 'int', 'default' => 14,
+                'tab' => 'limits', 'group' => 'trial', 'type' => 'int', 'default' => 7,
             ],
             'limits.trial_chatbot_message_limit' => [
                 'tab' => 'limits', 'group' => 'trial', 'type' => 'int', 'default' => 200,
@@ -265,6 +309,31 @@ class SettingsRegistry
             // trials adding up, or one somehow slipping past its own cap.
             'limits.trial_daily_cost_alert_toman' => [
                 'tab' => 'limits', 'group' => 'trial', 'type' => 'int', 'default' => 200000,
+            ],
+
+            // Read by QuotaService — see its own docblock for the
+            // check-then-reconcile shape this estimate makes possible.
+            'quota.token_reservation_estimate' => [
+                'tab' => 'limits', 'group' => 'quota', 'type' => 'int', 'default' => 3000,
+            ],
+            // Which model a chatbot falls back to for the rest of a quota
+            // period when its plan's quota_exceeded_behavior is 'degrade'.
+            'quota.degrade_model_name' => [
+                'tab' => 'limits', 'group' => 'quota', 'type' => 'string', 'default' => 'gemini-1.5-flash-8b',
+            ],
+            // A single warning fires once per quota period the first time
+            // usage crosses this percentage — 100% itself is "exceeded", not
+            // a second warning threshold.
+            'quota.warning_threshold_percent' => [
+                'tab' => 'limits', 'group' => 'quota', 'type' => 'int', 'default' => 80,
+            ],
+            'quota.exceeded_message_fa' => [
+                'tab' => 'limits', 'group' => 'quota', 'type' => 'string',
+                'default' => 'سقف پیام‌های این ماه شما پر شده است. لطفاً کمی بعد دوباره امتحان کنید یا با پشتیبانی تماس بگیرید.', // i18n:widget
+            ],
+            'quota.exceeded_message_en' => [
+                'tab' => 'limits', 'group' => 'quota', 'type' => 'string',
+                'default' => "This month's message allowance has been used up. Please try again later or contact support.",
             ],
 
             // ── Tab 6: system ────────────────────────────────────────────

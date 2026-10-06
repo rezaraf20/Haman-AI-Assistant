@@ -6,9 +6,10 @@ use App\Traits\HasUuid;
 
 class Tenant extends Model {
     use HasUuid, SoftDeletes;
-    protected $fillable = ['slug','name','email','phone','country','timezone','language','schema_name','plan_id','status','trial_ends_at','usage_tokens_current','usage_messages_current','bonus_tokens','wallet_balance_toman','settings','last_active_at','admin_seen_at'];
-    protected $casts = ['trial_ends_at'=>'datetime','settings'=>'array','last_active_at'=>'datetime','admin_seen_at'=>'datetime'];
+    protected $fillable = ['slug','name','email','phone','country','timezone','language','schema_name','plan_id','pending_plan_id','pending_plan_effective_at','status','trial_ends_at','trial_reminder_3d_sent_at','trial_reminder_1d_sent_at','quota_period_started_at','usage_tokens_current','usage_messages_current','bonus_tokens','wallet_balance_toman','settings','last_active_at','admin_seen_at'];
+    protected $casts = ['trial_ends_at'=>'datetime','trial_reminder_3d_sent_at'=>'datetime','trial_reminder_1d_sent_at'=>'datetime','quota_period_started_at'=>'datetime','pending_plan_effective_at'=>'datetime','settings'=>'array','last_active_at'=>'datetime','admin_seen_at'=>'datetime'];
     public function plan()         { return $this->belongsTo(Plan::class); }
+    public function pendingPlan()  { return $this->belongsTo(Plan::class, 'pending_plan_id'); }
     public function users()        { return $this->hasMany(User::class); }
     // The signup owner — every tenant gets exactly one User at creation time
     // (register() / registerViaPhone() in TenantService), so "oldest" reliably

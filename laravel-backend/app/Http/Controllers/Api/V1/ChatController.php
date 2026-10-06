@@ -416,7 +416,7 @@ class ChatController extends BaseApiController
 
         // Rule: off by default — the merchant must consciously enable it,
         // same opt-in gate every other tool in this system already uses.
-        if (!in_array('create_payment_link', $chatbot->enabled_tools ?? [], true)) {
+        if (!in_array('create_payment_link', $chatbot->effectiveTools(), true)) {
             return $this->forbidden('Payment links are not enabled for this chatbot.');
         }
         // Rule: a real cap must be explicitly configured on this chatbot —
@@ -547,7 +547,7 @@ class ChatController extends BaseApiController
 
         $chatbot = Chatbot::find($d['chatbot_id']);
         if (!$chatbot) return $this->notFound('Chatbot not found');
-        if (!in_array('get_order_status', $chatbot->enabled_tools ?? [], true)) {
+        if (!in_array('get_order_status', $chatbot->effectiveTools(), true)) {
             return $this->forbidden('Order status lookup is not enabled for this chatbot.');
         }
 

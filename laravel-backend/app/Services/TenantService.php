@@ -422,7 +422,7 @@ class TenantService
         } catch (\Throwable $e) {}
         // Tool calling — see createTenantTables()'s matching column comment.
         try {
-            DB::statement("ALTER TABLE {$schemaName}.chatbots ADD COLUMN IF NOT EXISTS enabled_tools JSONB NOT NULL DEFAULT '[]'");
+            DB::statement("ALTER TABLE {$schemaName}.chatbots ADD COLUMN IF NOT EXISTS enabled_tools JSONB");
         } catch (\Throwable $e) {}
         // Authenticity fields — see createTenantTables()'s matching column
         // comments and rag_service._authenticity_rule().
@@ -672,15 +672,19 @@ class TenantService
                 -- Which tool-registry tools (see python-ai-service/app/
                 -- services/tools/registry.py) this chatbot may call, e.g.
                 -- a JSON array containing e.g. get_product_availability.
-                -- Empty by default — opt-in per chatbot, same posture as
-                -- lead_capture_enabled:
-                -- every existing chatbot keeps today's retrieval-only
-                -- behavior unchanged unless the merchant explicitly turns
-                -- a tool on. A separate column from widget_config (that one
-                -- is client/widget-facing UI text; this gates a real
-                -- server-side capability with live-data and cost
-                -- implications, never sent to the browser).
-                enabled_tools JSONB NOT NULL DEFAULT '[]',
+                -- NULL by default, not '[]': NULL means the merchant has
+                -- never opened Widget Settings -- Chatbot::effectiveTools()
+                -- falls back to the plan's allowed tools intersected with
+                -- each tool's own default_enabled flag (ChatbotTools), so a
+                -- new chatbot is immediately useful at whatever its plan
+                -- permits. '[]' means the merchant visited the page and
+                -- explicitly unchecked everything -- a real, deliberate
+                -- choice that must stay empty, not be reinterpreted as
+                -- unset. A separate column from widget_config (that one is client/
+                -- widget-facing UI text; this gates a real server-side
+                -- capability with live-data and cost implications, never
+                -- sent to the browser).
+                enabled_tools JSONB,
                 -- Which WordPress content types the plugin is allowed to
                 -- sync into this chatbot's index, plus category/page
                 -- exclusions. Defaults match what sync-everything used to

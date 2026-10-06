@@ -1,85 +1,116 @@
 <?php
 namespace Database\Seeders;
-use App\Models\Plan;
+use App\Support\Settings;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * The four-tier model: trial (7 days, full pro access) -> free (permanent,
+ * hard-capped) -> pro (small shop/corporate site) -> business (large shop/
+ * company). See the 2026-09-30 business-model migration for how these same
+ * fixed ids carried the old free/starter/growth/enterprise rows before this.
+ */
 class PlanSeeder extends Seeder {
     public function run(): void {
-        // features holds display bullets only — see Plan::getDisplayFeaturesAttribute().
-        // It used to smuggle a 'woocommerce' capability flag in here instead,
-        // which nothing ever actually read (grepped: no code checks
-        // $plan->features['woocommerce']) and which foreach-printed as a bare
-        // "1" on every paid plan's public pricing card. Left empty here
-        // rather than inventing marketing copy this codebase has no basis
-        // for — see LandingController's own docblock on not claiming
-        // anything the product can't back. An admin adds real bullets
-        // through PlanResource's Repeater field once there's something
-        // specific to say.
-        // is_public follows the same intent 2026_09_17_000001_add_is_public_
-        // to_plans_table's own one-time UPDATE encodes (the three paid tiers
-        // are worth advertising, Free is the auto-assigned default and
-        // isn't) — set here directly rather than left to that migration,
-        // since on a genuinely fresh install migrations run (in order)
-        // BEFORE this seeder ever creates these rows, so that migration's
-        // UPDATE ... WHERE slug IN (...) would otherwise match zero rows
-        // and every paid plan would silently stay unpublished forever.
+        $freeTools = ['search_products', 'get_product_availability'];
+        $proTools = array_merge($freeTools, [
+            'get_product_variants', 'compare_products', 'recommend_products',
+            'build_cart_url', 'add_to_cart', 'create_payment_link',
+        ]);
+        $businessTools = array_merge($proTools, ['get_order_status']);
+
+        // price_yearly = price_monthly * (12 - months the discount is worth)
+        // — an editable setting, not a hardcoded multiplier, so "two months
+        // free" can become "one month free" from the panel without a code
+        // change. Falls back to 2 (-> the historical *10) if Settings isn't
+        // reachable yet (this seeder can run before the settings table does
+        // on a genuinely fresh install) or hasn't been configured.
+        try {
+            $monthsFree = (float) Settings::get('pricing.annual_discount_months');
+        } catch (\Throwable $e) {
+            $monthsFree = 2.0;
+        }
+        $yearlyMultiplier = max(0, 12 - $monthsFree);
+
         $plans = [
-            ['id' => '00000000-0000-0000-0000-000000000001', 'name'=>'Free',       'slug'=>'free',       'price_monthly'=>0,   'max_chatbots'=>1, 'max_tokens_monthly'=>50000,   'max_documents'=>20,   'max_messages_monthly'=>200,   'features'=>[], 'sort_order'=>0, 'is_public'=>false],
-            ['id' => '00000000-0000-0000-0000-000000000002', 'name'=>'Starter',    'slug'=>'starter',    'price_monthly'=>29,  'max_chatbots'=>2, 'max_tokens_monthly'=>500000,  'max_documents'=>200,  'max_messages_monthly'=>2000,  'features'=>[], 'sort_order'=>1, 'is_public'=>true],
-            ['id' => '00000000-0000-0000-0000-000000000003', 'name'=>'Growth',     'slug'=>'growth',     'price_monthly'=>99,  'max_chatbots'=>5, 'max_tokens_monthly'=>2000000, 'max_documents'=>1000, 'max_messages_monthly'=>10000, 'features'=>[], 'sort_order'=>2, 'is_public'=>true],
-            ['id' => '00000000-0000-0000-0000-000000000004', 'name'=>'Enterprise', 'slug'=>'enterprise', 'price_monthly'=>299, 'max_chatbots'=>20,'max_tokens_monthly'=>10000000,'max_documents'=>5000, 'max_messages_monthly'=>50000, 'features'=>[], 'sort_order'=>3, 'is_public'=>true],
+            [
+                'id' => '00000000-0000-0000-0000-000000000005', 'name' => 'آزمایشی', 'name_en' => 'Trial', 'slug' => 'trial',
+                'price_monthly' => 0, 'max_chatbots' => 3, 'max_tokens_monthly' => 500000, 'max_documents' => 2000,
+                'max_messages_monthly' => 100000, 'max_domains' => 3, 'model_tier' => 'gemini-1.5-flash',
+                'allowed_tools' => $proTools, 'can_purchase_tokens' => false, 'branding_removable' => true,
+                'quota_exceeded_behavior' => 'stop', 'is_public' => false, 'sort_order' => 0,
+            ],
+            [
+                'id' => '00000000-0000-0000-0000-000000000001', 'name' => 'رایگان', 'name_en' => 'Free', 'slug' => 'free',
+                'price_monthly' => 0, 'max_chatbots' => 1, 'max_tokens_monthly' => 150000, 'max_documents' => 100,
+                'max_messages_monthly' => 100, 'max_domains' => 1, 'model_tier' => 'gemini-1.5-flash-8b',
+                'allowed_tools' => $freeTools, 'can_purchase_tokens' => false, 'branding_removable' => false,
+                'quota_exceeded_behavior' => 'stop', 'is_public' => false, 'sort_order' => 1,
+            ],
+            [
+                'id' => '00000000-0000-0000-0000-000000000002', 'name' => 'پرو', 'name_en' => 'Pro', 'slug' => 'pro',
+                'price_monthly' => 990000, 'max_chatbots' => 3, 'max_tokens_monthly' => 3000000, 'max_documents' => 2000,
+                'max_messages_monthly' => 100000, 'max_domains' => 3, 'model_tier' => 'gemini-1.5-flash',
+                'allowed_tools' => $proTools, 'can_purchase_tokens' => true, 'branding_removable' => true,
+                'quota_exceeded_behavior' => 'auto_wallet', 'is_public' => true, 'sort_order' => 2,
+            ],
+            [
+                'id' => '00000000-0000-0000-0000-000000000003', 'name' => 'بیزینس', 'name_en' => 'Business', 'slug' => 'business',
+                'price_monthly' => 2900000, 'max_chatbots' => 10, 'max_tokens_monthly' => 12000000, 'max_documents' => 10000,
+                'max_messages_monthly' => 500000, 'max_domains' => 10, 'model_tier' => 'gemini-1.5-flash',
+                'allowed_tools' => $businessTools, 'can_purchase_tokens' => true, 'branding_removable' => true,
+                'quota_exceeded_behavior' => 'auto_wallet', 'is_public' => true, 'sort_order' => 3,
+            ],
         ];
 
-        // Raw DB::table()->insertOrIgnore(), not Plan::firstOrCreate(): this
-        // runs on every single deploy (docker-entrypoint.sh), and needs to
-        // write these fixed ids ONLY the first time each row doesn't exist
-        // yet — never touching an existing row again, which is what stops
-        // an admin's real price edit (or a deliberate is_active=false) from
-        // being reverted by the next deploy (the direct, confirmed cause of
-        // wrong prices reaching the public pricing page — see the
-        // 2026-09-30 pricing/currency audit).
-        //
-        // Plan::firstOrCreate(['id' => $p['id']], [...]) looks like it
-        // should do exactly that, but doesn't: 'id' is deliberately absent
-        // from Plan::$fillable (same reason as every other HasUuid model in
-        // this app), so on the CREATE path Eloquent's mass-assignment
-        // silently drops the given id and HasUuid mints a random one
-        // instead — the row saves, but never under the id this seeder just
-        // searched for. The next run's firstOrCreate then searches for that
-        // same id again, finds nothing (the real row has a different one),
-        // and tries to insert a second time — colliding on the unique slug
-        // instead. This only ever went unnoticed in production because
-        // these 4 rows were already seeded with their correct fixed ids by
-        // an earlier, pre-Eloquent version of this seeder (raw SQL, no
-        // fillable restriction) before updateOrCreate/firstOrCreate was
-        // ever introduced here — so the CREATE path, and this exact bug,
-        // was never actually exercised there. A genuinely fresh install (or
-        // this seeder's own test) has no such head start and hits it
-        // immediately. insertOrIgnore is a raw query builder call — no
-        // Eloquent fillable filtering — and is a single atomic
-        // "insert only if this id isn't already there" per row, matching
-        // on the table's real primary key (id), not the seeder's own
-        // application-level read-then-write.
+        // insertOrIgnore, not updateOrCreate/firstOrCreate: writes these
+        // defaults only the first time each id doesn't exist yet, so an
+        // admin's price/limit edit is never reverted by a later deploy —
+        // see the 2026-09-29 PlanSeeder fix for why updateOrCreate and
+        // Eloquent firstOrCreate() both fail this in different ways (the
+        // second silently drops 'id' on the create path, since it is
+        // deliberately absent from Plan::$fillable).
         $now = now();
         foreach ($plans as $p) {
             DB::table('plans')->insertOrIgnore([
-                'id'                   => $p['id'],
-                'name'                 => $p['name'],
-                'slug'                 => $p['slug'],
-                'price_monthly'        => $p['price_monthly'],
-                'price_yearly'         => $p['price_monthly'] * 10,
-                'max_chatbots'         => $p['max_chatbots'],
-                'max_tokens_monthly'   => $p['max_tokens_monthly'],
-                'max_documents'        => $p['max_documents'],
-                'max_messages_monthly' => $p['max_messages_monthly'],
-                'features'             => json_encode($p['features']),
-                'sort_order'           => $p['sort_order'],
-                'is_active'            => true,
-                'is_public'            => $p['is_public'],
-                'created_at'           => $now,
-                'updated_at'           => $now,
+                'id'                       => $p['id'],
+                'name'                     => $p['name'],
+                'name_en'                  => $p['name_en'],
+                'slug'                     => $p['slug'],
+                'price_monthly'            => $p['price_monthly'],
+                'price_yearly'             => $p['price_monthly'] * $yearlyMultiplier,
+                'max_chatbots'             => $p['max_chatbots'],
+                'max_tokens_monthly'       => $p['max_tokens_monthly'],
+                'max_documents'            => $p['max_documents'],
+                'max_messages_monthly'     => $p['max_messages_monthly'],
+                'max_domains'              => $p['max_domains'],
+                'model_tier'               => $p['model_tier'],
+                'allowed_tools'            => json_encode($p['allowed_tools']),
+                'can_purchase_tokens'      => $p['can_purchase_tokens'],
+                'branding_removable'       => $p['branding_removable'],
+                'quota_exceeded_behavior'  => $p['quota_exceeded_behavior'],
+                'features'                 => json_encode([]),
+                'sort_order'               => $p['sort_order'],
+                'is_active'                => true,
+                'is_public'                => $p['is_public'],
+                'created_at'               => $now,
+                'updated_at'               => $now,
             ]);
         }
+
+        // Retired legacy row (old 'enterprise') — created only on a fresh
+        // install where nothing has touched it yet; already-deployed
+        // installations get this from the restructure migration instead,
+        // which runs once against the row that already existed there.
+        DB::table('plans')->insertOrIgnore([
+            'id' => '00000000-0000-0000-0000-000000000004',
+            'name' => 'Enterprise (legacy)', 'slug' => 'enterprise-legacy',
+            'price_monthly' => 0, 'price_yearly' => 0,
+            'max_chatbots' => 1, 'max_tokens_monthly' => 100000, 'max_documents' => 50,
+            'max_messages_monthly' => 1000, 'max_domains' => 1,
+            'allowed_tools' => json_encode([]), 'features' => json_encode([]),
+            'is_active' => false, 'is_public' => false, 'sort_order' => 9,
+            'created_at' => $now, 'updated_at' => $now,
+        ]);
     }
 }

@@ -40,6 +40,10 @@ class PaymentLinkTest extends TestCase
             'name' => 'Test Plan', 'slug' => 'test-' . Str::random(8),
             'price_monthly' => 0, 'max_chatbots' => 1, 'max_tokens_monthly' => 1000000,
             'is_active' => true, 'sort_order' => 0,
+            // Chatbot::effectiveTools() intersects this with the chatbot's own
+            // enabled_tools below — without it here, the plan allows nothing
+            // and every request in this file 403s regardless of what it's testing.
+            'allowed_tools' => ['create_payment_link'],
         ]);
         $tenant = Tenant::create([
             'slug' => 'test-' . Str::random(8), 'name' => 'Test Tenant',
@@ -285,6 +289,10 @@ class PaymentLinkTest extends TestCase
             'name' => 'Test Plan', 'slug' => 'test-' . Str::random(8),
             'price_monthly' => 0, 'max_chatbots' => 1, 'max_tokens_monthly' => 1000000,
             'is_active' => true, 'sort_order' => 0,
+            // Chatbot::effectiveTools() intersects this with the chatbot's own
+            // enabled_tools below — without it here, the plan allows nothing
+            // and every request in this file 403s regardless of what it's testing.
+            'allowed_tools' => ['create_payment_link'],
         ]);
         $tenant = Tenant::create([
             'slug' => 'test-' . Str::random(8), 'name' => 'Test Tenant',

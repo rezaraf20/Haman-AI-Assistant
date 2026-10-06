@@ -15,4 +15,33 @@ class Chatbot extends Model {
     public function faqs()          { return $this->hasMany(Faq::class); }
     public function leads()         { return $this->hasMany(Lead::class); }
     public function scopeActive($q) { return $q->where('is_active', true); }
+
+    /**
+     * The one true answer to "which tools can this chatbot actually call
+     * right now" — the intersection of what the merchant switched on
+     * (enabled_tools, this column) and what the tenant's current plan
+     * allows (plans.allowed_tools). Every consumer of enabled_tools must
+     * call this instead of reading the column directly, or the plan-level
+     * gate simply does not exist for that call site — see
+     * LivewireActionAuditTest's sibling concern, "a check that only exists
+     * in one of several places is not a check".
+     *
+     * Deliberately NOT cached: a plan change (upgrade, downgrade, trial
+     * expiry) must take effect on the very next request, not after a
+     * service restart or a TTL — see TrialDowngradeCommand.
+     */
+    public function effectiveTools(?\App\Models\Tenant $tenant = null): array
+    {
+        $tenant ??= app()->bound('current_tenant') ? app('current_tenant') : null;
+        $allowed = $tenant?->plan?->allowed_tools ?? [];
+
+        // NULL (never configured, distinct from an explicit []) means the
+        // merchant has never opened Widget Settings — fall back to each
+        // tool's own default_enabled flag rather than treating it as "none
+        // selected". See TenantService::createTenantTables()'s enabled_tools
+        // column comment and ChatbotTools::defaultEnabledNames().
+        $selected = $this->enabled_tools ?? \App\Support\ChatbotTools::defaultEnabledNames();
+
+        return array_values(array_intersect($selected, $allowed));
+    }
 }

@@ -6,8 +6,8 @@ use App\Traits\HasUuid;
 
 class Plan extends Model {
     use HasUuid;
-    protected $fillable = ['name','name_en','slug','description','description_en','price_monthly','price_yearly','max_chatbots','max_tokens_monthly','max_documents','max_messages_monthly','max_domains','model_tier','features','is_active','is_public','sort_order'];
-    protected $casts = ['features'=>'array','is_active'=>'boolean','is_public'=>'boolean','price_monthly'=>'float'];
+    protected $fillable = ['name','name_en','slug','description','description_en','price_monthly','price_yearly','max_chatbots','max_tokens_monthly','max_documents','max_messages_monthly','max_domains','model_tier','features','allowed_tools','can_purchase_tokens','branding_removable','quota_exceeded_behavior','is_active','is_public','sort_order'];
+    protected $casts = ['features'=>'array','allowed_tools'=>'array','is_active'=>'boolean','is_public'=>'boolean','can_purchase_tokens'=>'boolean','branding_removable'=>'boolean','price_monthly'=>'float'];
 
     // Below this, a paid, publicly-listed plan is almost certainly still the
     // seed value (29/99/299 — plain USD-scale numbers PlanSeeder wrote

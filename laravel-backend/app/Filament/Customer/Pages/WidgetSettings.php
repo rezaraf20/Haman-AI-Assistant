@@ -99,7 +99,14 @@ class WidgetSettings extends Page implements HasForms {
             'lead_capture_not_in_catalog_enabled' => (bool) ($config['lead_capture_not_in_catalog_enabled'] ?? false),
             'lead_capture_out_of_stock_prompt' => $config['lead_capture_out_of_stock_prompt'] ?? '',
             'lead_capture_not_in_catalog_prompt' => $config['lead_capture_not_in_catalog_prompt'] ?? '',
-            'enabled_tools'      => ChatbotTools::sanitise($bot?->enabled_tools ?? []),
+            // NULL means never configured — show what's actually active
+            // right now (plan defaults) as checked, not an empty list that
+            // would wrongly suggest nothing is on. Saving the page from
+            // here always writes an explicit array (see save() below), so
+            // this is the one moment that reads the live default.
+            'enabled_tools'      => $bot && $bot->enabled_tools === null
+                ? $bot->effectiveTools(auth()->user()?->tenant)
+                : ChatbotTools::sanitise($bot?->enabled_tools ?? []),
         ]);
     }
 
@@ -187,13 +194,28 @@ class WidgetSettings extends Page implements HasForms {
                             ->mapWithKeys(fn ($name) => [$name => __('chatbot.tool_' . $name)])
                             ->all())
                         ->descriptions(collect(ChatbotTools::names())
-                            ->mapWithKeys(fn ($name) => [
-                                $name => __('chatbot.tool_' . $name . '_help')
+                            ->mapWithKeys(function ($name) {
+                                $desc = __('chatbot.tool_' . $name . '_help')
                                     . (ChatbotTools::cost($name) === 'none'
                                         ? ''
-                                        : ' - ' . __('chatbot.tool_cost_' . ChatbotTools::cost($name))),
-                            ])
+                                        : ' - ' . __('chatbot.tool_cost_' . ChatbotTools::cost($name)));
+                                // Shown, never hidden, even when the plan
+                                // doesn't allow it yet — seeing a locked
+                                // capability is what actually drives an
+                                // upgrade; a tool that silently isn't there
+                                // drives nothing.
+                                if (!in_array($name, $this->allowedToolsForTenant(), true)) {
+                                    $desc .= ' — ' . __('chatbot.tool_needs_upgrade');
+                                }
+                                return [$name => $desc];
+                            })
                             ->all())
+                        // Filament still submits a pre-checked-but-now-
+                        // disabled option's value on save (disabling only
+                        // blocks toggling it, not the state it already has)
+                        // — the real gate is save()'s own intersection with
+                        // allowedToolsForTenant(), not this UI-only lock.
+                        ->disableOptionWhen(fn (string $value): bool => !in_array($value, $this->allowedToolsForTenant(), true))
                         ->columns(2)
                         ->bulkToggleable(),
                 ]),
@@ -250,15 +272,29 @@ class WidgetSettings extends Page implements HasForms {
                 // enabled; see ChatController::createPaymentLink().
                 'max_payment_link_amount' => $data['max_payment_link_amount'] !== '' && $data['max_payment_link_amount'] !== null
                     ? (float) $data['max_payment_link_amount'] : null,
-                // Sanitised rather than stored as submitted: an unknown name
-                // would sit in the column where the panel, which only renders
-                // known tools, could never switch it off again.
-                'enabled_tools'   => ChatbotTools::sanitise($data['enabled_tools'] ?? []),
+                // Sanitised (an unknown name would sit in the column where
+                // the panel, which only renders known tools, could never
+                // switch it off again) AND intersected with the tenant's
+                // current plan — the UI's own disableOptionWhen() above is
+                // cosmetic; this is the real gate a manipulated POST can't
+                // get past. See Chatbot::effectiveTools(), which applies
+                // this same intersection again on every read — storing only
+                // the allowed subset here is belt, that's suspenders.
+                'enabled_tools'   => array_values(array_intersect(
+                    ChatbotTools::sanitise($data['enabled_tools'] ?? []),
+                    $this->allowedToolsForTenant(),
+                )),
                 'widget_config'   => $widgetConfig,
             ]);
         }
         DB::statement('SET search_path TO public');
 
         Notification::make()->title(__('chatbot.widget_settings_saved'))->success()->send();
+    }
+
+    /** Memoized per request — the form schema's descriptions() closure calls this once per tool option, not once. */
+    private ?array $allowedToolsCache = null;
+    private function allowedToolsForTenant(): array {
+        return $this->allowedToolsCache ??= auth()->user()?->tenant?->plan?->allowed_tools ?? [];
     }
 }

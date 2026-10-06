@@ -110,6 +110,40 @@ class PlanResource extends Resource
                     ->columnSpanFull(),
             ]),
 
+            Section::make(__('plans.section_tools'))
+                ->description(__('plans.section_tools_help'))
+                ->schema([
+                    // Options come from ChatbotTools::names() — the live
+                    // Python tool registry, via that same catalogue class —
+                    // not a list typed out here, so a new tool the registry
+                    // gains shows up as a checkbox automatically instead of
+                    // needing a second place updated to grant any plan
+                    // access to it.
+                    \Filament\Forms\Components\CheckboxList::make('allowed_tools')
+                        ->label('')
+                        ->options(collect(\App\Support\ChatbotTools::names())
+                            ->mapWithKeys(fn ($name) => [$name => __('chatbot.tool_' . $name)])
+                            ->all())
+                        ->columns(2)
+                        ->bulkToggleable(),
+                ]),
+
+            Section::make(__('plans.section_behavior'))->schema([
+                Toggle::make('can_purchase_tokens')->label(__('plans.can_purchase_tokens'))
+                    ->helperText(__('plans.can_purchase_tokens_help'))->default(true),
+                Toggle::make('branding_removable')->label(__('plans.branding_removable'))
+                    ->helperText(__('plans.branding_removable_help'))->default(false),
+                \Filament\Forms\Components\Select::make('quota_exceeded_behavior')
+                    ->label(__('plans.quota_exceeded_behavior'))
+                    ->helperText(__('plans.quota_exceeded_behavior_help'))
+                    ->options([
+                        'stop' => __('plans.quota_behavior_stop'),
+                        'degrade' => __('plans.quota_behavior_degrade'),
+                        'auto_wallet' => __('plans.quota_behavior_auto_wallet'),
+                    ])
+                    ->default('auto_wallet')->required(),
+            ])->columns(3),
+
             Section::make(__('plans.section_visibility'))->schema([
                 Toggle::make('is_active')->label(__('plans.is_active'))
                     ->helperText(__('plans.is_active_help'))->default(true)->live(),

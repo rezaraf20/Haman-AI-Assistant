@@ -142,6 +142,7 @@ return [
     'wp_plugin_key_name' => ':name — WordPress plugin',
     'tools_section' => 'Chatbot tools',
     'tools_section_help' => 'A tool you switch on is one the bot may use during a conversation. Off means it is not offered to the model at all.',
+    'tool_needs_upgrade' => 'Needs the Pro plan or higher',
     'tool_cost_live_query' => 'makes a live request to your site',
     'tool_cost_sms' => 'sends an SMS, billed to your wallet',
     'tool_cost_money' => 'involves a real payment',

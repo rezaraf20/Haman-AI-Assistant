@@ -2,7 +2,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\{ChatbotTypePrice, Plan};
-use App\Support\{LandingContent, MailSettings, Money, Settings};
+use App\Support\{ChatbotTools, LandingContent, MailSettings, Money, Settings};
 use Illuminate\Http\Request;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -55,6 +55,7 @@ class LandingController extends Controller
         $response = response()->view('landing.index', [
             'plans'               => $plans,
             'visiblePlans'        => $visiblePlans,
+            'toolRows'            => $this->toolComparisonRows($visiblePlans),
             'currency'            => $currency,
             'pricingComingSoon'   => $this->pricingLooksUnconfigured($plans, $currency),
             'popularSlug'         => (string) Settings::get('pricing.popular_plan_slug'),
@@ -83,6 +84,27 @@ class LandingController extends Controller
     private function chatbotTypePrices()
     {
         return ChatbotTypePrice::active()->orderBy('price_toman')->get();
+    }
+
+    /**
+     * The feature-comparison table's rows: every tool that at least one of
+     * the given plans actually allows, in ChatbotTools::CATALOGUE's own
+     * order — never the full catalogue unconditionally, so a tool no
+     * published plan grants (nothing today, but a future one could exist
+     * mid-rollout) doesn't show an all-dash row that advertises nothing.
+     * Built from plans.allowed_tools alone; no hand-maintained array here
+     * or in the view ever decides what counts as a "feature" to list.
+     *
+     * @return string[]
+     */
+    private function toolComparisonRows($plans): array
+    {
+        $granted = $plans->flatMap(fn (Plan $plan) => $plan->allowed_tools ?? [])->unique();
+
+        return array_values(array_filter(
+            ChatbotTools::names(),
+            fn (string $name) => $granted->contains($name),
+        ));
     }
 
     /**

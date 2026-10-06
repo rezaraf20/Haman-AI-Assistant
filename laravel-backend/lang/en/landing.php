@@ -117,6 +117,10 @@ return [
     // TODO(business): enterprise wording, and whether its price is public or
     // "contact us".
     'pricing_enterprise_note' => 'Talk to us about larger requirements.',
+    'tool_compare_title' => 'Feature comparison',
+    'tool_compare_feature' => 'Feature',
+    'tool_compare_yes' => 'Included',
+    'tool_compare_no' => 'Not included',
 
     // ── what a chatbot itself costs ─────────────────────────────────────
     'types_title' => 'What a chatbot costs',
