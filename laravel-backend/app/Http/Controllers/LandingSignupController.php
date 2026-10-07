@@ -90,12 +90,16 @@ class LandingSignupController extends Controller
 
         if (!$user->email_verified_at) {
             $user->forceFill(['email_verified_at' => now()])->save();
-            // The one real click that turns "signed up" into "has a working
-            // widget" — and, as of the deletion-lifecycle/signup-abuse work,
-            // the one moment any real resource (schema, chatbot, API key)
-            // gets created at all. See TenantService::provisionVerifiedTenant().
+            // Two calls covering both signup.require_email_verification
+            // modes (see TenantService::provisionVerifiedTenant()'s own
+            // docblock): ON, this is the first moment any real resource
+            // gets created at all; OFF, the resources already exist from
+            // registration and this is what flips the chatbot active.
+            // Each is a no-op under the mode it doesn't apply to.
             if ($user->tenant) {
-                app(TenantService::class)->provisionVerifiedTenant($user->tenant, $user, $user->locale === 'fa' ? 'fa' : 'en');
+                $tenantService = app(TenantService::class);
+                $tenantService->provisionVerifiedTenant($user->tenant, $user, $user->locale === 'fa' ? 'fa' : 'en');
+                $tenantService->activateChatbotsPendingVerification($user->tenant);
             }
         }
 

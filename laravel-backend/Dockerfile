@@ -134,6 +134,15 @@ RUN chmod +x /docker-entrypoint.sh
 # means that first mount comes up writable instead of failing on `mkdir`.
 RUN mkdir -p /shared-assets && chown www-data:www-data /shared-assets
 
+# The deploy-verification gate (scripts/verify-deploy.sh) reads this back
+# from the LIVE container — `docker inspect <container> --format
+# '{{index .Config.Labels "git_commit"}}'` — and fails loudly if it doesn't
+# match the commit that was supposed to go out. Metadata only, placed last
+# so passing a different commit on every build never invalidates any of
+# the cached layers above (composer install in particular is expensive).
+ARG GIT_COMMIT=unknown
+LABEL git_commit=$GIT_COMMIT
+
 USER www-data
 EXPOSE 9000
 ENTRYPOINT ["/docker-entrypoint.sh"]

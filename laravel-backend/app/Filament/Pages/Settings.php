@@ -318,6 +318,13 @@ class Settings extends Page implements HasForms
             'chat'      => __('settings.limits_chat'),
             'tools'     => __('settings.limits_tools'),
             'otp'       => __('settings.limits_otp'),
+            // Existed in the registry already (login throttling,
+            // registrations per IP) but had no section here at all — no
+            // admin could ever see or change them from the panel. Added now
+            // because signup.require_email_verification below needs a
+            // visible toggle to be the real "one switch in the panel" the
+            // deferred-provisioning gate was asked to have.
+            'auth'      => __('settings.limits_auth'),
             'documents' => __('settings.limits_documents'),
             'retrieval' => __('settings.limits_retrieval'),
             'trial'     => __('settings.limits_trial'),

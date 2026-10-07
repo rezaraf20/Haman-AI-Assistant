@@ -157,17 +157,6 @@ class TenantService
                 'signup_risk'   => $data['signup_risk'] ?? [],
             ]);
 
-            // Deliberately NOT created here anymore: the schema, the trial
-            // chatbot, its chatbot_index row, and its API key. All of that
-            // is real resource -- a Postgres schema full of tables, rows
-            // every tenant-scan has to pass over -- and an unverified email
-            // address proves nothing on its own. provisionVerifiedTenant()
-            // creates all four, together, the first time this tenant's
-            // email is actually confirmed (see LandingSignupController::
-            // verify()); PurgeUnverifiedSignupsCommand hard-deletes
-            // whatever never gets there, which is safe precisely because
-            // there is nothing but this tenant row and the user row below
-            // to remove -- no schema, nothing orphaned on Postgres.
             $user = User::create([
                 'id'                => Str::uuid()->toString(),
                 'tenant_id'         => $tenant->id,
@@ -182,15 +171,29 @@ class TenantService
                 // Unlike registerViaPhone(), where the phone number is
                 // already proven by a real OTP challenge before this method
                 // is even reached, nothing here has verified this address
-                // belongs to whoever submitted the form — left null so
-                // createTrialChatbot() creates an inactive chatbot instead
-                // of handing 200 free LLM messages to any email typed into
-                // a box. The caller (LandingSignupController::register() /
-                // EmailLogin::submitRegister()) sends the verification
-                // email; TenantService::activatePendingTrialChatbot() flips
-                // it active once verify() actually sets this column.
+                // belongs to whoever submitted it. createTrialChatbot()
+                // (called from provisionVerifiedTenant() below, or later
+                // from LandingSignupController::verify()) reads this column
+                // to decide is_active, so it must stay null here regardless
+                // of which branch runs next.
                 'email_verified_at' => null,
             ]);
+
+            // The kill switch: see signup.require_email_verification's own
+            // docblock in SettingsRegistry for why this defaults to false.
+            // OFF (default, and the only safe setting until a real test
+            // send is confirmed delivered) restores the exact pre-gate
+            // behaviour — schema, chatbot, chatbot_index, and API key are
+            // all created right now, with the chatbot inactive
+            // (disabled_reason='pending_verification') until the owner
+            // actually clicks the verification link, same as it always was.
+            // ON defers all of that to provisionVerifiedTenant(), called
+            // only once that click happens — see that method's own
+            // docblock, and PurgeUnverifiedSignupsCommand for what catches
+            // an email that never verifies under this mode.
+            if (!Settings::get('signup.require_email_verification')) {
+                $this->provisionVerifiedTenant($tenant, $user, 'en');
+            }
 
             return ['tenant' => $tenant, 'user' => $user];
         });
@@ -272,23 +275,26 @@ class TenantService
 
     /**
      * The real resource footprint of a signup -- the schema, the trial
-     * chatbot, its chatbot_index row, and its API key -- created together,
-     * the first time this tenant's email is actually confirmed (called from
-     * LandingSignupController::verify(), reused by EmailLogin's signup flow
-     * too since both send the same VerifyEmail link). Before this runs, a
-     * tenant row and its user exist and NOTHING else: no schema on disk, so
-     * PurgeUnverifiedSignupsCommand can hard-delete an account that never
-     * gets here without orphaning anything on Postgres.
+     * chatbot, its chatbot_index row, and its API key -- created together.
      *
-     * $user's email_verified_at must already be set before calling this
-     * (verify() sets it, then calls this) -- createTrialChatbot() reads
-     * that column to decide is_active, so calling this any earlier would
-     * create a chatbot nobody can ever use.
+     * Called from two places, depending on signup.require_email_verification
+     * (see its own docblock in SettingsRegistry):
+     *   - OFF (default): registerViaEmail() calls this immediately, with
+     *     $user->email_verified_at still null -- createTrialChatbot() reads
+     *     that column and creates the chatbot inactive
+     *     (disabled_reason='pending_verification'), exactly like signup
+     *     always behaved before this gate existed.
+     *   - ON: only LandingSignupController::verify() calls this, and only
+     *     after it has just set email_verified_at -- so the chatbot is
+     *     created already active, and before this a tenant row and its
+     *     user exist with NOTHING else: no schema on disk, so
+     *     PurgeUnverifiedSignupsCommand can hard-delete an account that
+     *     never gets here without orphaning anything on Postgres.
      *
-     * Idempotent via provisioned_at: a double-click on an old verification
-     * link, or a phone signup (which provisions inline in registerViaPhone()
-     * and never has a reason to reach this method at all), must not create
-     * a second chatbot for the same tenant.
+     * Either way, activateChatbotsPendingVerification() is what actually
+     * flips an inactive chatbot on once verification happens -- this method
+     * only ever creates things once, guarded by provisioned_at, and does
+     * not revisit a tenant it already provisioned.
      */
     public function provisionVerifiedTenant(Tenant $tenant, User $user, string $language = 'en'): void
     {
@@ -297,6 +303,40 @@ class TenantService
         $this->createSchema($tenant->schema_name);
         $this->createTrialChatbot($tenant, $user, $language);
         $tenant->forceFill(['provisioned_at' => now()])->save();
+    }
+
+    /**
+     * The other half of the OFF-mode path above: a chatbot created inactive
+     * at registration (disabled_reason='pending_verification') needs
+     * something to flip it active once the owner actually clicks the
+     * verification link. Scoped to that exact disabled_reason, not "every
+     * inactive chatbot for this tenant" -- a trial later suspended for
+     * expiring or hitting its message cap must not be silently revived
+     * just because an old verification link got clicked.
+     *
+     * Always safe to call regardless of which mode provisioned this tenant:
+     * under ON mode the chatbot was already created active, so this simply
+     * finds nothing to flip.
+     */
+    public function activateChatbotsPendingVerification(Tenant $tenant): void
+    {
+        $entries = DB::table('chatbot_index')
+            ->where('tenant_id', $tenant->id)
+            ->where('disabled_reason', 'pending_verification')
+            ->get(['chatbot_id']);
+
+        if ($entries->isEmpty()) return;
+
+        DB::table('chatbot_index')
+            ->where('tenant_id', $tenant->id)
+            ->where('disabled_reason', 'pending_verification')
+            ->update(['is_active' => true, 'disabled_reason' => null]);
+
+        DB::statement("SET search_path TO {$tenant->schema_name}, public");
+        foreach ($entries as $entry) {
+            DB::table('chatbots')->where('id', $entry->chatbot_id)->update(['is_active' => true]);
+        }
+        DB::statement('SET search_path TO public');
     }
 
     /**

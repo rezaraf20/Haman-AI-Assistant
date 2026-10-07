@@ -204,6 +204,7 @@ return [
     'field_limits_login_lockout_minutes' => 'Account lockout duration (minutes)',
     'field_limits_login_attempts_before_lockout' => 'Failed attempts before lockout',
     'field_limits_register_per_ip_per_day' => 'Registrations per IP per day',
+    'field_signup_require_email_verification' => 'Require email verification before creating a schema/chatbot (only turn on once SMTP is confirmed working)',
     'field_limits_portal_otp_per_ip_per_day' => 'Portal login codes per IP per day',
     'field_limits_sync_requests_per_minute' => 'Sync requests per minute (per key)',
     'field_limits_sync_items_per_request' => 'Maximum items per sync request',

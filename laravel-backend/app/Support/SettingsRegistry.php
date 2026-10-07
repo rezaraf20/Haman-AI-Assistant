@@ -218,6 +218,18 @@ class SettingsRegistry
             'limits.register_per_ip_per_day' => [
                 'tab' => 'limits', 'group' => 'auth', 'type' => 'int', 'default' => 3,
             ],
+            // The kill switch for the deferred-provisioning signup gate
+            // (TenantService::registerViaEmail()/provisionVerifiedTenant()).
+            // Off by default on purpose: SMTP was never actually confirmed
+            // to deliver (see the 2026-10-07 report — host/credentials are
+            // configured, but no real send has ever been verified to reach
+            // an inbox). Turning this on while mail doesn't work would
+            // strand every email signup with an unusable, unverifiable
+            // account and zero resources. Flip to true only after a real
+            // test send is confirmed received — see MailSettings::sendTest().
+            'signup.require_email_verification' => [
+                'tab' => 'limits', 'group' => 'auth', 'type' => 'bool', 'default' => false,
+            ],
             'limits.portal_otp_per_ip_per_day' => [
                 'tab' => 'limits', 'group' => 'otp', 'type' => 'int', 'default' => 10,
             ],
