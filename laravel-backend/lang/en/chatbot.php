@@ -68,6 +68,7 @@ return [
     'contact_support' => 'Contact Support',
     'demand_gap_nav' => 'Demand Gap',
     'demand_gap_range' => 'Range: :from to :to',
+    'demand_gap_reliability_warning' => '"Unanswered" means no indexed page matched this question — not necessarily that the customer got no answer. If the business profile is filled in, the bot may well have answered correctly from that, and this will still show up here as "unanswered"; that\'s deliberate, so the content gap stays visible either way. To see what the customer actually got, check the conversation itself on the Conversations page.',
     'demand_gap_total_questions' => 'Total Questions (This Month)',
     'demand_gap_unanswered' => 'Unanswered Questions',
     'demand_gap_unanswered_list_heading' => 'Most Frequent Unanswered Questions',

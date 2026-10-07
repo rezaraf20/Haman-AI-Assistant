@@ -7,6 +7,10 @@
             {{ __('chatbot.demand_gap_range', ['from' => \App\Support\Jalali::date($data['range_start']), 'to' => \App\Support\Jalali::date($data['range_end'])]) }}
         </p>
 
+        <div class="rounded-lg border border-warning-300 bg-warning-50 px-4 py-3 text-sm text-warning-800 dark:border-warning-500/30 dark:bg-warning-500/10 dark:text-warning-400">
+            {{ __('chatbot.demand_gap_reliability_warning') }}
+        </div>
+
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <x-filament::section>
                 <x-slot name="heading">{{ __('chatbot.demand_gap_total_questions') }}</x-slot>
