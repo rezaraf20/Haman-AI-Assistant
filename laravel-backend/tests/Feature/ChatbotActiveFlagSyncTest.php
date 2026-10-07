@@ -122,7 +122,7 @@ class ChatbotActiveFlagSyncTest extends TestCase
         $this->assertBothTablesAgree($tenant->schema_name, $index->chatbot_id, false, 'before verification');
 
         $user->forceFill(['email_verified_at' => now()])->save();
-        app(TenantService::class)->activatePendingTrialChatbot($tenant);
+        app(TenantService::class)->activateChatbotsPendingVerification($tenant);
 
         $this->assertBothTablesAgree($tenant->schema_name, $index->chatbot_id, true, 'after verification');
     }

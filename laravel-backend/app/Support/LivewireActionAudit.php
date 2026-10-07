@@ -56,6 +56,11 @@ class LivewireActionAudit
             ],
         ],
         \App\Livewire\EmailLogin::class => [
+            'mount' => [
+                'costs' => false, 'security' => false,
+                'protected_by' => null,
+                'unprotected_reason' => 'Records this component\'s own render timestamp for the signup timing signal (see App\Support\SignupRisk) — sets one property, nothing else.',
+            ],
             'toggleMode' => [
                 'costs' => false, 'security' => false,
                 'protected_by' => null,
