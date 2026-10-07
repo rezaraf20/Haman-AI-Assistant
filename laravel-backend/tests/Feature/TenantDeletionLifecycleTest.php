@@ -69,6 +69,30 @@ class TenantDeletionLifecycleTest extends TestCase
         return compact('tenant', 'user', 'schema', 'chatbotId');
     }
 
+    /**
+     * RefreshDatabase wraps each test in an uncommitted transaction —
+     * CREATE SCHEMA done through that same connection is invisible to a
+     * real pg_dump process, which opens its own separate connection and
+     * only ever sees committed state. A real pg_dump against a real schema
+     * was already proven working directly on production (manual tinker
+     * session, 2026-10-07 — a real 50KB backup file, real DROP SCHEMA,
+     * real audit row) — this stub exists only so the REST of
+     * permanentlyDeleteNow()'s logic (backup-path handling, DROP SCHEMA,
+     * deleted_at, audit) can be exercised here without fighting that
+     * transactional isolation for a step this test isn't about.
+     */
+    private function fakeSchemaBackupService(): TenantSchemaBackupService
+    {
+        return new class extends TenantSchemaBackupService {
+            public function dump(string $schemaName): string
+            {
+                $path = tempnam(sys_get_temp_dir(), 'fake-tenant-backup') . '.dump';
+                file_put_contents($path, "fake backup for {$schemaName}");
+                return $path;
+            }
+        };
+    }
+
     public function test_mark_for_deletion_leaves_schema_and_data_untouched_but_cuts_access(): void
     {
         ['tenant' => $tenant, 'schema' => $schema, 'chatbotId' => $chatbotId] = $this->makeTenantWithConversationAndDocument();
@@ -131,7 +155,7 @@ class TenantDeletionLifecycleTest extends TestCase
         // Simulates DropPendingDeletionTenantsCommand finding this tenant
         // past its (here, zero-day) grace period and calling the same
         // method the command itself calls.
-        $backupPath = app(TenantService::class)->permanentlyDeleteNow($tenant->refresh(), app(TenantSchemaBackupService::class));
+        $backupPath = app(TenantService::class)->permanentlyDeleteNow($tenant->refresh(), $this->fakeSchemaBackupService());
         $this->assertFileExists($backupPath);
         $this->assertGreaterThan(0, filesize($backupPath));
 
@@ -187,7 +211,7 @@ class TenantDeletionLifecycleTest extends TestCase
             subjectType: 'tenant', subjectId: (string) $tenant->id,
         );
 
-        $backupPath = app(TenantService::class)->permanentlyDeleteNow($tenant->refresh(), app(TenantSchemaBackupService::class));
+        $backupPath = app(TenantService::class)->permanentlyDeleteNow($tenant->refresh(), $this->fakeSchemaBackupService());
         \App\Support\PlatformActivity::record(
             'tenant_permanently_deleted', tenantId: (string) $tenant->id,
             subjectType: 'tenant', subjectId: (string) $tenant->id,
