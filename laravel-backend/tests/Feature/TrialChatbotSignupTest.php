@@ -86,7 +86,7 @@ class TrialChatbotSignupTest extends TestCase
         ]);
         $tenant = $result['tenant'];
         $result['user']->forceFill(['email_verified_at' => now()])->save();
-        app(TenantService::class)->activatePendingTrialChatbot($tenant);
+        app(TenantService::class)->activateChatbotsPendingVerification($tenant);
 
         $chatbotId = DB::table('chatbot_index')->where('tenant_id', $tenant->id)->value('chatbot_id');
         $response = $this->postJson('/api/v1/chat/session', [
@@ -155,7 +155,7 @@ class TrialChatbotSignupTest extends TestCase
         ]);
         $tenant = $result['tenant'];
 
-        app(TenantService::class)->activatePendingTrialChatbot($tenant);
+        app(TenantService::class)->activateChatbotsPendingVerification($tenant);
 
         $index = ChatbotIndexEntry::where('tenant_id', $tenant->id)->first();
         $this->assertTrue((bool) $index->is_active);
@@ -177,7 +177,7 @@ class TrialChatbotSignupTest extends TestCase
         $index = ChatbotIndexEntry::where('tenant_id', $tenant->id)->first();
         $index->update(['disabled_reason' => 'trial_message_limit_reached']);
 
-        app(TenantService::class)->activatePendingTrialChatbot($tenant);
+        app(TenantService::class)->activateChatbotsPendingVerification($tenant);
 
         $fresh = ChatbotIndexEntry::where('chatbot_id', $index->chatbot_id)->first();
         $this->assertFalse((bool) $fresh->is_active);
