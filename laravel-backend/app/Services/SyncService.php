@@ -432,37 +432,38 @@ class SyncService {
     }
 
     /**
-     * The real completion bookkeeping for a sync run. Status/completed_at
-     * are only ever set here when NOTHING was dispatched for embedding at
-     * all (every item skipped, or the whole batch failed outright) — safe,
-     * since markJobIndexing() was never called and the job is still
-     * sitting at 'running'. Whenever something WAS dispatched, status is
-     * deliberately left alone: it is either already 'indexing' (an async
-     * queue — EmbedDocumentJob::maybeCloseOutSyncJob() moves it from
-     * there once every dispatched document resolves) or already a real
-     * terminal state (QUEUE_CONNECTION=sync already ran and closed out
-     * every document before this method was even reached) — overwriting
-     * either one back to a guessed status here would re-introduce the
-     * exact "sync says completed before embedding actually finished" bug
-     * this whole mechanism exists to close.
+     * The real completion bookkeeping for a sync run. The status/
+     * completed_at update is deliberately a raw, GUARDED query
+     * (->where('status', 'running')) rather than a blind $job->update() —
+     * it only ever takes effect when nothing has moved this job past
+     * 'running' yet, which is exactly "nothing was ever dispatched for
+     * embedding". Everything else (already 'indexing', or already a real
+     * terminal state set by EmbedDocumentJob::maybeCloseOutSyncJob()/
+     * failed()) is left alone.
+     *
+     * This can't be decided from $counts alone, which is why the guard is
+     * on the row's actual status, not a count: under QUEUE_CONNECTION=sync,
+     * a failed embed throws back out of EmbedDocumentJob::dispatch()
+     * synchronously, landing in the SAME per-item try/catch that counts
+     * the whole item as merely 'failed' — never crediting 'new'/'updated'
+     * — even though markJobIndexing() + the job's own failed() hook
+     * already correctly closed the batch out as 'indexed_with_errors' by
+     * the time this method runs. Trusting $counts there would stomp that
+     * already-correct status back to a guessed 'failed'.
      */
     private function finalizeSyncJob(SyncJob $job, array $counts, array $errors = []): void {
         $processed = $counts['new'] + $counts['updated'] + $counts['skipped'];
-        $dispatchedForEmbedding = $counts['new'] + $counts['updated'];
+        $status = ($counts['failed'] > 0 && $processed === 0) ? 'failed' : 'completed';
 
-        $updates = [
+        DB::table('sync_jobs')->where('id', $job->id)->where('status', 'running')
+            ->update(['status' => $status, 'completed_at' => now()]);
+
+        $job->update([
             'items_processed' => $processed,
             'items_failed'    => $counts['failed'],
             'error_log'       => $errors,
             'result'          => $counts,
-        ];
-
-        if ($dispatchedForEmbedding === 0) {
-            $updates['status'] = ($counts['failed'] > 0 && $processed === 0) ? 'failed' : 'completed';
-            $updates['completed_at'] = now();
-        }
-
-        $job->update($updates);
+        ]);
     }
 
     /**

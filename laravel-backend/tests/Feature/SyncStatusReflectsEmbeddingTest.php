@@ -2,6 +2,7 @@
 namespace Tests\Feature;
 
 use App\Models\{Tenant, Plan};
+use App\Models\Tenant\SyncJob;
 use App\Services\TenantService;
 use Illuminate\Support\Facades\{DB, Http};
 use Illuminate\Support\Str;
@@ -24,10 +25,22 @@ use Tests\TestCase;
  * finds the job still at 'running' (not 'indexing' yet) and its own guard
  * never matches, leaving the job stuck at 'indexing' forever once the loop
  * finally does set it.
+ *
+ * SyncService's own methods (unlike EmbedDocumentJob) don't set
+ * search_path themselves — same ambient-context convention as the rest of
+ * this app's synchronous request-path code, which normally runs behind
+ * ValidateChatbotDomain middleware. Called directly here, so each test sets
+ * it explicitly, matching DocumentSyncSkipTest's own pattern.
  */
 class SyncStatusReflectsEmbeddingTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function tearDown(): void
+    {
+        DB::statement('SET search_path TO public');
+        parent::tearDown();
+    }
 
     private function makeTenantWithChatbot(): array
     {
@@ -51,9 +64,12 @@ class SyncStatusReflectsEmbeddingTest extends TestCase
             'id' => $chatbotId, 'name' => 'Test Bot', 'type' => 'support', 'status' => 'active',
             'is_active' => true, 'language' => 'en', 'created_at' => now(), 'updated_at' => now(),
         ]);
-        DB::statement('SET search_path TO public');
 
         return compact('chatbotId', 'schema');
+        // Deliberately leaves search_path set to this tenant's schema --
+        // SyncService's own methods need it, and sync_jobs/documents both
+        // live in it too, so every assertion below runs in the same
+        // context the real call would. tearDown() resets it for the next test.
     }
 
     public function test_sync_does_not_report_completed_until_embedding_actually_finishes(): void
@@ -68,13 +84,11 @@ class SyncStatusReflectsEmbeddingTest extends TestCase
         // QUEUE_CONNECTION=sync means the embed already ran by the time
         // syncFaqs() returns -- this is the real, correct final status,
         // not a lie told before the work happened.
-        $this->assertSame('completed', $job->fresh()->status);
-        $this->assertNotNull($job->fresh()->completed_at);
+        $job = SyncJob::find($job->id);
+        $this->assertSame('completed', $job->status);
+        $this->assertNotNull($job->completed_at);
 
-        DB::statement("SET search_path TO {$schema}, public");
         $doc = DB::table('documents')->where('chatbot_id', $chatbotId)->first();
-        DB::statement('SET search_path TO public');
-
         $this->assertSame('indexed', $doc->status);
         $this->assertSame($job->id, $doc->sync_job_id);
     }
@@ -90,12 +104,9 @@ class SyncStatusReflectsEmbeddingTest extends TestCase
             ['question' => 'Q3', 'answer' => 'A3'],
         ], $schema);
 
-        $this->assertSame('completed', $job->fresh()->status);
+        $this->assertSame('completed', SyncJob::find($job->id)->status);
 
-        DB::statement("SET search_path TO {$schema}, public");
         $indexedCount = DB::table('documents')->where('sync_job_id', $job->id)->where('status', 'indexed')->count();
-        DB::statement('SET search_path TO public');
-
         $this->assertSame(3, $indexedCount);
     }
 
@@ -108,8 +119,9 @@ class SyncStatusReflectsEmbeddingTest extends TestCase
         // never pass through 'indexing' on its way to 'completed'.
         $job = app(\App\Services\SyncService::class)->syncPages($chatbotId, [], $schema);
 
-        $this->assertSame('completed', $job->fresh()->status);
-        $this->assertNotNull($job->fresh()->completed_at);
+        $job = SyncJob::find($job->id);
+        $this->assertSame('completed', $job->status);
+        $this->assertNotNull($job->completed_at);
     }
 
     public function test_the_embed_failure_path_still_closes_out_the_batch(): void
@@ -124,6 +136,6 @@ class SyncStatusReflectsEmbeddingTest extends TestCase
         // tries=3 with a real HTTP failure exhausts its retries
         // synchronously under QUEUE_CONNECTION=sync, landing on
         // 'indexed_with_errors' rather than leaving the batch stuck.
-        $this->assertSame('indexed_with_errors', $job->fresh()->status);
+        $this->assertSame('indexed_with_errors', SyncJob::find($job->id)->status);
     }
 }
