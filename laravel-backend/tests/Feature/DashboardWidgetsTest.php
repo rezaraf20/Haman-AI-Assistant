@@ -181,11 +181,12 @@ class DashboardWidgetsTest extends TestCase
         $count = count(DB::getQueryLog());
         DB::disableQueryLog();
 
-        // 16, not 15: CustomerStatsOverview's wallet stat now resolves the
-        // tenant's currency (Money::forCurrentTenant(), for the Toman/Euro
-        // split) — one extra, necessary, already-memoized-per-request
-        // query (confirmed in the log below: it appears exactly once, not
-        // once per money() call on the page).
-        $this->assertLessThan(16, $count, "Customer dashboard ran {$count} queries (budget: <16). Query log: " . json_encode(array_column(DB::getQueryLog(), 'query')));
+        // 17, not 16: CustomerStatsOverview's wallet stat resolves the
+        // tenant's currency (Money::forCurrentTenant(), one memoized
+        // query), and CustomerDashboardData now also runs one bulk query
+        // for the business-profile onboarding banner (BusinessProfileWarning
+        // / profileGaps) — one query total regardless of chatbot count,
+        // not one per chatbot.
+        $this->assertLessThan(17, $count, "Customer dashboard ran {$count} queries (budget: <17). Query log: " . json_encode(array_column(DB::getQueryLog(), 'query')));
     }
 }

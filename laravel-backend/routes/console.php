@@ -67,3 +67,12 @@ Schedule::command('haman:generate-suggestions')->dailyAt('04:00');
 // the only way to find a renewal that stopped working is to look. Early, so a
 // warning is waiting at the start of the day rather than arriving during it.
 Schedule::command('haman:check-certificates')->dailyAt('06:15');
+
+// The two-phase tenant deletion lifecycle (TenantResource's
+// mark_for_deletion action) and the signup resource-allocation gate
+// (TenantService::registerViaEmail()) — see each command's own docblock.
+// After the nightly backup window (02:30/03:45 above) so a tenant's
+// schema-drop backup never competes with the whole-database dump for
+// pg_dump's own I/O.
+Schedule::command('haman:drop-pending-deletion-tenants')->dailyAt('04:30')->withoutOverlapping();
+Schedule::command('haman:purge-unverified-signups')->dailyAt('04:45');

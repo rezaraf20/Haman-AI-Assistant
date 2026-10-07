@@ -311,6 +311,24 @@ class SettingsRegistry
                 'tab' => 'limits', 'group' => 'trial', 'type' => 'int', 'default' => 200000,
             ],
 
+            // Two-phase tenant deletion (TenantResource's mark_for_deletion
+            // / restore_from_deletion / permanent_delete_now actions) and
+            // the signup resource-allocation gate — see TenantService and
+            // DropPendingDeletionTenantsCommand / PurgeUnverifiedSignupsCommand.
+            'limits.tenant_deletion_grace_days' => [
+                'tab' => 'limits', 'group' => 'lifecycle', 'type' => 'int', 'default' => 7,
+            ],
+            'limits.tenant_schema_backup_retention_days' => [
+                'tab' => 'limits', 'group' => 'lifecycle', 'type' => 'int', 'default' => 90,
+            ],
+            // A tenant whose email is still unverified this long after
+            // signup has, under the deferred-provisioning flow, no schema
+            // and nothing else to lose — see TenantService::registerViaEmail()
+            // and PurgeUnverifiedSignupsCommand, which hard-deletes past this.
+            'limits.unverified_signup_purge_days' => [
+                'tab' => 'limits', 'group' => 'lifecycle', 'type' => 'int', 'default' => 7,
+            ],
+
             // Read by QuotaService — see its own docblock for the
             // check-then-reconcile shape this estimate makes possible.
             'quota.token_reservation_estimate' => [
@@ -337,6 +355,13 @@ class SettingsRegistry
             ],
 
             // ── Tab 6: system ────────────────────────────────────────────
+            // Read by Chatbot::businessHoursNowBlock() to decide "is this
+            // chatbot open right now" — one platform-wide zone rather than
+            // per-tenant, since every tenant on this platform operates in
+            // the same market today; revisit if that stops being true.
+            'system.default_timezone' => [
+                'tab' => 'system', 'group' => 'localization', 'type' => 'string', 'default' => 'Asia/Tehran',
+            ],
             'system.retention_event_payload_days' => [
                 'tab' => 'system', 'group' => 'retention', 'type' => 'int', 'default' => 90,
             ],

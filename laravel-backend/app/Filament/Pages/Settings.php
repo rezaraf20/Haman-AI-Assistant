@@ -322,6 +322,7 @@ class Settings extends Page implements HasForms
             'retrieval' => __('settings.limits_retrieval'),
             'trial'     => __('settings.limits_trial'),
             'quota'     => __('settings.limits_quota'),
+            'lifecycle' => __('settings.limits_lifecycle'),
         ];
 
         $sections = [];
@@ -385,6 +386,11 @@ class Settings extends Page implements HasForms
                             'report' => $this->diskUsageReport(),
                         ])),
                     $this->field('system.disk_warn_percent'),
+                ]),
+            Section::make(__('settings.localization'))
+                ->description(__('settings.localization_desc'))
+                ->schema([
+                    $this->field('system.default_timezone'),
                 ]),
             Section::make(__('settings.retention'))
                 ->description(__('settings.retention_desc'))

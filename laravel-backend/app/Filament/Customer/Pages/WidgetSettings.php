@@ -8,7 +8,7 @@ use Filament\Pages\Page;
 use Filament\Forms\Form;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Concerns\InteractsWithForms;
-use Filament\Forms\Components\{TextInput, Textarea, ColorPicker, Select, Toggle, Repeater, CheckboxList, Section};
+use Filament\Forms\Components\{TextInput, Textarea, ColorPicker, Select, Toggle, Repeater, CheckboxList, Section, Grid, TagsInput, TimePicker};
 use App\Support\ChatbotTools;
 use Filament\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
@@ -67,6 +67,7 @@ class WidgetSettings extends Page implements HasForms {
     public string $chatbotId;
     public string $schemaName;
     public string $chatbotName = '';
+    public bool $profileIncomplete = false;
 
     public function mount(string $chatbot): void {
         $entry = ChatbotIndexEntry::where('chatbot_id', $chatbot)
@@ -107,7 +108,10 @@ class WidgetSettings extends Page implements HasForms {
             'enabled_tools'      => $bot && $bot->enabled_tools === null
                 ? $bot->effectiveTools(auth()->user()?->tenant)
                 : ChatbotTools::sanitise($bot?->enabled_tools ?? []),
+            'business_name'      => $bot?->business_name ?? '',
+            'business_profile'   => $bot?->business_profile ?? [],
         ]);
+        $this->profileIncomplete = (bool) ($bot?->businessProfileMissingCore());
     }
 
     public function getTitle(): string {
@@ -116,6 +120,94 @@ class WidgetSettings extends Page implements HasForms {
 
     public function form(Form $form): Form {
         return $form->statePath('data')->schema([
+            Section::make(__('chatbot.business_profile_section'))
+                ->description(__('chatbot.business_profile_section_help'))
+                ->collapsed(fn () => !$this->profileIncomplete)
+                ->schema([
+                    TextInput::make('business_name')->label(__('chatbot.business_name_label'))->maxLength(255),
+                    Grid::make(2)->schema([
+                        Textarea::make('business_profile.description.fa')->label(__('chatbot.profile_description_fa'))->rows(2)->maxLength(1000),
+                        Textarea::make('business_profile.description.en')->label(__('chatbot.profile_description_en'))->rows(2)->maxLength(1000),
+                    ]),
+                    Grid::make(2)->schema([
+                        Textarea::make('business_profile.address.fa')->label(__('chatbot.profile_address_fa'))->rows(2)->maxLength(500),
+                        Textarea::make('business_profile.address.en')->label(__('chatbot.profile_address_en'))->rows(2)->maxLength(500),
+                    ]),
+                    Grid::make(3)->schema([
+                        TextInput::make('business_profile.city.fa')->label(__('chatbot.profile_city_fa'))->maxLength(100),
+                        TextInput::make('business_profile.city.en')->label(__('chatbot.profile_city_en'))->maxLength(100),
+                        TextInput::make('business_profile.postal_code')->label(__('chatbot.profile_postal_code'))->maxLength(20),
+                    ]),
+                    Grid::make(2)->schema([
+                        TextInput::make('business_profile.province.fa')->label(__('chatbot.profile_province_fa'))->maxLength(100),
+                        TextInput::make('business_profile.province.en')->label(__('chatbot.profile_province_en'))->maxLength(100),
+                    ]),
+                    Grid::make(2)->schema([
+                        TagsInput::make('business_profile.phones')->label(__('chatbot.profile_phones'))->helperText(__('chatbot.profile_phones_help')),
+                        TagsInput::make('business_profile.emails')->label(__('chatbot.profile_emails')),
+                    ]),
+                    Repeater::make('business_profile.working_hours_schedule')
+                        ->label(__('chatbot.profile_hours_label'))
+                        ->helperText(__('chatbot.profile_hours_help'))
+                        ->schema([
+                            CheckboxList::make('days')
+                                ->label(__('chatbot.profile_hours_days_label'))
+                                ->options(collect(\App\Support\BusinessHours::WEEKDAYS)
+                                    ->mapWithKeys(fn ($d) => [$d => __('chatbot.weekday_' . $d)])
+                                    ->all())
+                                ->columns(4)
+                                ->bulkToggleable(),
+                            Toggle::make('closed')
+                                ->label(__('chatbot.profile_hours_closed_label'))
+                                ->live(),
+                            Grid::make(2)->schema([
+                                TimePicker::make('from')
+                                    ->label(__('chatbot.profile_hours_from_label'))
+                                    ->seconds(false)
+                                    ->visible(fn ($get) => !$get('closed'))
+                                    ->required(fn ($get) => !$get('closed')),
+                                TimePicker::make('to')
+                                    ->label(__('chatbot.profile_hours_to_label'))
+                                    ->seconds(false)
+                                    ->visible(fn ($get) => !$get('closed'))
+                                    ->required(fn ($get) => !$get('closed')),
+                            ]),
+                        ])
+                        ->addActionLabel(__('chatbot.profile_hours_add'))
+                        ->maxItems(5)
+                        ->live(),
+                    Grid::make(2)->schema([
+                        Textarea::make('business_profile.working_hours_exceptions.fa')->label(__('chatbot.profile_hours_exceptions_fa'))->helperText(__('chatbot.profile_hours_exceptions_help'))->rows(2)->maxLength(500),
+                        Textarea::make('business_profile.working_hours_exceptions.en')->label(__('chatbot.profile_hours_exceptions_en'))->rows(2)->maxLength(500),
+                    ]),
+                    Grid::make(3)->schema([
+                        TextInput::make('business_profile.social_links.instagram')->label('Instagram')->url()->maxLength(255),
+                        TextInput::make('business_profile.social_links.telegram')->label('Telegram')->url()->maxLength(255),
+                        TextInput::make('business_profile.social_links.whatsapp')->label('WhatsApp')->maxLength(255),
+                    ]),
+                    Grid::make(2)->schema([
+                        TextInput::make('business_profile.support_channel.fa')->label(__('chatbot.profile_support_channel_fa'))->maxLength(255),
+                        TextInput::make('business_profile.support_channel.en')->label(__('chatbot.profile_support_channel_en'))->maxLength(255),
+                    ]),
+                    TextInput::make('business_profile.founded_year')->label(__('chatbot.profile_founded_year'))->numeric()->minValue(1300)->maxValue(1500),
+                    Grid::make(2)->schema([
+                        Textarea::make('business_profile.service_area.fa')->label(__('chatbot.profile_service_area_fa'))->rows(2)->maxLength(500),
+                        Textarea::make('business_profile.service_area.en')->label(__('chatbot.profile_service_area_en'))->rows(2)->maxLength(500),
+                    ]),
+                    Grid::make(2)->schema([
+                        Textarea::make('business_profile.payment_methods.fa')->label(__('chatbot.profile_payment_methods_fa'))->rows(2)->maxLength(500),
+                        Textarea::make('business_profile.payment_methods.en')->label(__('chatbot.profile_payment_methods_en'))->rows(2)->maxLength(500),
+                    ]),
+                    Grid::make(2)->schema([
+                        Textarea::make('business_profile.return_policy_summary.fa')->label(__('chatbot.profile_return_policy_fa'))->rows(2)->maxLength(1000),
+                        Textarea::make('business_profile.return_policy_summary.en')->label(__('chatbot.profile_return_policy_en'))->rows(2)->maxLength(1000),
+                    ]),
+                    Grid::make(2)->schema([
+                        Textarea::make('business_profile.warranty_summary.fa')->label(__('chatbot.profile_warranty_fa'))->rows(2)->maxLength(1000),
+                        Textarea::make('business_profile.warranty_summary.en')->label(__('chatbot.profile_warranty_en'))->rows(2)->maxLength(1000),
+                    ]),
+                ]),
+
             Textarea::make('welcome_message')
                 ->label(__('chatbot.welcome_message_label'))
                 ->rows(2)->live(onBlur: true)->maxLength(2000),
@@ -267,6 +359,12 @@ class WidgetSettings extends Page implements HasForms {
                 'welcome_message' => $data['welcome_message'] ?: null,
                 'system_prompt'   => $data['system_instruction'] ?: null,
                 'authenticity_unknown_message' => $data['authenticity_unknown_message'] ?: null,
+                'business_name'    => $data['business_name'] ?: null,
+                // Prune blank-string leaves so an untouched field stays
+                // genuinely empty (and so Chatbot::businessProfilePromptBlock()
+                // skips it) rather than storing "" that filled()/blank()
+                // checks would otherwise have to special-case everywhere.
+                'business_profile' => $this->pruneBlank($data['business_profile'] ?? []),
                 // create_payment_link (doc-04) — NULL (left blank) means
                 // the feature stays inert even if the tool is otherwise
                 // enabled; see ChatController::createPaymentLink().
@@ -296,5 +394,20 @@ class WidgetSettings extends Page implements HasForms {
     private ?array $allowedToolsCache = null;
     private function allowedToolsForTenant(): array {
         return $this->allowedToolsCache ??= auth()->user()?->tenant?->plan?->allowed_tools ?? [];
+    }
+
+    /** Recursively drops empty-string/null leaves (keeps real 0/false), so an untouched business_profile field is genuinely absent, not stored as "". */
+    private function pruneBlank(array $data): array {
+        $pruned = [];
+        foreach ($data as $key => $value) {
+            if (is_array($value)) {
+                $value = $this->pruneBlank($value);
+                if ($value === []) continue;
+                $pruned[$key] = $value;
+            } elseif (filled($value)) {
+                $pruned[$key] = $value;
+            }
+        }
+        return $pruned;
     }
 }

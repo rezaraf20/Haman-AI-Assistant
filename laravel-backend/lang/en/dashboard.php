@@ -88,4 +88,11 @@ return [
     'onboarding_plugin_installed' => 'WordPress plugin installed and connected',
     'onboarding_first_sync' => 'First content sync completed',
     'onboarding_first_conversation' => 'First conversation with a visitor recorded',
+
+    // Business-profile onboarding banner (persists until the core fields
+    // are filled — unlike the checklist above, this doesn't go away once
+    // first-setup is done)
+    'profile_warning_title' => 'Your bot still can\'t answer basic questions',
+    'profile_warning_desc' => 'Fill in these four fields: address, phone or email, working hours, business description.',
+    'profile_warning_cta' => 'Complete profile',
 ];

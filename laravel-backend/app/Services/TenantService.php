@@ -154,10 +154,20 @@ class TenantService
                 'status'        => 'trial',
                 'trial_ends_at' => now()->addDays(14),
                 'settings'      => ['webhook_secret' => Str::random(32)],
+                'signup_risk'   => $data['signup_risk'] ?? [],
             ]);
 
-            $this->createSchema($schema);
-
+            // Deliberately NOT created here anymore: the schema, the trial
+            // chatbot, its chatbot_index row, and its API key. All of that
+            // is real resource -- a Postgres schema full of tables, rows
+            // every tenant-scan has to pass over -- and an unverified email
+            // address proves nothing on its own. provisionVerifiedTenant()
+            // creates all four, together, the first time this tenant's
+            // email is actually confirmed (see LandingSignupController::
+            // verify()); PurgeUnverifiedSignupsCommand hard-deletes
+            // whatever never gets there, which is safe precisely because
+            // there is nothing but this tenant row and the user row below
+            // to remove -- no schema, nothing orphaned on Postgres.
             $user = User::create([
                 'id'                => Str::uuid()->toString(),
                 'tenant_id'         => $tenant->id,
@@ -182,25 +192,28 @@ class TenantService
                 'email_verified_at' => null,
             ]);
 
-            $this->createTrialChatbot($tenant, $user, 'en');
-
             return ['tenant' => $tenant, 'user' => $user];
         });
     }
 
     /**
-     * Every new tenant gets one working chatbot immediately, on both
-     * self-signup paths, so "sign up" and "have something to test/install"
-     * are the same moment — BuyChatbot's own purchase flow needs wallet
-     * balance a brand-new trial tenant does not have, which was otherwise a
-     * hard stop before anything existed to configure at all. Mirrors
-     * BuyChatbot::purchase()'s three-row shape (chatbot, chatbot_index,
-     * bound API key) deliberately: a trial chatbot is an ordinary chatbot in
-     * every way except type='trial' and the time/message caps
-     * ExpireOverdueChatbotsCommand / EnforceTrialMessageLimitCommand enforce
-     * against it the same way an unpaid renewal would be. Called from
-     * inside registerViaEmail()/registerViaPhone()'s own transaction, so a
-     * failure here rolls the whole signup back rather than leaving a tenant
+     * Every new tenant gets one working chatbot — immediately on the phone
+     * signup path (registerViaPhone(), below, where a real OTP challenge
+     * already proved the contact before this is even called), or on the
+     * email path the moment provisionVerifiedTenant() runs it after a real
+     * verification click (never at registerViaEmail() time itself anymore
+     * — see that method's own comment). Either way, "sign up" and "have
+     * something to test/install" land on the same moment FOR A VERIFIED
+     * signup, which is the point: BuyChatbot's own purchase flow needs
+     * wallet balance a brand-new trial tenant does not have, which was
+     * otherwise a hard stop before anything existed to configure at all.
+     * Mirrors BuyChatbot::purchase()'s three-row shape (chatbot,
+     * chatbot_index, bound API key) deliberately: a trial chatbot is an
+     * ordinary chatbot in every way except type='trial' and the
+     * time/message caps ExpireOverdueChatbotsCommand /
+     * EnforceTrialMessageLimitCommand enforce against it the same way an
+     * unpaid renewal would be. Called inside a transaction in both of its
+     * callers, so a failure here rolls back rather than leaving a tenant
      * with no chatbot and no way to reach one without support's help.
      */
     private function createTrialChatbot(Tenant $tenant, User $user, string $language): void
@@ -258,35 +271,32 @@ class TenantService
     }
 
     /**
-     * The other half of createTrialChatbot()'s email-verification gate —
-     * called once, from wherever a user's email actually gets verified
-     * (LandingSignupController::verify(), reused by EmailLogin's signup
-     * flow too since both send the same VerifyEmail link). Scoped to
-     * disabled_reason='pending_verification' specifically, not just
-     * "reactivate every inactive chatbot for this tenant": a trial that was
-     * later suspended for expiring or hitting its message cap must not be
-     * silently revived just because the owner clicked an old verification
-     * link.
+     * The real resource footprint of a signup -- the schema, the trial
+     * chatbot, its chatbot_index row, and its API key -- created together,
+     * the first time this tenant's email is actually confirmed (called from
+     * LandingSignupController::verify(), reused by EmailLogin's signup flow
+     * too since both send the same VerifyEmail link). Before this runs, a
+     * tenant row and its user exist and NOTHING else: no schema on disk, so
+     * PurgeUnverifiedSignupsCommand can hard-delete an account that never
+     * gets here without orphaning anything on Postgres.
+     *
+     * $user's email_verified_at must already be set before calling this
+     * (verify() sets it, then calls this) -- createTrialChatbot() reads
+     * that column to decide is_active, so calling this any earlier would
+     * create a chatbot nobody can ever use.
+     *
+     * Idempotent via provisioned_at: a double-click on an old verification
+     * link, or a phone signup (which provisions inline in registerViaPhone()
+     * and never has a reason to reach this method at all), must not create
+     * a second chatbot for the same tenant.
      */
-    public function activatePendingTrialChatbot(Tenant $tenant): void
+    public function provisionVerifiedTenant(Tenant $tenant, User $user, string $language = 'en'): void
     {
-        $entries = DB::table('chatbot_index')
-            ->where('tenant_id', $tenant->id)
-            ->where('disabled_reason', 'pending_verification')
-            ->get(['chatbot_id']);
+        if ($tenant->provisioned_at !== null) return;
 
-        if ($entries->isEmpty()) return;
-
-        DB::table('chatbot_index')
-            ->where('tenant_id', $tenant->id)
-            ->where('disabled_reason', 'pending_verification')
-            ->update(['is_active' => true, 'disabled_reason' => null]);
-
-        DB::statement("SET search_path TO {$tenant->schema_name}, public");
-        foreach ($entries as $entry) {
-            DB::table('chatbots')->where('id', $entry->chatbot_id)->update(['is_active' => true]);
-        }
-        DB::statement('SET search_path TO public');
+        $this->createSchema($tenant->schema_name);
+        $this->createTrialChatbot($tenant, $user, $language);
+        $tenant->forceFill(['provisioned_at' => now()])->save();
     }
 
     /**
@@ -316,6 +326,114 @@ class TenantService
         DB::statement('SET search_path TO public');
 
         return true;
+    }
+
+    /**
+     * Phase one of deletion: "marked", not destroyed. The schema is left
+     * completely untouched — only the tenant's status and every one of its
+     * chatbots' is_active flags change, both snapshotted first so
+     * restoreFromDeletion() can put them back exactly, not just "on".
+     * DropPendingDeletionTenantsCommand is the only thing that ever turns
+     * this into a real, irreversible DROP SCHEMA, and only after the grace
+     * period (Settings 'limits.tenant_deletion_grace_days') has passed.
+     *
+     * Deliberately does not touch deleted_at — a tenant marked for deletion
+     * is still the exact tenant it was, just suspended; "deleted" (the
+     * SoftDeletes column) is reserved for the moment the schema is actually
+     * gone, so that column stops being a misleading name for "suspended
+     * with an undo button".
+     */
+    public function markForDeletion(Tenant $tenant): void
+    {
+        $chatbots = DB::table('chatbot_index')->where('tenant_id', $tenant->id)->get(['chatbot_id', 'is_active']);
+
+        $tenant->update([
+            'pending_deletion_at'       => now(),
+            'pending_deletion_snapshot' => [
+                'status'    => $tenant->status,
+                'chatbots'  => $chatbots->pluck('is_active', 'chatbot_id')->all(),
+            ],
+            'status' => 'suspended',
+        ]);
+
+        foreach ($chatbots as $chatbot) {
+            $this->setChatbotActive($chatbot->chatbot_id, false, 'pending_deletion');
+        }
+    }
+
+    /** Phase one, undone — one click, no typed confirmation, since nothing was ever destroyed. */
+    public function restoreFromDeletion(Tenant $tenant): void
+    {
+        $snapshot = (array) ($tenant->pending_deletion_snapshot ?? []);
+
+        foreach ((array) ($snapshot['chatbots'] ?? []) as $chatbotId => $wasActive) {
+            $this->setChatbotActive($chatbotId, (bool) $wasActive, $wasActive ? null : 'pending_verification');
+        }
+
+        $tenant->update([
+            'status'                    => $snapshot['status'] ?? 'active',
+            'pending_deletion_at'       => null,
+            'pending_deletion_snapshot' => null,
+        ]);
+    }
+
+    /**
+     * True if this tenant has ever actually used anything — the single gate
+     * for TenantResource's permanent_delete_now action, which must only
+     * ever be clickable on a tenant nobody can lose anything real from
+     * (an empty test account, never a live customer). usage_tokens_current
+     * covers token spend; conversations/documents are checked directly in
+     * the tenant's own schema since a tenant can have documents synced and
+     * zero conversations yet, which is still real work to protect.
+     */
+    public function hasAnyUsage(Tenant $tenant): bool
+    {
+        if ($tenant->usage_tokens_current > 0 || $tenant->usage_messages_current > 0) return true;
+
+        DB::statement("SET search_path TO {$tenant->schema_name}, public");
+        try {
+            $counts = DB::selectOne('
+                SELECT
+                    EXISTS(SELECT 1 FROM conversations) AS has_conversations,
+                    EXISTS(SELECT 1 FROM documents) AS has_documents
+            ');
+            return (bool) ($counts->has_conversations || $counts->has_documents);
+        } catch (\Throwable $e) {
+            // An unreadable/missing schema is not "zero usage" -- it is
+            // unknown, and unknown must never be treated as safe to
+            // permanently destroy.
+            return true;
+        } finally {
+            DB::statement('SET search_path TO public');
+        }
+    }
+
+    /**
+     * The one place that actually destroys a tenant schema -- backup first,
+     * always, no exception even when hasAnyUsage() is false, because the
+     * backup is cheap insurance against this method itself being called in
+     * error. Shared by the immediate "permanent delete now" action (gated
+     * on hasAnyUsage() === false) and DropPendingDeletionTenantsCommand
+     * (the end of the two-phase grace period, usage or not -- a merchant
+     * who let the grace period lapse chose this by not clicking restore).
+     *
+     * deleted_at is set here, not at markForDeletion() time -- this is the
+     * one moment "deleted" stops being a misleading name for "suspended".
+     */
+    public function permanentlyDeleteNow(Tenant $tenant, TenantSchemaBackupService $backups): string
+    {
+        $backupPath = $backups->dump($tenant->schema_name);
+
+        ApiKey::where('tenant_id', $tenant->id)->delete();
+        User::where('tenant_id', $tenant->id)->delete();
+        DB::table('chatbot_index')->where('tenant_id', $tenant->id)->delete();
+        DB::statement('SET search_path TO public');
+        DB::statement("DROP SCHEMA IF EXISTS \"{$tenant->schema_name}\" CASCADE");
+
+        $tenant->update(['pending_deletion_at' => null, 'pending_deletion_snapshot' => null]);
+        $tenant->delete();
+
+        return $backupPath;
     }
 
     public function createSchema(string $schemaName): void
@@ -371,6 +489,11 @@ class TenantService
         } catch (\Throwable $e) {}
         try {
             DB::statement("ALTER TABLE {$schemaName}.chatbots ADD COLUMN IF NOT EXISTS business_name VARCHAR(255)");
+        } catch (\Throwable $e) {}
+        try {
+            // See createTenantTables()'s matching column comment for why
+            // this is injected into the system prompt always, not retrieved.
+            DB::statement("ALTER TABLE {$schemaName}.chatbots ADD COLUMN IF NOT EXISTS business_profile JSONB NOT NULL DEFAULT '{}'");
         } catch (\Throwable $e) {}
         try {
             // products.tags was TEXT[] (Postgres native array) while
@@ -647,6 +770,26 @@ class TenantService
                 -- the prompt's grounding rules tell the model to say it
                 -- does not know rather than invent one.
                 business_name VARCHAR(255),
+                -- The merchant's own answer to who they are, where they
+                -- are, and how to reach them -- name/description/address/city/
+                -- province/postal_code/phones/emails/social_links/
+                -- support_channel/founded_year/service_area/payment_methods/
+                -- return_policy/warranty, each bilingual {fa,en} where free
+                -- text. working_hours_schedule is structured instead (up to
+                -- 5 rows of {days,closed,from,to} -- see BusinessHours and
+                -- WidgetSettings' repeater), with working_hours_exceptions
+                -- as the one bilingual free-text field alongside it, for
+                -- irregular notes a fixed schedule can't express (a holiday
+                -- closure, a lunch break). Built by
+                -- Chatbot::businessProfilePromptBlock() into a fixed block
+                -- ALWAYS injected into the system prompt (see ChatService::
+                -- gatewayPayload()), never left to retrieval -- it is small
+                -- and the alternative is a bot that cannot answer a plain
+                -- address question because no one ever asked that exact
+                -- sentence on an indexed page. The injected block's own
+                -- instruction is what stops the model inventing an address
+                -- when this is empty, not application code.
+                business_profile JSONB NOT NULL DEFAULT '{}',
                 system_prompt TEXT,
                 welcome_message TEXT,
                 fallback_response TEXT,

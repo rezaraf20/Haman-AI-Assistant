@@ -5,8 +5,6 @@ use App\Support\PlatformAccess;
 
 use App\Models\Tenant;
 use App\Models\Plan;
-use App\Models\User;
-use App\Models\ApiKey;
 use Filament\Forms\Form;
 use Filament\Forms\Components\{TextInput, Select, Section, Textarea};
 use Filament\Resources\Resource;
@@ -19,6 +17,8 @@ use Illuminate\Support\Facades\{DB, Cache};
 use App\Support\PlatformActivity;
 use App\Support\Jalali;
 use App\Support\Money;
+use App\Support\Settings;
+use App\Services\{TenantService, TenantSchemaBackupService};
 use App\Filament\Pages\TenantConversations;
 use App\Filament\Resources\TenantResource\Pages;
 
@@ -148,6 +148,21 @@ class TenantResource extends Resource {
                     ->formatStateUsing(fn ($record) => number_format($record->usage_tokens_current) . ' / ' . ($record->plan?->max_tokens_monthly ? number_format($record->plan->max_tokens_monthly) : '∞'))
                     ->color(fn ($record) => $record->isTokenQuotaExceeded() ? 'danger' : null),
                 TextColumn::make('trial_ends_at')->label(__('panel.trial_ends_at'))->formatStateUsing(fn ($state) => Jalali::dateTime($state))->sortable(),
+                // Scheduled, not yet dropped — see TenantService::markForDeletion().
+                // Blank for the overwhelming majority of rows, which never
+                // reach this state at all.
+                TextColumn::make('pending_deletion_at')->label(__('panel.pending_deletion_column'))
+                    ->formatStateUsing(fn ($state) => $state
+                        ? __('panel.pending_deletion_countdown', ['date' => Jalali::dateTime(\Illuminate\Support\Carbon::parse($state)->addDays((int) Settings::get('limits.tenant_deletion_grace_days')))])
+                        : null)
+                    ->color('danger')->placeholder('—'),
+                // Never a block, only a signal for a human to look twice at
+                // — see App\Support\SignupRisk. Blank for a normal signup.
+                TextColumn::make('signup_risk')->label(__('panel.signup_risk_column'))
+                    ->formatStateUsing(fn ($record) => $record->riskFlags()
+                        ? implode(', ', array_map(fn ($f) => __('panel.risk_flag_' . $f), $record->riskFlags()))
+                        : null)
+                    ->color('warning')->placeholder('—')->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('created_at')->label(__('common.created_at'))->formatStateUsing(fn ($state) => Jalali::dateTime($state))->sortable()->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
@@ -244,34 +259,124 @@ class TenantResource extends Resource {
                             ->success()->send();
                     }),
 
-                Action::make('delete')
-                    ->label(__('common.delete'))
-                    ->icon('heroicon-o-trash')
+                // ── Two-phase deletion ──────────────────────────────────
+                // Phase one, the default: nothing destroyed. Schema stays
+                // exactly as it is; only the tenant's status and every
+                // chatbot's is_active flag change, both snapshotted first
+                // so restore_from_deletion puts them back exactly, not just
+                // "on". See TenantService::markForDeletion().
+                Action::make('mark_for_deletion')
+                    ->label(__('panel.mark_for_deletion'))
+                    ->icon('heroicon-o-clock')
                     ->color('danger')
-                    // A hand-written action, so canDelete() does not gate it.
-                    // The closure below drops the customer's whole schema,
-                    // which makes this the single most dangerous button in
-                    // the panel — hence the guard inside it as well.
-                    ->visible(fn () => PlatformAccess::allows('tenant_lifecycle'))
+                    ->visible(fn (Tenant $record) => PlatformAccess::allows('tenant_lifecycle') && !$record->isPendingDeletion())
+                    ->form([
+                        TextInput::make('confirm_email')
+                            ->label(fn (Tenant $record) => __('panel.type_to_confirm', ['value' => $record->email]))
+                            ->required(),
+                    ])
+                    ->modalHeading(fn (Tenant $record) => __('panel.mark_for_deletion_heading', ['name' => $record->name]))
+                    ->modalDescription(fn () => __('panel.mark_for_deletion_description', ['days' => (int) Settings::get('limits.tenant_deletion_grace_days')]))
+                    ->modalSubmitActionLabel(__('panel.mark_for_deletion_confirm'))
+                    ->action(function (array $data, Tenant $record) {
+                        PlatformAccess::authorize('tenant_lifecycle');
+                        if (trim($data['confirm_email']) !== $record->email) {
+                            Notification::make()->title(__('panel.confirm_mismatch'))->danger()->send();
+                            return;
+                        }
+
+                        app(TenantService::class)->markForDeletion($record);
+
+                        PlatformActivity::record(
+                            'tenant_marked_for_deletion',
+                            tenantId: (string) $record->id,
+                            subjectType: 'tenant',
+                            subjectId: (string) $record->id,
+                            after: ['pending_deletion_at' => now()->toIso8601String()],
+                        );
+
+                        Notification::make()->title(__('panel.mark_for_deletion_done', ['name' => $record->name]))->success()->send();
+                    }),
+
+                // One click, no typed confirmation — nothing was ever
+                // destroyed in phase one, so there is nothing here that
+                // warrants the same friction as the two genuinely
+                // irreversible actions below.
+                Action::make('restore_from_deletion')
+                    ->label(__('panel.restore_from_deletion'))
+                    ->icon('heroicon-o-arrow-uturn-left')
+                    ->color('success')
+                    ->visible(fn (Tenant $record) => PlatformAccess::allows('tenant_lifecycle') && $record->isPendingDeletion())
                     ->requiresConfirmation()
-                    ->modalHeading(fn (Tenant $record) => __('panel.delete_tenant_heading', ['name' => $record->name]))
-                    ->modalDescription(__('panel.delete_tenant_description'))
-                    ->modalSubmitActionLabel(__('panel.delete_tenant_confirm'))
+                    ->modalDescription(__('panel.restore_from_deletion_description'))
                     ->action(function (Tenant $record) {
                         PlatformAccess::authorize('tenant_lifecycle');
-                        $schema = $record->schema_name;
-                        $id     = $record->id;
+                        $before = ['status' => $record->status, 'pending_deletion_at' => (string) $record->pending_deletion_at];
 
-                        ApiKey::where('tenant_id', $id)->delete();
-                        User::where('tenant_id', $id)->delete();
-                        DB::table('chatbot_index')->where('tenant_id', $id)->delete();
-                        DB::statement("SET search_path TO public");
-                        DB::statement("DROP SCHEMA IF EXISTS \"{$schema}\" CASCADE");
+                        app(TenantService::class)->restoreFromDeletion($record);
+
+                        PlatformActivity::record(
+                            'tenant_restored_from_deletion',
+                            tenantId: (string) $record->id,
+                            subjectType: 'tenant',
+                            subjectId: (string) $record->id,
+                            before: $before,
+                            after: ['status' => $record->fresh()->status, 'pending_deletion_at' => null],
+                        );
+
+                        Notification::make()->title(__('panel.restore_from_deletion_done', ['name' => $record->name]))->success()->send();
+                    }),
+
+                // Phase two: separate, explicit, and structurally disabled
+                // the moment this tenant has any real usage at all — see
+                // TenantService::hasAnyUsage(). A tenant with even one
+                // message, document, or token spent cannot reach this
+                // button no matter who is clicking; it stays enabled only
+                // for the kind of row nobody stands to lose anything real
+                // from (a test account, a duplicate signup that never
+                // became anything).
+                Action::make('permanent_delete_now')
+                    ->label(__('panel.permanent_delete_now'))
+                    ->icon('heroicon-o-trash')
+                    ->color('danger')
+                    ->visible(fn () => PlatformAccess::allows('tenant_lifecycle'))
+                    ->disabled(fn (Tenant $record) => app(TenantService::class)->hasAnyUsage($record))
+                    ->tooltip(fn (Tenant $record) => app(TenantService::class)->hasAnyUsage($record)
+                        ? __('panel.permanent_delete_disabled_reason')
+                        : null)
+                    ->form([
+                        TextInput::make('confirm_email')
+                            ->label(fn (Tenant $record) => __('panel.type_to_confirm', ['value' => $record->email]))
+                            ->required(),
+                    ])
+                    ->modalHeading(fn (Tenant $record) => __('panel.permanent_delete_now_heading', ['name' => $record->name]))
+                    ->modalDescription(__('panel.permanent_delete_now_description'))
+                    ->modalSubmitActionLabel(__('panel.permanent_delete_now_confirm'))
+                    ->action(function (array $data, Tenant $record) {
+                        PlatformAccess::authorize('tenant_lifecycle');
+                        $service = app(TenantService::class);
+
+                        if ($service->hasAnyUsage($record)) {
+                            Notification::make()->title(__('panel.permanent_delete_blocked'))->danger()->send();
+                            return;
+                        }
+                        if (trim($data['confirm_email']) !== $record->email) {
+                            Notification::make()->title(__('panel.confirm_mismatch'))->danger()->send();
+                            return;
+                        }
 
                         $name = $record->name;
-                        $record->delete();
+                        $backupPath = $service->permanentlyDeleteNow($record, app(TenantSchemaBackupService::class));
 
-                        Notification::make()->title(__('panel.delete_tenant_success', ['name' => $name]))->success()->send();
+                        PlatformActivity::record(
+                            'tenant_permanently_deleted',
+                            tenantId: (string) $record->id,
+                            subjectType: 'tenant',
+                            subjectId: (string) $record->id,
+                            after: ['schema_name' => $record->schema_name, 'backup' => basename($backupPath)],
+                        );
+
+                        Notification::make()->title(__('panel.permanent_delete_now_done', ['name' => $name]))->success()->send();
                     }),
             ])
             ->defaultSort('created_at', 'desc');

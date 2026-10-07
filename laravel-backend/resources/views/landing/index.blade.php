@@ -632,6 +632,12 @@
             <div class="card" style="margin-top:24px">
                 <form method="POST" action="{{ route('landing.register') }}">
                     @csrf
+                    <input type="hidden" name="form_rendered_at" value="{{ now()->timestamp }}">
+                    {{-- Honeypot: invisible to a human, a plain text field a bot that fills every input trips. Never required, never shown in an error. --}}
+                    <div style="position:absolute;left:-9999px;top:-9999px" aria-hidden="true">
+                        <label for="website">Website</label>
+                        <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+                    </div>
                     <label for="name">{{ __('landing.signup_name') }}</label>
                     <input id="name" name="name" value="{{ old('name') }}" required maxlength="255">
                     @error('name') <div class="field-error">{{ $message }}</div> @enderror

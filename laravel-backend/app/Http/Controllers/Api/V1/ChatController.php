@@ -103,7 +103,10 @@ class ChatController extends BaseApiController
                 'conversation_id' => $existing->id,
                 'session_id'      => $existing->session_id,
                 'welcome_message' => $merged['welcome_message'],
-                'language'        => $chatbot->language,
+                // $existing->language (this session's own negotiated
+                // language), not $chatbot->language — same mismatch as
+                // ChatService::quotaExceededMessage()'s docblock describes.
+                'language'        => $existing->language,
                 'widget_config'   => $merged,
             ]);
         }
@@ -147,7 +150,11 @@ class ChatController extends BaseApiController
             'conversation_id' => $conv->id,
             'session_id'      => $conv->session_id,
             'welcome_message' => $merged['welcome_message'],
-            'language'        => $chatbot->language,
+            // $conv->language (this session's own negotiated language,
+            // just set above from the widget's own request), not
+            // $chatbot->language — same mismatch as
+            // ChatService::quotaExceededMessage()'s docblock describes.
+            'language'        => $conv->language,
             'widget_config'   => $merged,
         ]);
     }
@@ -193,8 +200,12 @@ class ChatController extends BaseApiController
         if ($maxMsgs && $blockMins) {
             $key = 'haman-chat:' . $conv->chatbot_id . ':' . $req->ip();
             if (RateLimiter::tooManyAttempts($key, (int) $maxMsgs)) {
+                // $conv->language (the visitor's actual session), not
+                // $chatbot->language (the merchant's admin default) — see
+                // ChatService::quotaExceededMessage()'s docblock for why
+                // that mismatch is the real "mixed languages" bug.
                 $rateLimitMessage = $chatbot->widget_config['rate_limit_message']
-                    ?? ($chatbot->language === 'en'
+                    ?? ($conv->language === 'en'
                         ? "You've reached the message limit. Please try again in a few minutes."
                         : 'تعداد پیام‌های مجاز شما به پایان رسیده. لطفاً چند دقیقه دیگر دوباره امتحان کنید.'); // i18n:widget
                 return $this->tooManyRequests($rateLimitMessage, RateLimiter::availableIn($key));

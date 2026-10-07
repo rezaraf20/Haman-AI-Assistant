@@ -41,6 +41,12 @@ class LandingSignupController extends Controller
             'country'  => ['required', 'string', Rule::in(array_keys(Countries::all()))],
         ]);
 
+        $data['signup_risk'] = \App\Support\SignupRisk::compute(
+            $request->userAgent(),
+            $request->input(\App\Support\SignupRisk::HONEYPOT_FIELD),
+            $request->filled('form_rendered_at') ? (now()->timestamp - (float) $request->input('form_rendered_at')) : null,
+        );
+
         $result = $tenants->registerViaEmail($data);
         $user = $result['user'];
 
@@ -84,11 +90,12 @@ class LandingSignupController extends Controller
 
         if (!$user->email_verified_at) {
             $user->forceFill(['email_verified_at' => now()])->save();
-            // The other half of createTrialChatbot()'s verification gate —
-            // this is the one real click that turns "signed up" into "has
-            // a working widget."
+            // The one real click that turns "signed up" into "has a working
+            // widget" — and, as of the deletion-lifecycle/signup-abuse work,
+            // the one moment any real resource (schema, chatbot, API key)
+            // gets created at all. See TenantService::provisionVerifiedTenant().
             if ($user->tenant) {
-                app(TenantService::class)->activatePendingTrialChatbot($user->tenant);
+                app(TenantService::class)->provisionVerifiedTenant($user->tenant, $user, $user->locale === 'fa' ? 'fa' : 'en');
             }
         }
 

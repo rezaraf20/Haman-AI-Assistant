@@ -41,6 +41,11 @@
             </form>
         @else
             <form wire:submit="submitRegister">
+                {{-- Honeypot: invisible to a human, a plain text field a bot that fills every input trips. --}}
+                <div style="position:absolute;left:-9999px;top:-9999px" aria-hidden="true">
+                    <label for="haman-register-website">Website</label>
+                    <input type="text" id="haman-register-website" wire:model="website" tabindex="-1" autocomplete="off">
+                </div>
                 <div style="margin-bottom:16px;" wire:key="register-field-name">
                     <label for="haman-register-name" style="{{ $labelStyle }}">{{ __('common.full_name') }}</label>
                     <input id="haman-register-name" name="name" type="text" wire:model="name" autocomplete="name" style="{{ $inputStyle }}">

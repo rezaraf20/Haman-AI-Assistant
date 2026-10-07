@@ -25,6 +25,18 @@ class EmailLogin extends Component {
 
     public ?string $error = null;
 
+    // Signup risk signals — see App\Support\SignupRisk. $website is a
+    // honeypot a human never sees or fills (bound to a visually-hidden
+    // input in the blade view); $mountedAt is this component's own render
+    // time, kept across the whole interaction by Livewire's component
+    // state, so submitRegister() needs no hidden timestamp field at all.
+    public string $website = '';
+    public int $mountedAt = 0;
+
+    public function mount(): void {
+        $this->mountedAt = now()->timestamp;
+    }
+
     public function toggleMode(): void {
         $this->mode = $this->mode === 'login' ? 'register' : 'login';
         $this->error = null;
@@ -125,9 +137,14 @@ class EmailLogin extends Component {
         RateLimiter::hit($key, 86400);
 
         $result = $tenantService->registerViaEmail([
-            'name'     => $this->name,
-            'email'    => $this->email,
-            'password' => $this->password,
+            'name'        => $this->name,
+            'email'       => $this->email,
+            'password'    => $this->password,
+            'signup_risk' => \App\Support\SignupRisk::compute(
+                request()->userAgent(),
+                $this->website,
+                $this->mountedAt > 0 ? (now()->timestamp - $this->mountedAt) : null,
+            ),
         ]);
         $user = $result['user'];
 

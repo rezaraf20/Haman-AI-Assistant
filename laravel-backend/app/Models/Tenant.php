@@ -6,8 +6,8 @@ use App\Traits\HasUuid;
 
 class Tenant extends Model {
     use HasUuid, SoftDeletes;
-    protected $fillable = ['slug','name','email','phone','country','timezone','language','schema_name','plan_id','pending_plan_id','pending_plan_effective_at','status','trial_ends_at','trial_reminder_3d_sent_at','trial_reminder_1d_sent_at','quota_period_started_at','usage_tokens_current','usage_messages_current','bonus_tokens','wallet_balance_toman','settings','last_active_at','admin_seen_at'];
-    protected $casts = ['trial_ends_at'=>'datetime','trial_reminder_3d_sent_at'=>'datetime','trial_reminder_1d_sent_at'=>'datetime','quota_period_started_at'=>'datetime','pending_plan_effective_at'=>'datetime','settings'=>'array','last_active_at'=>'datetime','admin_seen_at'=>'datetime'];
+    protected $fillable = ['slug','name','email','phone','country','timezone','language','schema_name','plan_id','pending_plan_id','pending_plan_effective_at','status','trial_ends_at','trial_reminder_3d_sent_at','trial_reminder_1d_sent_at','quota_period_started_at','usage_tokens_current','usage_messages_current','bonus_tokens','wallet_balance_toman','settings','last_active_at','admin_seen_at','provisioned_at','signup_risk','pending_deletion_at','pending_deletion_snapshot'];
+    protected $casts = ['trial_ends_at'=>'datetime','trial_reminder_3d_sent_at'=>'datetime','trial_reminder_1d_sent_at'=>'datetime','quota_period_started_at'=>'datetime','pending_plan_effective_at'=>'datetime','settings'=>'array','last_active_at'=>'datetime','admin_seen_at'=>'datetime','provisioned_at'=>'datetime','signup_risk'=>'array','pending_deletion_at'=>'datetime','pending_deletion_snapshot'=>'array'];
     public function plan()         { return $this->belongsTo(Plan::class); }
     public function pendingPlan()  { return $this->belongsTo(Plan::class, 'pending_plan_id'); }
     public function users()        { return $this->hasMany(User::class); }
@@ -38,6 +38,16 @@ class Tenant extends Model {
         return $this->bonus_tokens <= 0;
     }
     public function getWebhookSecret(): ?string { return $this->settings['webhook_secret'] ?? null; }
+
+    /** Reversible right up until DropPendingDeletionTenantsCommand actually runs — see TenantService::markForDeletion(). */
+    public function isPendingDeletion(): bool { return $this->pending_deletion_at !== null; }
+
+    /** True only once provisionVerifiedTenant() has actually run — a tenant can exist with no schema at all before this. */
+    public function isProvisioned(): bool { return $this->provisioned_at !== null; }
+
+    /** @return string[] flag names set by TenantService::computeSignupRisk() — never a reason to block, only to show the admin which signups to look at twice. */
+    public function riskFlags(): array { return array_keys(array_filter((array) ($this->signup_risk['flags'] ?? []))); }
+    public function riskScore(): int { return (int) ($this->signup_risk['score'] ?? 0); }
 
     /**
      * The one thing `country` actually controls: which currency this tenant

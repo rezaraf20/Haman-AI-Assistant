@@ -18,7 +18,7 @@ class CustomerDashboardData {
             'chatbotStatuses' => [], 'dailyRows' => collect(), 'monthQuestions' => 0,
             'monthUnanswered' => 0, 'recentUnanswered' => [], 'topTopics' => [],
             'newLeadsThisWeek' => 0, 'maxTokensMonthly' => $maxTokensMonthly,
-            'intentDailyRows' => [], 'intentTotals' => [],
+            'intentDailyRows' => [], 'intentTotals' => [], 'profileGaps' => [],
         ];
     }
 
@@ -126,6 +126,21 @@ class CustomerDashboardData {
         }
         arsort($intentTotals);
 
+        // One bulk query (regardless of how many chatbots this tenant has)
+        // for the business-profile onboarding banner — see
+        // Chatbot::businessProfileMissingCore() for what "basic" means and
+        // BusinessProfileWarning for how this is rendered. Reuses that
+        // model method directly (rather than re-deriving the same four
+        // checks here) so the banner and the WidgetSettings warning can
+        // never drift out of sync with each other.
+        $profileGaps = [];
+        foreach (\App\Models\Tenant\Chatbot::whereIn('id', $chatbots->pluck('chatbot_id'))->get(['id', 'name', 'business_profile']) as $bot) {
+            $missing = $bot->businessProfileMissingCore();
+            if ($missing) {
+                $profileGaps[] = ['chatbot_id' => $bot->id, 'name' => $bot->name ?: '—', 'missing' => $missing];
+            }
+        }
+
         $monthQuestions = 0;
         $monthUnanswered = 0;
         foreach ($dailyRows as $date => $row) {
@@ -178,6 +193,7 @@ class CustomerDashboardData {
             'maxTokensMonthly',
             'intentDailyRows',
             'intentTotals',
+            'profileGaps',
         );
     }
 }

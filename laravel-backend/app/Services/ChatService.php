@@ -15,8 +15,18 @@ class ChatService {
         private NotificationService $notifications,
     ) {}
 
-    private function quotaExceededMessage(Chatbot $chatbot): string {
-        $key = $chatbot->language === 'fa' ? 'quota.exceeded_message_fa' : 'quota.exceeded_message_en';
+    // $language is the CONVERSATION's language (conv.language, set from the
+    // widget's own ?lang= at session creation), never $chatbot->language —
+    // that column is the merchant's admin-configured default and has no
+    // relationship to which language any one visitor is actually chatting
+    // in. Every hardcoded-text fallback in this class (quota/error/lead
+    // capture) was reading $chatbot->language until this fix, which is why
+    // an English-widget visitor could get a Persian system message
+    // mid-conversation — not literally two languages concatenated into one
+    // string, but the same visible symptom: both languages appearing in one
+    // conversation.
+    private function quotaExceededMessage(Chatbot $chatbot, string $language): string {
+        $key = $language === 'fa' ? 'quota.exceeded_message_fa' : 'quota.exceeded_message_en';
         return $chatbot->fallback_response ?? Settings::get($key);
     }
 
@@ -63,14 +73,14 @@ class ChatService {
             // tenant is over their plan's monthly token or message
             // allowance. reservation is 0 here, so finish()'s reconcile is
             // a no-op charge, correctly.
-            $result = ['response'=>$this->quotaExceededMessage($chatbot),'chunk_ids'=>[],'scores'=>[],'sources'=>[],'prompt_tokens'=>0,'completion_tokens'=>0,'total_tokens'=>0,'model'=>$chatbot->llm_model,'latency_ms'=>0,'is_fallback'=>true,'is_unanswered'=>false,'finish_reason'=>'quota_exceeded'];
+            $result = ['response'=>$this->quotaExceededMessage($chatbot, $conv->language),'chunk_ids'=>[],'scores'=>[],'sources'=>[],'prompt_tokens'=>0,'completion_tokens'=>0,'total_tokens'=>0,'model'=>$chatbot->llm_model,'latency_ms'=>0,'is_fallback'=>true,'is_unanswered'=>false,'finish_reason'=>'quota_exceeded'];
         } else {
             try {
                 $payload = $this->gatewayPayload($conv, $msg, $chatbot, $tenant, $history);
                 if ($quota['degrade']) $payload['llm_model'] = Settings::get('quota.degrade_model_name');
                 $result = $this->ai->chat($payload);
             } catch (\Throwable $e) {
-                $result = ['response'=>$chatbot->fallback_response??WidgetDefaults::forLanguage($chatbot->language)['processing_error_response'],'chunk_ids'=>[],'scores'=>[],'sources'=>[],'prompt_tokens'=>0,'completion_tokens'=>0,'total_tokens'=>0,'model'=>$chatbot->llm_model,'latency_ms'=>0,'is_fallback'=>true,'is_unanswered'=>false,'finish_reason'=>'error'];
+                $result = ['response'=>$chatbot->fallback_response??WidgetDefaults::forLanguage($conv->language)['processing_error_response'],'chunk_ids'=>[],'scores'=>[],'sources'=>[],'prompt_tokens'=>0,'completion_tokens'=>0,'total_tokens'=>0,'model'=>$chatbot->llm_model,'latency_ms'=>0,'is_fallback'=>true,'is_unanswered'=>false,'finish_reason'=>'error'];
             }
         }
 
@@ -121,7 +131,7 @@ class ChatService {
 
         $quota = $this->quotaSvc->checkAndReserveTokens($tenant);
         if (!$quota['allowed']) {
-            $text = $this->quotaExceededMessage($chatbot);
+            $text = $this->quotaExceededMessage($chatbot, $conv->language);
             $onDelta($text);
             $result = ['response'=>$text,'chunk_ids'=>[],'scores'=>[],'sources'=>[],'prompt_tokens'=>0,'completion_tokens'=>0,'total_tokens'=>0,'model'=>$chatbot->llm_model,'latency_ms'=>0,'is_fallback'=>true,'is_unanswered'=>false,'finish_reason'=>'quota_exceeded'];
         } else {
@@ -136,7 +146,7 @@ class ChatService {
                     throw new \RuntimeException('Stream ended without a done event');
                 }
             } catch (\Throwable $e) {
-                $text = $chatbot->fallback_response ?? WidgetDefaults::forLanguage($chatbot->language)['processing_error_response'];
+                $text = $chatbot->fallback_response ?? WidgetDefaults::forLanguage($conv->language)['processing_error_response'];
                 $onDelta($text);
                 $result = ['response'=>$text,'chunk_ids'=>[],'scores'=>[],'sources'=>[],'prompt_tokens'=>0,'completion_tokens'=>0,'total_tokens'=>0,'model'=>$chatbot->llm_model,'latency_ms'=>0,'is_fallback'=>true,'is_unanswered'=>false,'finish_reason'=>'error'];
             }
@@ -173,7 +183,14 @@ class ChatService {
     }
 
     private function gatewayPayload(Conversation $conv, string $msg, Chatbot $chatbot, object $tenant, array $history): array {
-        return ['chatbot_id'=>$conv->chatbot_id,'conversation_id'=>$conv->id,'session_id'=>$conv->session_id,'query'=>$msg,'history'=>$history,'schema_name'=>$tenant->schema_name,'top_k'=>$chatbot->retrieval_top_k,'threshold'=>$chatbot->retrieval_threshold ?? Settings::get('limits.retrieval_threshold'),'temperature'=>$chatbot->temperature,'max_tokens'=>$chatbot->max_tokens_response,'llm_model'=>$chatbot->llm_model,'language'=>$chatbot->response_language??'auto','system_prompt'=>$chatbot->system_prompt,'fallback_response'=>$chatbot->fallback_response,'rerank_enabled'=>$chatbot->reranker_enabled,'rerank_threshold'=>$chatbot->rerank_threshold ?? Settings::get('limits.rerank_threshold'),'business_name'=>$chatbot->business_name,'enabled_tools'=>$chatbot->effectiveTools($tenant),'authenticity_unknown_message'=>$chatbot->authenticity_unknown_message];
+        // Always prepended, never left to retrieval — see Chatbot::
+        // businessProfilePromptBlock()'s own docblock for why. Prepended
+        // (not appended) so it reads as the model's grounding context
+        // before any merchant-written instructions that follow it.
+        $systemPrompt = $chatbot->businessProfilePromptBlock();
+        $systemPrompt = $systemPrompt ? trim($systemPrompt . "\n\n" . ($chatbot->system_prompt ?? '')) : $chatbot->system_prompt;
+
+        return ['chatbot_id'=>$conv->chatbot_id,'conversation_id'=>$conv->id,'session_id'=>$conv->session_id,'query'=>$msg,'history'=>$history,'schema_name'=>$tenant->schema_name,'top_k'=>$chatbot->retrieval_top_k,'threshold'=>$chatbot->retrieval_threshold ?? Settings::get('limits.retrieval_threshold'),'temperature'=>$chatbot->temperature,'max_tokens'=>$chatbot->max_tokens_response,'llm_model'=>$chatbot->llm_model,'language'=>$chatbot->response_language??'auto','system_prompt'=>$systemPrompt,'fallback_response'=>$chatbot->fallback_response,'rerank_enabled'=>$chatbot->reranker_enabled,'rerank_threshold'=>$chatbot->rerank_threshold ?? Settings::get('limits.rerank_threshold'),'business_name'=>$chatbot->business_name,'enabled_tools'=>$chatbot->effectiveTools($tenant),'authenticity_unknown_message'=>$chatbot->authenticity_unknown_message];
     }
 
     /** Returns a handleVolunteeredContact()-shaped lead result if $msg

@@ -39,6 +39,11 @@ class PlatformActivity
         'tickets' => ['ticket_replied', 'ticket_status_changed'],
         'staff' => ['staff_created', 'staff_updated', 'staff_activated', 'staff_deactivated'],
         'platform' => ['platform_settings_changed', 'plan_changed'],
+        'tenant_lifecycle' => [
+            'tenant_marked_for_deletion', 'tenant_restored_from_deletion',
+            'tenant_permanently_deleted', 'tenant_deletion_grace_period_elapsed',
+            'unverified_signup_purged',
+        ],
     ];
 
     public static function allActions(): array
@@ -62,14 +67,21 @@ class PlatformActivity
         mixed $actor = null,
     ): void {
         try {
+            // A console/scheduled context (DropPendingDeletionTenantsCommand,
+            // PurgeUnverifiedSignupsCommand) has no authenticated user at
+            // all — this used to just return here, which meant every
+            // cron-triggered destructive action left no audit trail
+            // whatsoever. It now still writes the row, attributed to
+            // 'system' rather than a guessed human, because "nobody did
+            // this, the clock did" is itself a fact worth recording, not a
+            // reason to skip recording.
             $user = $actor ?? auth()->user();
-            if (!$user) return;
 
             DB::table('platform_activity_log')->insert([
                 'id'            => (string) Str::uuid(),
-                'user_id'       => $user->id,
-                'user_email'    => $user->email,
-                'platform_role' => $user->platform_role,
+                'user_id'       => $user?->id,
+                'user_email'    => $user->email ?? 'system',
+                'platform_role' => $user->platform_role ?? 'system',
                 'action'        => $action,
                 'tenant_id'     => $tenantId,
                 'subject_type'  => $subjectType,

@@ -91,4 +91,11 @@ return [
     'onboarding_plugin_installed' => 'افزونه‌ی وردپرس نصب و متصل شد',
     'onboarding_first_sync' => 'اولین sync محتوا انجام شد',
     'onboarding_first_conversation' => 'اولین مکالمه با یک بازدیدکننده ثبت شد',
+
+    // Business-profile onboarding banner (persists until the core fields
+    // are filled — unlike the checklist above, this doesn't go away once
+    // first-setup is done)
+    'profile_warning_title' => 'بات شما هنوز نمی‌تواند به سؤال‌های پایه جواب بدهد',
+    'profile_warning_desc' => 'این چهار فیلد را پر کنید: آدرس، شماره تماس یا ایمیل، ساعت کاری، توضیح کسب‌وکار.',
+    'profile_warning_cta' => 'تکمیل پروفایل',
 ];

@@ -27,7 +27,7 @@ class LeadCaptureService {
 
     /** @return array{response: string, finish_reason: string, lead: ?Lead} */
     public function handleContactAttempt(Conversation $conv, Chatbot $chatbot, string $message): array {
-        $texts = array_merge(WidgetDefaults::forLanguage($chatbot->language), $chatbot->widget_config ?? []);
+        $texts = array_merge(WidgetDefaults::forLanguage($conv->language), $chatbot->widget_config ?? []);
         $parsed = $this->parseContact($message);
 
         if (!$parsed) {
@@ -100,7 +100,7 @@ class LeadCaptureService {
     public function promptForItem(Conversation $conv, Chatbot $chatbot, string $mode, string $item, string $question, ?int $productId = null): ?string {
         if (!self::isModeEnabled($chatbot, $mode)) return null;
 
-        $texts = array_merge(WidgetDefaults::forLanguage($chatbot->language), $chatbot->widget_config ?? []);
+        $texts = array_merge(WidgetDefaults::forLanguage($conv->language), $chatbot->widget_config ?? []);
         $key = $mode === 'out_of_stock' ? 'lead_capture_out_of_stock_prompt' : 'lead_capture_not_in_catalog_prompt';
 
         $conv->update([
@@ -140,7 +140,7 @@ class LeadCaptureService {
             return null;
         }
 
-        $texts = array_merge(WidgetDefaults::forLanguage($chatbot->language), $chatbot->widget_config ?? []);
+        $texts = array_merge(WidgetDefaults::forLanguage($conv->language), $chatbot->widget_config ?? []);
         $conv->update([
             'pending_lead_question' => $question,
             'lead_capture_asked_at' => now(),
@@ -263,7 +263,7 @@ class LeadCaptureService {
      * @return array{response: string, finish_reason: string, lead: ?Lead}
      */
     public function handleVolunteeredContact(Conversation $conv, Chatbot $chatbot, string $message, array $parsed, array $recentHistory): array {
-        $texts = array_merge(WidgetDefaults::forLanguage($chatbot->language), $chatbot->widget_config ?? []);
+        $texts = array_merge(WidgetDefaults::forLanguage($conv->language), $chatbot->widget_config ?? []);
 
         $lead = Lead::create([
             'conversation_id' => $conv->id,
