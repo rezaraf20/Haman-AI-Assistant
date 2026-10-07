@@ -211,9 +211,27 @@ class ChatService {
      * asking for contact info (chatbot has lead capture enabled AND the
      * result came back unanswered), or null if it doesn't apply — the
      * caller decides whether to replace (non-streaming) or append
-     * (streaming) the response text with it. */
+     * (streaming) the response text with it.
+     *
+     * is_unanswered is a RETRIEVAL signal only (no indexed chunk scored
+     * above threshold) — it says nothing about whether the model actually
+     * answered from the business profile instead, which is never
+     * retrieved, always injected directly into the system prompt (see
+     * Chatbot::businessProfilePromptBlock()). Confirmed by a real
+     * production test (2026-10-07, hamantech.ir, "محل شرکت کجاست؟"): the
+     * model correctly answered from the profile, and this method still
+     * discarded that real answer for the generic lead-capture prompt,
+     * because is_unanswered was true regardless. A chatbot with a filled-in
+     * profile already has its own "offer known contact instead of a dead
+     * end" instruction baked into that block, so once one exists, handing
+     * off to lead capture on every profile-covered question is both wrong
+     * (throws away a correct answer) and redundant (the profile's own
+     * instruction already covers the dead-end case the way point 2 of the
+     * business-profile request asked for).
+     */
     private function leadCapturePromptIfApplicable(Conversation $conv, Chatbot $chatbot, array $result, string $question): ?string {
         if (!($result['is_unanswered'] ?? false)) return null;
+        if ($chatbot->businessProfilePromptBlock() !== null) return null;
         if (!LeadCaptureService::isEnabled($chatbot)) return null;
         return $this->leadCapture->promptForContact($conv, $chatbot, $question);
     }
