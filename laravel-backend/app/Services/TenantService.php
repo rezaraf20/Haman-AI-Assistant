@@ -536,6 +536,12 @@ class TenantService
             DB::statement("ALTER TABLE {$schemaName}.chatbots ADD COLUMN IF NOT EXISTS business_profile JSONB NOT NULL DEFAULT '{}'");
         } catch (\Throwable $e) {}
         try {
+            // See createTenantTables()'s matching column comment --
+            // EmbedDocumentJob::maybeCloseOutSyncJob() / SyncService.
+            DB::statement("ALTER TABLE {$schemaName}.documents ADD COLUMN IF NOT EXISTS sync_job_id UUID");
+            DB::statement("CREATE INDEX IF NOT EXISTS documents_sync_job_id_index ON {$schemaName}.documents (sync_job_id)");
+        } catch (\Throwable $e) {}
+        try {
             // products.tags was TEXT[] (Postgres native array) while
             // Product's 'tags' => 'array' Eloquent cast always JSON-encodes
             // — every single product sync failed with "malformed array
@@ -930,6 +936,11 @@ class TenantService
                 retry_count SMALLINT NOT NULL DEFAULT 0,
                 last_synced_at TIMESTAMPTZ,
                 indexed_at TIMESTAMPTZ,
+                -- Which sync run dispatched this document for embedding --
+                -- see EmbedDocumentJob::maybeCloseOutSyncJob() and
+                -- SyncService, the other halves of why a sync no longer
+                -- reports complete the instant it finishes dispatching.
+                sync_job_id UUID,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 UNIQUE(chatbot_id, source_type, external_id)

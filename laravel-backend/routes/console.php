@@ -76,3 +76,8 @@ Schedule::command('haman:check-certificates')->dailyAt('06:15');
 // pg_dump's own I/O.
 Schedule::command('haman:drop-pending-deletion-tenants')->dailyAt('04:30')->withoutOverlapping();
 Schedule::command('haman:purge-unverified-signups')->dailyAt('04:45');
+
+// failed_jobs had 153 unnoticed rows before anything ever looked at this
+// table (2026-10-07) — hourly so a growing count gets caught within the
+// hour, not the next time someone happens to think to check.
+Schedule::command('haman:check-failed-jobs')->hourly();

@@ -97,6 +97,7 @@ class SyncService {
                     'external_id' => (string)$p['id'],
                     'title'       => $p['name'],
                     'raw_content' => $content,
+                    'sync_job_id' => $job->id,
                     'metadata'    => [
                         'price'        => $p['price']??null,
                         // The shop's own currency, or nothing. Never a
@@ -120,17 +121,18 @@ class SyncService {
                     ['name'=>$p['name'],'sku'=>$p['sku']??null,'sku_normalized'=>SkuNormalizer::normalize($p['sku']??null),'type'=>$p['type']??'simple','status'=>$p['status']??'publish','description'=>strip_tags($p['description']??''),'price'=>$p['price']??null,'currency'=>$p['currency']??null,'stock_status'=>$p['stock_status']??'instock','permalink'=>$p['permalink']??null,'featured_image'=>$p['featured_image']??null,'attributes'=>$p['attributes']??[],'tags'=>$p['tags']??[],'authenticity_status'=>$p['authenticity_status']??null,'brand'=>$p['brand']??null,'official_distributor'=>$p['official_distributor']??null,'warranty_period'=>$p['warranty_period']??null,'country_of_origin'=>$p['country_of_origin']??null,'embedding_status'=>'pending','synced_at'=>now()]
                 );
                 if (in_array($outcome, ['new','updated'], true)) {
-                    EmbedDocumentJob::dispatch($doc->id, $chatbotId, $schema);
+                    $this->markJobIndexing($job->id);
+                    EmbedDocumentJob::dispatch($doc->id, $chatbotId, $schema, $job->id);
                 }
                 $this->notifyRestockWaitlist($chatbotId, (int)$p['id'], $p['name'], $previousStock, $p['stock_status'] ?? 'instock');
-                $this->syncAttachments($chatbotId, (int)$p['id'], $p['name'], $p['attachments']??[], $schema);
+                $this->syncAttachments($chatbotId, (int)$p['id'], $p['name'], $p['attachments']??[], $schema, $job->id);
                 $counts[$outcome]++;
             } catch (\Throwable $e) {
                 $counts['failed']++;
                 $errors[] = ['item'=>$p['id']??'?','error'=>$e->getMessage()];
             }
         }
-        $job->update(['status'=>$counts['failed']>0&&($counts['new']+$counts['updated']+$counts['skipped'])===0?'failed':'completed','items_processed'=>$counts['new']+$counts['updated']+$counts['skipped'],'items_failed'=>$counts['failed'],'error_log'=>$errors,'completed_at'=>now(),'result'=>$counts]);
+        $this->finalizeSyncJob($job, $counts, $errors);
         return $job;
     }
 
@@ -150,7 +152,7 @@ class SyncService {
      * is never re-embedded — re-syncing only picks up a genuinely new URL.
      * Not solved here; out of scope for what was asked.
      */
-    private function syncAttachments(string $chatbotId, int $productId, string $productName, array $attachments, string $schema): void {
+    private function syncAttachments(string $chatbotId, int $productId, string $productName, array $attachments, string $schema, ?string $syncJobId = null): void {
         foreach ($attachments as $att) {
             $url = $att['url'] ?? null;
             if (!$url) continue;
@@ -162,6 +164,7 @@ class SyncService {
                     'title'       => $att['name'] ?? (basename(parse_url($url, PHP_URL_PATH) ?: '') ?: $url),
                     'source_url'  => $url,
                     'raw_content' => '',
+                    'sync_job_id' => $syncJobId,
                     'metadata'    => [
                         'url'          => $url,
                         'product_id'   => $productId,
@@ -170,7 +173,8 @@ class SyncService {
                     ],
                 ]);
                 if (in_array($outcome, ['new','updated'], true)) {
-                    EmbedDocumentJob::dispatch($doc->id, $chatbotId, $schema);
+                    $this->markJobIndexing($syncJobId);
+                    EmbedDocumentJob::dispatch($doc->id, $chatbotId, $schema, $syncJobId);
                 }
             } catch (\Throwable $e) {
                 // Best-effort per attachment — one bad URL must not fail
@@ -209,15 +213,17 @@ class SyncService {
                     'external_id' => (string)$page['id'],
                     'title'       => $page['title'],
                     'raw_content' => $page['title']."\n\n".$content,
+                    'sync_job_id' => $job->id,
                     'metadata'    => ['url'=>$page['url']??null,'type'=>'page'],
                 ]);
                 if (in_array($outcome, ['new','updated'], true)) {
-                    EmbedDocumentJob::dispatch($doc->id, $chatbotId, $schema);
+                    $this->markJobIndexing($job->id);
+                    EmbedDocumentJob::dispatch($doc->id, $chatbotId, $schema, $job->id);
                 }
                 $counts[$outcome]++;
             } catch (\Throwable $e) { $counts['failed']++; }
         }
-        $job->update(['status'=>'completed','items_processed'=>$counts['new']+$counts['updated']+$counts['skipped'],'completed_at'=>now(),'result'=>$counts]);
+        $this->finalizeSyncJob($job, $counts);
         return $job;
     }
 
@@ -236,15 +242,17 @@ class SyncService {
                     'external_id' => 'faq_'.md5($faq['question']),
                     'title'       => $faq['question'],
                     'raw_content' => "Q: {$faq['question']}\nA: {$faq['answer']}",
+                    'sync_job_id' => $job->id,
                     'metadata'    => ['type'=>'faq'],
                 ]);
                 if (in_array($outcome, ['new','updated'], true)) {
-                    EmbedDocumentJob::dispatch($doc->id, $chatbotId, $schema);
+                    $this->markJobIndexing($job->id);
+                    EmbedDocumentJob::dispatch($doc->id, $chatbotId, $schema, $job->id);
                 }
                 $counts[$outcome]++;
             } catch (\Throwable $e) { $counts['failed']++; }
         }
-        $job->update(['status'=>'completed','items_processed'=>$counts['new']+$counts['updated']+$counts['skipped'],'completed_at'=>now(),'result'=>$counts]);
+        $this->finalizeSyncJob($job, $counts);
         return $job;
     }
 
@@ -401,6 +409,63 @@ class SyncService {
     }
 
     /**
+     * Moves a sync job past 'running' the moment its FIRST document is
+     * dispatched for embedding — called right before each
+     * EmbedDocumentJob::dispatch(), not after the whole loop.
+     *
+     * Ordering matters here in a way that is easy to get backwards: under
+     * QUEUE_CONNECTION=sync (every test run, and most local dev — see
+     * DEPLOY.md) dispatch() runs the job's handle() immediately, inline,
+     * before this loop even continues. If the status were only set to
+     * 'indexing' AFTER the whole loop finished, EmbedDocumentJob::
+     * maybeCloseOutSyncJob() would already have run (and found status
+     * still 'running', not 'indexing', so its own guard would never match)
+     * by the time this method ever got called — leaving the job stuck at
+     * 'indexing' forever once finalizeSyncJob() finally did set it, since
+     * nothing is left to ever move it further. Marking 'indexing' BEFORE
+     * the first dispatch means the guard already matches whenever that
+     * first embed finishes, synchronously or not.
+     */
+    private function markJobIndexing(?string $syncJobId): void {
+        if (!$syncJobId) return;
+        DB::table('sync_jobs')->where('id', $syncJobId)->where('status', 'running')->update(['status' => 'indexing']);
+    }
+
+    /**
+     * The real completion bookkeeping for a sync run. Status/completed_at
+     * are only ever set here when NOTHING was dispatched for embedding at
+     * all (every item skipped, or the whole batch failed outright) — safe,
+     * since markJobIndexing() was never called and the job is still
+     * sitting at 'running'. Whenever something WAS dispatched, status is
+     * deliberately left alone: it is either already 'indexing' (an async
+     * queue — EmbedDocumentJob::maybeCloseOutSyncJob() moves it from
+     * there once every dispatched document resolves) or already a real
+     * terminal state (QUEUE_CONNECTION=sync already ran and closed out
+     * every document before this method was even reached) — overwriting
+     * either one back to a guessed status here would re-introduce the
+     * exact "sync says completed before embedding actually finished" bug
+     * this whole mechanism exists to close.
+     */
+    private function finalizeSyncJob(SyncJob $job, array $counts, array $errors = []): void {
+        $processed = $counts['new'] + $counts['updated'] + $counts['skipped'];
+        $dispatchedForEmbedding = $counts['new'] + $counts['updated'];
+
+        $updates = [
+            'items_processed' => $processed,
+            'items_failed'    => $counts['failed'],
+            'error_log'       => $errors,
+            'result'          => $counts,
+        ];
+
+        if ($dispatchedForEmbedding === 0) {
+            $updates['status'] = ($counts['failed'] > 0 && $processed === 0) ? 'failed' : 'completed';
+            $updates['completed_at'] = now();
+        }
+
+        $job->update($updates);
+    }
+
+    /**
      * @return array{document: Document, outcome: 'new'|'updated'|'skipped'}
      */
     private function upsertDoc(array $d): array {
@@ -439,6 +504,13 @@ class SyncService {
                 'metadata'       => $d['metadata'] ?? [],
                 'status'         => 'pending',
                 'last_synced_at' => now(),
+                // Which sync run this document belongs to -- see
+                // EmbedDocumentJob::maybeCloseOutSyncJob() for why: a sync
+                // job can't honestly report 'completed' until every
+                // document IT dispatched has actually finished embedding,
+                // and this is how that job finds "every document it
+                // dispatched" again later.
+                'sync_job_id'    => $d['sync_job_id'] ?? null,
             ]
         );
         return ['document' => $doc, 'outcome' => $outcome];

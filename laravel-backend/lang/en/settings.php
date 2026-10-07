@@ -75,6 +75,8 @@ return [
     'cert_expiring' => 'The certificate for :host expires in :days days, on :date. Automatic renewal normally runs about 30 days before expiry, so it has already missed that window.',
     'cert_unreadable' => 'The certificate for :host could not be read: :error',
     'cert_alert_title' => 'Certificate expiring: :host',
+    'failed_jobs_alert_title' => ':count new failed job(s) in the queue',
+    'failed_jobs_alert_body' => ':summary — failed_jobs now has :total row(s) total.',
     'system_status' => 'Service status',
     'system_status_desc' => 'Checked right now.',
     'disk_usage' => 'Disk usage',

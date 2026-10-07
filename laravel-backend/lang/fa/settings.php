@@ -75,6 +75,8 @@ return [
     'cert_expiring' => 'گواهی :host تا :days روز دیگر، در تاریخ :date، منقضی می‌شود. تمدید خودکار معمولاً حدود ۳۰ روز مانده به انقضا اجرا می‌شود، پس این گواهی آن فرصت را از دست داده است.',
     'cert_unreadable' => 'گواهی :host خوانده نشد: :error',
     'cert_alert_title' => 'انقضای گواهی: :host',
+    'failed_jobs_alert_title' => ':count job جدید در صف شکست خورد',
+    'failed_jobs_alert_body' => ':summary — جمع کل در failed_jobs الان :total ردیف است.',
     'system_status' => 'وضعیت سرویس‌ها',
     'system_status_desc' => 'همین حالا بررسی می‌شود.',
     'disk_usage' => 'فضای دیسک',

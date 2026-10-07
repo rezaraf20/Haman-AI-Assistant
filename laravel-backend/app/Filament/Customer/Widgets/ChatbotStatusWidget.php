@@ -21,8 +21,14 @@ class ChatbotStatusWidget extends Widget {
         return array_map(function (array $chatbot) {
             $status = match (true) {
                 !$chatbot['is_active'] => 'suspended',
-                $chatbot['sync_status'] === 'running' => 'syncing',
-                $chatbot['sync_status'] === 'failed' => 'error',
+                // 'indexing': content was pulled, but EmbedDocumentJob
+                // hasn't finished turning it into something the bot can
+                // actually answer from yet — see SyncService::
+                // finalizeSyncJob(). Shown as "syncing" too, not "active":
+                // a merchant checking this right after a sync must not see
+                // a green light before the bot genuinely knows the content.
+                in_array($chatbot['sync_status'], ['running', 'indexing'], true) => 'syncing',
+                in_array($chatbot['sync_status'], ['failed', 'indexed_with_errors'], true) => 'error',
                 default => 'active',
             };
 
