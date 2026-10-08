@@ -60,6 +60,14 @@ Route::prefix('v1')->group(function () {
             ->middleware(['maintenance', 'chatbot.domain', 'throttle:chat-message']);
     });
 
+    // Deliberately outside auth.apikey — see ConnectionTestController's
+    // own docblock for why a diagnostic endpoint can't sit behind the
+    // middleware that would otherwise answer for it. Its own throttle
+    // since an unauthenticated caller could otherwise use this to probe
+    // key prefixes at whatever rate it liked.
+    Route::post('connection-test', [\App\Http\Controllers\Api\V1\ConnectionTestController::class, 'test'])
+        ->middleware('throttle:plugin-api');
+
     // ── Plugin API (API Key) ───────────────────────────
     // Every sync call embeds text at the platform's expense, and a valid
     // key could make them as fast as it liked.

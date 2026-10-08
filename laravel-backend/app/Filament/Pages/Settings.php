@@ -329,6 +329,7 @@ class Settings extends Page implements HasForms
             'retrieval' => __('settings.limits_retrieval'),
             'trial'     => __('settings.limits_trial'),
             'quota'     => __('settings.limits_quota'),
+            'onboarding' => __('settings.limits_onboarding'),
             'lifecycle' => __('settings.limits_lifecycle'),
         ];
 

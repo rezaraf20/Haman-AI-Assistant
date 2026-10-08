@@ -35,7 +35,7 @@ class PlatformActivity
         'access' => ['login', 'logout', 'login_failed'],
         'conversations' => ['conversation_list_opened', 'conversation_viewed', 'contact_revealed'],
         'settings' => ['chatbot_settings_changed', 'tenant_settings_changed', 'site_content_changed', 'brand_changed'],
-        'operations' => ['cache_cleared', 'webhook_secret_rotated', 'sync_triggered'],
+        'operations' => ['cache_cleared', 'webhook_secret_rotated', 'sync_triggered', 'connection_alert_sent'],
         'tickets' => ['ticket_replied', 'ticket_status_changed'],
         'staff' => ['staff_created', 'staff_updated', 'staff_activated', 'staff_deactivated'],
         'platform' => ['platform_settings_changed', 'plan_changed'],

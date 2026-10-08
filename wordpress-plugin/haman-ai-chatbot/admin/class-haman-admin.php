@@ -137,20 +137,25 @@ class Haman_Admin {
         exit;
     }
 
-    /** AJAX: "تست اتصال" — resolves and shows the actually-connected
-     * chatbot's real name, not just a generic pass/fail, so a mistyped-but-
-     * technically-valid-looking chatbot ID doesn't read as "success". */
+    /** AJAX: "تست اتصال" — calls the server's dedicated connection-test
+     * endpoint, which logs every attempt (success or failure) on the
+     * platform side, and returns a precise, bilingual reason the merchant
+     * can act on (wrong key, expired key, suspended chatbot, ...) instead
+     * of a bare "failed". A request that never reaches the server at all
+     * (wrong server address, network/DNS failure) is the one case only
+     * this plugin can see — Haman_Api_Client::test_connection() reports it
+     * as a WP_Error with code 'network'. */
     public function ajax_test_connection(): void {
         check_ajax_referer('haman_admin_ajax','nonce');
         if (!current_user_can('manage_options')) wp_send_json_error(['message'=>'دسترسی ندارید / No permission'], 403);
 
-        $name = (new Haman_Api_Client())->get_connected_chatbot_name();
-        if (is_wp_error($name)) {
-            self::log('Connection test failed: ' . $name->get_error_message());
-            wp_send_json_error(['message' => $name->get_error_message()]);
+        $result = (new Haman_Api_Client())->test_connection();
+        if (is_wp_error($result)) {
+            self::log('Connection test failed (' . $result->get_error_code() . '): ' . $result->get_error_message());
+            wp_send_json_error(['message' => $result->get_error_message(), 'reason' => $result->get_error_code()]);
         }
-        self::log("Connection test succeeded: connected to '{$name}'");
-        wp_send_json_success(['name' => $name]);
+        self::log('Connection test succeeded: ' . $result['message']);
+        wp_send_json_success(['name' => $result['message']]);
     }
 
     public function ajax_clear_cache(): void {

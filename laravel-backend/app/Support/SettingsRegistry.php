@@ -323,6 +323,24 @@ class SettingsRegistry
                 'tab' => 'limits', 'group' => 'trial', 'type' => 'int', 'default' => 200000,
             ],
 
+            // "Never connected" admin widget + the proactive connection-alert
+            // job (see NeverConnectedChatbots and
+            // NotifyUnconnectedChatbotsCommand) — all three admin-configurable
+            // per the 2026-10-08 request rather than hardcoded. The widget's
+            // "N days of silence" default is short on purpose: it is also the
+            // admin's own outreach list, so it should surface a stuck
+            // merchant well before the 48h/7-day customer-facing alerts below
+            // would even fire a second time.
+            'limits.never_connected_silence_days' => [
+                'tab' => 'limits', 'group' => 'onboarding', 'type' => 'int', 'default' => 2,
+            ],
+            'limits.connection_alert_first_hours' => [
+                'tab' => 'limits', 'group' => 'onboarding', 'type' => 'int', 'default' => 48,
+            ],
+            'limits.connection_alert_second_days' => [
+                'tab' => 'limits', 'group' => 'onboarding', 'type' => 'int', 'default' => 7,
+            ],
+
             // Two-phase tenant deletion (TenantResource's mark_for_deletion
             // / restore_from_deletion / permanent_delete_now actions) and
             // the signup resource-allocation gate — see TenantService and

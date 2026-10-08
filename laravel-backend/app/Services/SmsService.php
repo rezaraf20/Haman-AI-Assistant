@@ -151,6 +151,49 @@ class SmsService {
         }
     }
 
+    /**
+     * A plain, free-text SMS for cases that aren't an OTP code — e.g.
+     * NotifyUnconnectedChatbotsCommand's "your plugin still hasn't
+     * connected" alert. Deliberately always uses the plain SendSMS endpoint,
+     * never the pattern/BaseServiceNumber one even if melipayamak_use_pattern
+     * is on: a pattern is a carrier-pre-approved OTP template whose single
+     * variable is filled with $code — routing arbitrary text through it
+     * would not send that text at all, just stuff it into the OTP template's
+     * placeholder. Same daily-cap/counting discipline as send() since this
+     * still spends real money per send.
+     *
+     * @return array{ok:bool}
+     */
+    public function sendPlainMessage(string $phone, string $message): array {
+        $settings = PlatformSetting::current();
+        if (!$settings->melipayamak_username || !$settings->melipayamak_password) {
+            return ['ok' => false];
+        }
+        if (!$this->withinDailyCaps()) {
+            return ['ok' => false];
+        }
+
+        try {
+            $resp = Http::timeout(15)->post('https://rest.payamak-panel.com/api/SendSMS/SendSMS', [
+                'username' => $settings->melipayamak_username,
+                'password' => $settings->melipayamak_password,
+                'to'       => $phone,
+                'from'     => $settings->melipayamak_sender,
+                'text'     => $message,
+                'isflash'  => false,
+            ]);
+            $body = $resp->json();
+            $ok = $resp->successful() && (int) ($body['RetStatus'] ?? 0) === 1;
+
+            if ($ok) $this->countSend();
+
+            return ['ok' => $ok];
+        } catch (\Throwable $e) {
+            report($e);
+            return ['ok' => false];
+        }
+    }
+
     private function send(string $phone, string $code): array {
         $settings = PlatformSetting::current();
         if (!$settings->melipayamak_username || !$settings->melipayamak_password) {

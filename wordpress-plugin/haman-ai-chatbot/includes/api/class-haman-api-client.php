@@ -45,15 +45,77 @@ class Haman_Api_Client {
         return $this->request( 'POST', '/sync/webhook', $payload, [ 'X-Haman-Signature' => $signature ] );
     }
     // Kept for any other internal caller wanting a plain bool — the
-    // Connection tab's own "Test Connection" button uses
-    // get_connected_chatbot_name() instead, since a real chatbot name
-    // proves both the key AND the configured chatbot_id actually resolve,
-    // not just that some valid key was presented.
+    // Connection tab's own "Test Connection" button uses test_connection()
+    // instead, since the server logs that call and can report a precise
+    // failure reason rather than just true/false.
     public function verify_connection(): bool {
         $r = $this->request( 'GET', '/chatbots' );
         return ! is_wp_error( $r );
     }
-    /** @return string|WP_Error the connected chatbot's name, or the error the admin should see verbatim. */
+    /**
+     * "Test Connection", v2 — hits a dedicated server endpoint
+     * (ConnectionTestController) that logs every attempt, success or
+     * failure, on the server side (api_keys.last_used_at alone only ever
+     * told us THAT a plugin never connected, never whether anyone had
+     * tried). Returns a precise, bilingual reason a merchant can actually
+     * act on instead of a bare "failed" — see $reason_messages below for
+     * the exact set the server can report.
+     *
+     * A request that never reaches the server at all (wrong base URL,
+     * DNS failure, the site genuinely unreachable) shows up here as a
+     * WP_Error from wp_remote_request() itself — that case is the one
+     * this method can diagnose that the server never could, since the
+     * server never saw the request to log it.
+     *
+     * @return array{ok:true,message:string}|WP_Error
+     */
+    public function test_connection(): array|WP_Error {
+        if ( empty( $this->api_key ) ) {
+            return new WP_Error( 'no_key', 'کلید API وارد نشده / No API key entered' );
+        }
+
+        $response = wp_remote_request( $this->base_url . '/connection-test', [
+            'method'  => 'POST',
+            'headers' => [ 'Authorization' => 'Bearer ' . $this->api_key, 'Accept' => 'application/json' ],
+            'timeout' => 15,
+        ] );
+
+        if ( is_wp_error( $response ) ) {
+            // The request never reached the server at all -- this is the
+            // ONE case the server-side log can never cover, by definition.
+            return new WP_Error(
+                'network',
+                'اتصال به سرور برقرار نشد (مشکل شبکه یا آدرس سرور اشتباه است): ' . $response->get_error_message()
+                . ' / Could not reach the server (network problem or wrong server address): ' . $response->get_error_message()
+            );
+        }
+
+        $body = json_decode( wp_remote_retrieve_body( $response ), true );
+        $reason = $body['reason'] ?? null;
+
+        if ( ( $body['ok'] ?? false ) === true ) {
+            $name = $body['chatbot_name'] ?? '';
+            return [ 'ok' => true, 'message' => $name
+                ? "متصل شد به «{$name}» / Connected as \"{$name}\""
+                : 'اتصال موفق / Connected successfully' ];
+        }
+
+        $reason_messages = [
+            'missing_key'       => 'کلید API ارسال نشد / No API key was sent',
+            'invalid_key'       => 'کلید API نامعتبر است یا دوباره ساخته شده — کلید جدید را از پورتال کپی کنید / The API key is invalid or was regenerated — copy the current one from the portal',
+            'account_error'     => 'خطا در حساب تننت مرتبط با این کلید / An error with the tenant account behind this key',
+            'key_expired'       => 'کلید API منقضی شده است / This API key has expired',
+            'chatbot_suspended' => 'این چت‌بات غیرفعال یا معلق است — وضعیت پلن/آزمایشی را در پورتال بررسی کنید / This chatbot is suspended — check your plan/trial status in the portal',
+        ];
+        $message = $reason_messages[ $reason ] ?? ( $body['message'] ?? 'خطای نامشخص / Unknown error' );
+
+        return new WP_Error( $reason ?? 'unknown', $message );
+    }
+
+    /** No longer used by the Connection tab (see test_connection()); kept
+     * for any other internal caller that wants the connected chatbot's
+     * real name specifically, proving the configured chatbot_id resolves.
+     * @return string|WP_Error the connected chatbot's name, or the error the admin should see verbatim. */
     public function get_connected_chatbot_name(): string|WP_Error {
         $chatbot_id = get_option( 'haman_chatbot_id', '' );
         if ( empty( $chatbot_id ) ) {

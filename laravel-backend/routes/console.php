@@ -11,6 +11,11 @@ Schedule::command('trial-chatbots:enforce-message-limit')->hourly();
 // chatbot going over — see the command's own docblock for why this is
 // hourly, not daily.
 Schedule::command('trial-chatbots:check-daily-cost')->hourly();
+// Hourly, not daily, so a chatbot that just crossed the 48h/N-day threshold
+// gets its SMS within the hour rather than up to a day late — see the
+// command's own docblock for why this is the active counterpart to the
+// (login-gated) onboarding checklist.
+Schedule::command('haman:notify-unconnected-chatbots')->hourly();
 // Trial-plan expiry (-> free), trial-ending reminders, and scheduled
 // end-of-cycle plan downgrades — see ProcessPlanTransitionsCommand's own
 // docblock. Daily, not hourly: unlike the cost spike this same "trial"
