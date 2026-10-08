@@ -87,6 +87,7 @@ class OtpLoginTest extends TestCase
             ->set('email', 'email-after-phone@example.test')
             ->set('password', 'password123')
             ->set('password_confirmation', 'password123')
+            ->set('mountedAt', now()->timestamp - 30)
             ->call('submitRegister');
 
         $this->assertNotEmpty($emailAttempt->get('error'), 'a phone signup must consume the same daily budget an email signup would, not a separate one');

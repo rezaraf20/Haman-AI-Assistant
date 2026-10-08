@@ -69,9 +69,12 @@ class SignupHoneypotBlockTest extends TestCase
             'company_fax' => 'http://spam.example', // honeypot filled
         ]);
 
-        // Looks exactly like a real success to whatever submitted it.
+        // Looks exactly like a real success to whatever submitted it —
+        // BrandDomains::appUrl() resolves to whichever brand domain is
+        // actually configured (production: app.hamanai.com), so this only
+        // pins the path, not the host.
         $response->assertRedirect();
-        $this->assertSame('http://localhost/portal', $response->headers->get('Location'));
+        $this->assertStringEndsWith('/portal', $response->headers->get('Location'));
 
         $this->assertSame($before, $this->counts(), 'a blocked signup must create no user and no tenant');
         $this->assertDatabaseHas('signup_blocks', ['reason' => 'honeypot_filled', 'source' => 'landing']);

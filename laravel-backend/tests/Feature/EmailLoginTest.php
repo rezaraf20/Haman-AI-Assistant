@@ -63,6 +63,7 @@ class EmailLoginTest extends TestCase
             ->set('email', 'jane@example.test')
             ->set('password', 'password123')
             ->set('password_confirmation', 'password123')
+            ->set('mountedAt', now()->timestamp - 30) // a real human takes more than an instant — see SignupRisk::blockReason()
             ->call('submitRegister')
             ->assertRedirect('/portal');
 
@@ -88,6 +89,7 @@ class EmailLoginTest extends TestCase
             ->set('email', 'pending@example.test')
             ->set('password', 'password123')
             ->set('password_confirmation', 'password123')
+            ->set('mountedAt', now()->timestamp - 30)
             ->call('submitRegister');
 
         $user = User::where('email', 'pending@example.test')->first();
@@ -106,6 +108,7 @@ class EmailLoginTest extends TestCase
             ->set('email', 'nosmtp@example.test')
             ->set('password', 'password123')
             ->set('password_confirmation', 'password123')
+            ->set('mountedAt', now()->timestamp - 30)
             ->call('submitRegister')
             ->assertSet('error', __('auth_email.smtp_unavailable'));
 
@@ -126,6 +129,7 @@ class EmailLoginTest extends TestCase
             ->set('email', 'first@example.test')
             ->set('password', 'password123')
             ->set('password_confirmation', 'password123')
+            ->set('mountedAt', now()->timestamp - 30)
             ->call('submitRegister')
             ->assertRedirect('/portal');
 
@@ -135,6 +139,7 @@ class EmailLoginTest extends TestCase
             ->set('email', 'second@example.test')
             ->set('password', 'password123')
             ->set('password_confirmation', 'password123')
+            ->set('mountedAt', now()->timestamp - 30)
             ->call('submitRegister');
 
         $this->assertNotEmpty($second->get('error'), 'a second signup over the per-IP daily cap must show an error, not silently succeed or fail');
@@ -160,6 +165,7 @@ class EmailLoginTest extends TestCase
             ->set('email', 'taken@example.test')
             ->set('password', 'password123')
             ->set('password_confirmation', 'password123')
+            ->set('mountedAt', now()->timestamp - 30)
             ->call('submitRegister')
             ->assertHasErrors(['email']);
     }
