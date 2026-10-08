@@ -141,12 +141,14 @@ class DashboardWidgetsTest extends TestCase
         $count = count(DB::getQueryLog());
         DB::disableQueryLog();
 
-        // 18, not 15: NeverConnectedChatbots (2026-10-08) adds its own
+        // 20, not 15: NeverConnectedChatbots (2026-10-08) adds its own
         // Settings::get() read (never_connected_silence_days — one query,
         // PlatformSetting::current()) and one flat chatbot_index scan
         // across every tenant — both constant regardless of tenant count,
-        // not a per-tenant query like FailedSyncsTable's.
-        $this->assertLessThan(18, $count, "Admin dashboard ran {$count} queries (budget: <18). Query log: " . json_encode(array_column(DB::getQueryLog(), 'query')));
+        // not a per-tenant query like FailedSyncsTable's. SignupBlockRatioWidget
+        // (same day, the honeypot/timing block ratio) adds two more flat
+        // counts (signup_blocks, tenants) behind its own 5-minute cache.
+        $this->assertLessThan(20, $count, "Admin dashboard ran {$count} queries (budget: <20). Query log: " . json_encode(array_column(DB::getQueryLog(), 'query')));
     }
 
     public function test_customer_dashboard_query_count_is_bounded(): void

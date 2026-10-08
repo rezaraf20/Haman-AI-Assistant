@@ -156,8 +156,11 @@ class TenantResource extends Resource {
                         ? __('panel.pending_deletion_countdown', ['date' => Jalali::dateTime(\Illuminate\Support\Carbon::parse($state)->addDays((int) Settings::get('limits.tenant_deletion_grace_days')))])
                         : null)
                     ->color('danger')->placeholder('—'),
-                // Never a block, only a signal for a human to look twice at
-                // — see App\Support\SignupRisk. Blank for a normal signup.
+                // Only ever a signal for a human to look twice at, never a
+                // block — see App\Support\SignupRisk::compute(). A signup
+                // blockReason() actually refused never reaches this table
+                // at all; see the admin dashboard's SignupBlockRatioWidget
+                // for those. Blank here for a normal signup.
                 TextColumn::make('signup_risk')->label(__('panel.signup_risk_column'))
                     ->formatStateUsing(fn ($record) => $record->riskFlags()
                         ? implode(', ', array_map(fn ($f) => __('panel.risk_flag_' . $f), $record->riskFlags()))

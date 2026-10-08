@@ -218,6 +218,25 @@ class SettingsRegistry
             'limits.register_per_ip_per_day' => [
                 'tab' => 'limits', 'group' => 'auth', 'type' => 'int', 'default' => 3,
             ],
+            // SignupRisk's two timing thresholds (2026-10-08, "honeypot
+            // should block, not just tag"). Below the BLOCK threshold, no
+            // genuine human could plausibly have rendered the form, read
+            // it, and submitted — refused outright, logged to
+            // signup_blocks, nothing created. Between the block and tag
+            // thresholds, still unusually fast but not implausible for a
+            // password-manager-assisted human — only tagged on
+            // tenants.signup_risk for a human to look at twice, never
+            // refused on its own. tag MUST stay >= block or every blocked
+            // submission would also show up as merely tagged, which can't
+            // happen since blocked ones never reach compute() at all — kept
+            // as two independent numbers anyway since an admin tightening
+            // one is a deliberate, separate decision from the other.
+            'limits.signup_too_fast_block_seconds' => [
+                'tab' => 'limits', 'group' => 'auth', 'type' => 'float', 'default' => 1.0,
+            ],
+            'limits.signup_too_fast_tag_seconds' => [
+                'tab' => 'limits', 'group' => 'auth', 'type' => 'float', 'default' => 3.0,
+            ],
             // The kill switch for the deferred-provisioning signup gate
             // (TenantService::registerViaEmail()/provisionVerifiedTenant()).
             // Off by default on purpose: SMTP was never actually confirmed

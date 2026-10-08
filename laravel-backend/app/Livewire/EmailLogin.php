@@ -25,12 +25,15 @@ class EmailLogin extends Component {
 
     public ?string $error = null;
 
-    // Signup risk signals — see App\Support\SignupRisk. $website is a
+    // Signup risk signals — see App\Support\SignupRisk. $companyFax is a
     // honeypot a human never sees or fills (bound to a visually-hidden
-    // input in the blade view); $mountedAt is this component's own render
-    // time, kept across the whole interaction by Livewire's component
-    // state, so submitRegister() needs no hidden timestamp field at all.
-    public string $website = '';
+    // input in the blade view); deliberately not named anything a
+    // password manager would recognise and fill FOR a sighted human (see
+    // SignupRisk::HONEYPOT_FIELD's own docblock). $mountedAt is this
+    // component's own render time, kept across the whole interaction by
+    // Livewire's component state, so submitRegister() needs no hidden
+    // timestamp field at all.
+    public string $companyFax = '';
     public int $mountedAt = 0;
 
     public function mount(): void {
@@ -102,6 +105,22 @@ class EmailLogin extends Component {
 
     public function submitRegister(TenantService $tenantService): void {
         $this->error = null;
+
+        // Checked before validation, and before the throttle/mail-usability
+        // gates below: a bot that trips this must see exactly the same
+        // outcome as a real success, never a validation error that would
+        // teach it anything. See SignupRisk::blockReason()'s own docblock
+        // and LandingSignupController::register()'s identical check — the
+        // two signup surfaces share this one class specifically so they
+        // can never drift apart on what counts as a block.
+        $secondsToSubmit = $this->mountedAt > 0 ? (now()->timestamp - $this->mountedAt) : null;
+        $blockReason = \App\Support\SignupRisk::blockReason($this->companyFax, $secondsToSubmit);
+        if ($blockReason) {
+            \App\Support\SignupRisk::recordBlock($blockReason, 'portal_email', request()->ip(), request()->userAgent());
+            $this->redirect('/portal', navigate: false);
+            return;
+        }
+
         $this->validate([
             'name'     => 'required|string|max:255',
             'email'    => 'required|email|max:255|unique:users,email',
@@ -142,8 +161,8 @@ class EmailLogin extends Component {
             'password'    => $this->password,
             'signup_risk' => \App\Support\SignupRisk::compute(
                 request()->userAgent(),
-                $this->website,
-                $this->mountedAt > 0 ? (now()->timestamp - $this->mountedAt) : null,
+                $this->companyFax,
+                $secondsToSubmit,
             ),
         ]);
         $user = $result['user'];

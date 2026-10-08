@@ -5,7 +5,7 @@ use App\Support\BrandDomains;
 use App\Mail\VerifyEmail;
 use App\Models\User;
 use App\Services\TenantService;
-use App\Support\{Countries, MailSettings};
+use App\Support\{Countries, MailSettings, SignupRisk};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{Auth, Log, Mail, URL};
 use Illuminate\Validation\Rule;
@@ -25,6 +25,24 @@ class LandingSignupController extends Controller
 {
     public function register(Request $request, TenantService $tenants)
     {
+        $secondsToSubmit = $request->filled('form_rendered_at')
+            ? (now()->timestamp - (float) $request->input('form_rendered_at'))
+            : null;
+
+        // Checked before anything else, including the mail-usability gate
+        // below: a bot that trips this should see exactly the same thing
+        // regardless of this platform's own mail configuration, and must
+        // never learn anything real about why — no validation errors, no
+        // account, nothing. See SignupRisk::blockReason()'s own docblock
+        // for why only these two signals are certain enough to refuse on.
+        $blockReason = SignupRisk::blockReason($request->input(SignupRisk::HONEYPOT_FIELD), $secondsToSubmit);
+        if ($blockReason) {
+            SignupRisk::recordBlock($blockReason, 'landing', $request->ip(), $request->userAgent());
+
+            return redirect(BrandDomains::appUrl('/portal'))
+                ->with('landing_status', __('auth_email.verification_sent', ['email' => (string) $request->input('email')]));
+        }
+
         if (!MailSettings::isUsable()) {
             return back()->with('landing_status', __('landing.signup_email_disabled'));
         }
@@ -41,11 +59,7 @@ class LandingSignupController extends Controller
             'country'  => ['required', 'string', Rule::in(array_keys(Countries::all()))],
         ]);
 
-        $data['signup_risk'] = \App\Support\SignupRisk::compute(
-            $request->userAgent(),
-            $request->input(\App\Support\SignupRisk::HONEYPOT_FIELD),
-            $request->filled('form_rendered_at') ? (now()->timestamp - (float) $request->input('form_rendered_at')) : null,
-        );
+        $data['signup_risk'] = SignupRisk::compute($request->userAgent(), $request->input(SignupRisk::HONEYPOT_FIELD), $secondsToSubmit);
 
         $result = $tenants->registerViaEmail($data);
         $user = $result['user'];

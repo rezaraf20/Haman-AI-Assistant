@@ -98,7 +98,7 @@ class LoginFormAttributesTest extends TestCase
         $fieldCount = $this->countFields($html);
 
         // name, email, password, password_confirmation — plus one honeypot
-        // input (2026-10-07, see App\Support\SignupRisk / EmailLogin::$website)
+        // input (2026-10-07, see App\Support\SignupRisk / EmailLogin::$companyFax)
         // that deliberately carries an id but no name attribute: a password
         // manager/autofill heuristic keys off name far more than id, and a
         // honeypot that a form-filler actually fills in defeats its purpose.

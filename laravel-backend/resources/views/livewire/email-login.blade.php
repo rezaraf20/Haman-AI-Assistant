@@ -41,10 +41,10 @@
             </form>
         @else
             <form wire:submit="submitRegister">
-                {{-- Honeypot: invisible to a human, a plain text field a bot that fills every input trips. --}}
+                {{-- Honeypot: invisible to a human, a plain text field a bot that fills every input trips. No name attribute on purpose — see SignupRisk::HONEYPOT_FIELD's own docblock on why nothing here may resemble a field autofill would recognise. --}}
                 <div style="position:absolute;left:-9999px;top:-9999px" aria-hidden="true">
-                    <label for="haman-register-website">Website</label>
-                    <input type="text" id="haman-register-website" wire:model="website" tabindex="-1" autocomplete="off">
+                    <label for="haman-register-company-fax">Company Fax</label>
+                    <input type="text" id="haman-register-company-fax" wire:model="companyFax" tabindex="-1" autocomplete="off">
                 </div>
                 <div style="margin-bottom:16px;" wire:key="register-field-name">
                     <label for="haman-register-name" style="{{ $labelStyle }}">{{ __('common.full_name') }}</label>

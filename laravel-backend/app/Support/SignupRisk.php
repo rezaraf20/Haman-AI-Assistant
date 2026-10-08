@@ -1,41 +1,97 @@
 <?php
 namespace App\Support;
 
+use App\Models\SignupBlock;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+
 /**
- * Free, zero-cost signup risk signals — never a reason to block a signup on
- * their own. The 2026-10-04 investigation into three Tor-sourced trial-abuse
- * signups found real signal (two of three shared one scripted-looking
- * User-Agent, all three never verified) but the explicit decision after
- * that investigation was: tag, never block — a false positive here must
- * never cost a real customer their signup, and an Iranian visitor behind a
- * VPN or Tor is not a bot. Computed once at registration, stored on
- * tenants.signup_risk (see TenantService::registerViaEmail()); surfaced in
- * TenantResource's table so a human decides what, if anything, a flagged
- * signup is worth looking at twice.
+ * Signup risk signals, split into two tiers by how certain they are:
+ *
+ *  - blockReason(): a filled honeypot, or a submission faster than any
+ *    human could plausibly manage. Both have an effectively-zero false
+ *    positive rate for a sighted human (the honeypot field is never
+ *    visible, never tabbable, and aria-hidden removes it from the
+ *    accessibility tree too — see resources/views/landing/index.blade.php
+ *    and livewire/email-login.blade.php) — certain enough to refuse the
+ *    signup outright. Nothing is created; see recordBlock().
+ *
+ *  - compute(): everything else (an implausible user agent, a fast-but-not
+ *    impossible submission). Never a reason to block on its own — the
+ *    2026-10-04 investigation into three Tor-sourced trial-abuse signups
+ *    found real signal here but the explicit decision was tag, never
+ *    block: a false positive must never cost a real customer their
+ *    signup, and an Iranian visitor behind a VPN or Tor is not a bot.
+ *    Stored on tenants.signup_risk; surfaced in TenantResource's table so
+ *    a human decides what, if anything, a flagged signup is worth.
  *
  * Tor/VPN exit-node detection is deliberately NOT implemented here — it
- * needs a live exit-node feed this class has no access to. The 'flags'
- * shape below has room for a future 'known_anonymizer' key if that feed
- * ever gets wired up; until then this only ever sees what a single request
- * already carries.
+ * needs a live exit-node feed this class has no access to.
  */
 class SignupRisk
 {
-    /** The hidden form field a human never sees or fills; a bot that fills every input trips this. */
-    public const HONEYPOT_FIELD = 'website';
-
-    /** Below this many seconds between page render and submit, a human could not plausibly have filled the form. */
-    private const TOO_FAST_SECONDS = 3.0;
+    /**
+     * The hidden form field a human never sees, tabs to, or hears from a
+     * screen reader; a bot that fills every input trips this. Deliberately
+     * NOT "website", "website_url", "email", "phone", or anything else a
+     * browser's autofill/password-manager heuristics recognise — a name a
+     * manager fills FOR a sighted human defeats the one property (zero
+     * false positives) that makes blocking on it safe at all. "company_fax"
+     * reads like a real, boring business-form field to a scraper without
+     * matching any autofill category.
+     */
+    public const HONEYPOT_FIELD = 'company_fax';
 
     public static function compute(?string $userAgent, ?string $honeypotValue, ?float $secondsToSubmit): array
     {
+        $tagThreshold = (float) Settings::get('limits.signup_too_fast_tag_seconds');
+
         $flags = [
             'invalid_user_agent' => self::looksInvalid($userAgent),
             'honeypot_filled'    => filled($honeypotValue),
-            'submitted_too_fast' => $secondsToSubmit !== null && $secondsToSubmit >= 0 && $secondsToSubmit < self::TOO_FAST_SECONDS,
+            'submitted_too_fast' => $secondsToSubmit !== null && $secondsToSubmit >= 0 && $secondsToSubmit < $tagThreshold,
         ];
 
         return ['flags' => $flags, 'score' => count(array_filter($flags))];
+    }
+
+    /**
+     * @return string|null the reason to refuse this signup outright, or
+     *   null to let it proceed (compute()'s tag-only signals still apply).
+     */
+    public static function blockReason(?string $honeypotValue, ?float $secondsToSubmit): ?string
+    {
+        if (filled($honeypotValue)) return 'honeypot_filled';
+
+        $blockThreshold = (float) Settings::get('limits.signup_too_fast_block_seconds');
+        if ($secondsToSubmit !== null && $secondsToSubmit >= 0 && $secondsToSubmit < $blockThreshold) {
+            return 'submitted_too_fast';
+        }
+
+        return null;
+    }
+
+    /**
+     * The only trace a blocked attempt ever leaves — nothing else about it
+     * is created. $source distinguishes which form caught it (the two
+     * signup surfaces share this one class specifically so they can never
+     * drift apart on what counts as a block). Never throws: a logging
+     * failure must not be the reason a bot's request falls through to
+     * actually creating an account.
+     */
+    public static function recordBlock(string $reason, string $source, ?string $ip, ?string $userAgent): void
+    {
+        try {
+            SignupBlock::create([
+                'reason' => $reason,
+                'source' => $source,
+                'ip' => $ip,
+                'user_agent' => Str::limit((string) $userAgent, 250, ''),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning("SignupRisk::recordBlock failed ({$reason}/{$source}): " . $e->getMessage());
+        }
     }
 
     /**

@@ -633,10 +633,10 @@
                 <form method="POST" action="{{ route('landing.register') }}">
                     @csrf
                     <input type="hidden" name="form_rendered_at" value="{{ now()->timestamp }}">
-                    {{-- Honeypot: invisible to a human, a plain text field a bot that fills every input trips. Never required, never shown in an error. --}}
+                    {{-- Honeypot: invisible to a human, a plain text field a bot that fills every input trips. Never required, never shown in an error. Name deliberately NOT "website"/"website_url" or anything else autofill/password-manager heuristics recognise — see App\Support\SignupRisk::HONEYPOT_FIELD's own docblock. A filled value here now gets the signup refused outright, not just flagged. --}}
                     <div style="position:absolute;left:-9999px;top:-9999px" aria-hidden="true">
-                        <label for="website">Website</label>
-                        <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+                        <label for="company_fax">Company Fax</label>
+                        <input type="text" id="company_fax" name="company_fax" tabindex="-1" autocomplete="off">
                     </div>
                     <label for="name">{{ __('landing.signup_name') }}</label>
                     <input id="name" name="name" value="{{ old('name') }}" required maxlength="255">

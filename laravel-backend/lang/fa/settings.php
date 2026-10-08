@@ -210,6 +210,8 @@ return [
     'field_limits_login_lockout_minutes' => 'مدت قفل حساب (دقیقه)',
     'field_limits_login_attempts_before_lockout' => 'تلاش ناموفق تا قفل شدن حساب',
     'field_limits_register_per_ip_per_day' => 'ثبت‌نام روزانه (هر IP)',
+    'field_limits_signup_too_fast_block_seconds' => 'مسدود کردن ثبت‌نام اگر سریع‌تر از این ارسال شود (ثانیه)',
+    'field_limits_signup_too_fast_tag_seconds' => 'علامت‌گذاری ثبت‌نام به‌عنوان مشکوک اگر سریع‌تر از این ارسال شود (ثانیه)',
     'field_signup_require_email_verification' => 'الزامی کردن تأیید ایمیل قبل از ساخت schema/چت‌بات (فقط بعد از اطمینان از کارکرد SMTP روشن کنید)',
     'field_limits_portal_otp_per_ip_per_day' => 'کد ورود پنل روزانه (هر IP)',
     'field_limits_sync_requests_per_minute' => 'درخواست sync در دقیقه (هر کلید)',
