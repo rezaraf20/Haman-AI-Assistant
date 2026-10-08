@@ -43,6 +43,10 @@ class AbuseAuditCommand extends Command
         'api/v1/auth/register'                        => ['db-write', 'Creates a tenant AND a Postgres schema full of tables'],
         'api/v1/auth/login'                           => ['none', 'Password check; brute-force target rather than a cost'],
         'api/v1/wp-plugin/latest-version'             => ['none', 'Static version string'],
+        // Deliberately outside auth.apikey (see ConnectionTestController) so
+        // a failed auth attempt can still be logged — capped by
+        // throttle:plugin-api the same as the authenticated plugin routes.
+        'api/v1/connection-test'                      => ['none', 'One row written to connection_tests per attempt; no external calls'],
         'api/v1/chat/session'                         => ['db-write', 'Opens a conversation row'],
         'api/v1/chat/message'                         => ['llm', 'The main model call; also embeds the query'],
         'api/v1/chat/history/{sessionId}'             => ['none', 'Read'],
