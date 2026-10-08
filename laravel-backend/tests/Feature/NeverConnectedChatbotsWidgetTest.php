@@ -49,6 +49,12 @@ class NeverConnectedChatbotsWidgetTest extends TestCase
             'slug' => 'test-' . Str::random(8), 'name' => $name,
             'email' => Str::random(12) . '@example.test', 'plan_id' => $plan->id,
             'schema_name' => 'placeholder', 'status' => 'active', 'trial_ends_at' => now()->addDays(14),
+            // Comfortably above TenantsAtRiskTable's LOW_WALLET_TOMAN (100,000)
+            // — that widget also renders on /admin and would otherwise flag
+            // every zero-balance test tenant here for an unrelated reason,
+            // a false positive for assertDontSee() that has nothing to do
+            // with this widget's own connection-status logic.
+            'wallet_balance_toman' => 500000,
         ]);
         $schema = 'tenant_' . str_replace('-', '', $tenant->id);
         $tenant->update(['schema_name' => $schema]);
