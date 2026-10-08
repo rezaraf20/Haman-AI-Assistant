@@ -464,6 +464,18 @@ class SyncService {
             'error_log'       => $errors,
             'result'          => $counts,
         ]);
+
+        // The guarded update above is deliberately raw SQL (see this
+        // method's own docblock on why), which writes the DB row but never
+        // touches $job's in-memory attributes — so $job->status stayed
+        // whatever it was created with ('running') even after the row was
+        // genuinely 'failed'. SyncController::jobArr() reads $job->status
+        // straight off this object for the HTTP response, so a caller
+        // whose entire batch failed (nothing ever reached markJobIndexing())
+        // was being told "running" about a job the database already had
+        // as "failed". refresh() re-pulls every column, including whatever
+        // EmbedDocumentJob's own hooks may since have set it to.
+        $job->refresh();
     }
 
     /**

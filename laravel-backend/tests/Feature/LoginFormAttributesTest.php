@@ -97,10 +97,14 @@ class LoginFormAttributesTest extends TestCase
         $names = $this->extractFieldNames($html);
         $fieldCount = $this->countFields($html);
 
-        // name, email, password, password_confirmation.
-        $this->assertSame(4, $fieldCount, 'register mode should render exactly four fields');
-        $this->assertCount($fieldCount, $ids);
-        $this->assertCount($fieldCount, $names);
+        // name, email, password, password_confirmation — plus one honeypot
+        // input (2026-10-07, see App\Support\SignupRisk / EmailLogin::$website)
+        // that deliberately carries an id but no name attribute: a password
+        // manager/autofill heuristic keys off name far more than id, and a
+        // honeypot that a form-filler actually fills in defeats its purpose.
+        $this->assertSame(5, $fieldCount, 'register mode should render exactly five fields (four real + one honeypot)');
+        $this->assertCount($fieldCount, $ids, 'every field, honeypot included, must have an id');
+        $this->assertCount(4, $names, 'only the four real fields should carry a name — the honeypot deliberately has none');
         $this->assertSame(count($ids), count(array_unique($ids)), 'no two fields may share an id: ' . json_encode($ids));
         $this->assertSame(count($names), count(array_unique($names)), 'no two fields may share a name: ' . json_encode($names));
     }

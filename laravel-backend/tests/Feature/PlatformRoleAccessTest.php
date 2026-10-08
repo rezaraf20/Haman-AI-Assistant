@@ -228,15 +228,30 @@ class PlatformRoleAccessTest extends TestCase
 
     public function test_the_tenant_delete_button_does_not_render_for_support(): void
     {
+        // There is no single 'delete' action any more — TenantResource's
+        // one-click delete was replaced by two-phase deletion (2026-10-07,
+        // "tenant lifecycle/signup-abuse controls"): mark_for_deletion
+        // (reversible, typed-email confirmation) and permanent_delete_now
+        // (irreversible, typed-email confirmation, disabled while the
+        // tenant has any real usage). restore_from_deletion is the third
+        // action but only ever visible on an already-pending tenant, so it
+        // doesn't apply to the fresh, active tenant this test uses. This
+        // test still asserts the same thing it always did — support sees
+        // neither destructive action, admin sees both — just against the
+        // two action names that actually exist now.
         [$tenant] = $this->tenantWithUser();
 
         $support = $this->user([], 'support');
         $this->actingAs($support, 'web');
-        Livewire::test(ListTenants::class)->assertTableActionHidden('delete', $tenant);
+        Livewire::test(ListTenants::class)
+            ->assertTableActionHidden('mark_for_deletion', $tenant)
+            ->assertTableActionHidden('permanent_delete_now', $tenant);
 
         $admin = $this->user([], 'admin');
         $this->actingAs($admin, 'web');
-        Livewire::test(ListTenants::class)->assertTableActionVisible('delete', $tenant);
+        Livewire::test(ListTenants::class)
+            ->assertTableActionVisible('mark_for_deletion', $tenant)
+            ->assertTableActionVisible('permanent_delete_now', $tenant);
     }
 
     public function test_the_capability_behind_the_destructive_actions_is_admin_only(): void
