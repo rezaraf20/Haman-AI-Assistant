@@ -22,11 +22,32 @@ class LandingContentOverrideTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * applyOverrides() is wired to run once per request via
+     * AppServiceProvider::boot() -- correct in real PHP-FPM, where every
+     * request is a fresh process, but a single PHPUnit test method only
+     * boots the application ONCE (in setUp(), before the test body runs).
+     * Calling set()/setLegal() mid-test therefore leaves the translator
+     * exactly as it was at boot -- unpatched, and for 'landing' keys
+     * specifically, not through ANY mechanism, since (unlike legalTitle()/
+     * legalBody(), which read the content store directly as a fallback)
+     * the landing page relies purely on the translator having been
+     * patched. Calling applyOverrides() again here is not test ceremony;
+     * it is literally what the next real visitor's fresh PHP-FPM request
+     * does on its own, and skipping it would make these tests pass
+     * without ever exercising the bug they exist to catch -- confirmed
+     * the hard way: without this call, the landing-key test below failed
+     * (the override never appeared at all, not even stomping its
+     * sibling), while the two legal-page tests passed for the wrong
+     * reason -- legalTitle()/legalBody()'s content-store fallback masked
+     * that addLines() was never even invoked in that version of the test.
+     */
     public function test_overriding_one_legal_field_does_not_blank_an_untouched_sibling_field(): void
     {
         // Mirrors production exactly: only the BODY was ever set from the
         // admin panel, the TITLE never was.
         LandingContent::setLegal('about', 'body', 'en', 'Real about body, set from the panel.');
+        LandingContent::applyOverrides();
 
         $response = $this->get('/legal/about?lang=en');
 
@@ -43,6 +64,7 @@ class LandingContentOverrideTest extends TestCase
         // 'about' gets touched; 'terms' -- a different slug, same 'legal'
         // translation group -- never does.
         LandingContent::setLegal('about', 'body', 'en', 'Some about body.');
+        LandingContent::applyOverrides();
 
         $response = $this->get('/legal/terms?lang=en');
 
@@ -56,6 +78,7 @@ class LandingContentOverrideTest extends TestCase
     public function test_overriding_a_landing_key_does_not_blank_an_untouched_sibling(): void
     {
         LandingContent::set('hero_title', 'en', 'Custom hero headline.');
+        LandingContent::applyOverrides();
 
         $response = $this->get('/?lang=en');
 
