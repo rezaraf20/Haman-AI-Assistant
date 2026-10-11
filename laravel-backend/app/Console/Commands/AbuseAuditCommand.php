@@ -60,8 +60,15 @@ class AbuseAuditCommand extends Command
         '/'                                           => ['none', 'Public landing page; reads published plans'],
         'legal/{slug}'                                => ['none', 'Static about/contact/terms/privacy copy, edited from the admin panel'],
         'signup'                                      => ['db-write', 'Creates a tenant AND a Postgres schema, same as the API register'],
-        'verify-email/{id}/{hash}'                    => ['none', 'Signed, expiring link; marks one address verified'],
+        'verify-email/{id}/{hash}/{nonce}'            => ['none', 'Signed, expiring, single-use link; marks one address verified'],
         'verify-email/resend'                         => ['none', 'Sends one email to the signed-in user own address'],
+        // Recovery funnel (2026-10-10) — every send here is per-email
+        // rate-limited inside the controller (resendVerificationFor() /
+        // sendResetLink()), not just by the route-level throttle below.
+        'check-email'                                 => ['none', 'Static page; reads the email from the query string for display only'],
+        'resend-verification'                         => ['none', 'One email, capped per address at limits.verification_resend_per_hour'],
+        'forgot-password'                             => ['none', 'One email, capped per address at limits.password_reset_request_per_hour; response is identical whether or not the address has an account'],
+        'reset-password/{id}/{hash}/{nonce}'          => ['none', 'Signed, expiring, single-use link; sets a new password hash'],
         'portal/login'                                => ['none', 'Renders the form; both Livewire actions behind it are capped (OtpLogin, EmailLogin)'],
         // Filament rate-limits the attempt itself inside the Livewire
         // action (Login::authenticate() calls rateLimit(5)), so the GET

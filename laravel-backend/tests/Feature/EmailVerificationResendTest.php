@@ -63,18 +63,28 @@ class EmailVerificationResendTest extends TestCase
         Settings::set('limits.verification_resend_per_hour', 2);
 
         $this->signUp('capped@example.test');
-        $user = User::where('email', 'capped@example.test')->first();
 
-        // Two more resends: the cap of 2/hour is already spent by now?
-        // No -- the initial send doesn't count against THIS limiter (it's
-        // the registration itself, not a resend), so two resends here are
-        // exactly at the cap, and a third is refused.
-        $this->signUp('capped@example.test', 'token-2');
-        $this->signUp('capped@example.test', 'token-3');
-        $response = $this->signUp('capped@example.test', 'token-4');
+        // Via /resend-verification directly, not another /signup POST --
+        // /signup carries its own route-level throttle:register (the
+        // per-IP-per-DAY tenant-creation cap, default 3), which a 4th call
+        // to /signup in one test would hit first and mask what this test
+        // is actually checking (confirmed: that mistake gave a 429 from
+        // the OUTER limiter, nothing to do with the per-email one this
+        // test means to exercise). /resend-verification was deliberately
+        // kept off that limiter for exactly this reason -- see its own
+        // route comment in routes/web.php.
+        $resend = fn (string $token) => $this->withSession(['_token' => $token])->post('/resend-verification', [
+            '_token' => $token, 'email' => 'capped@example.test',
+        ]);
+
+        // The cap of 2/hour: two resends here are exactly at it, and a
+        // third is refused.
+        $resend('token-2');
+        $resend('token-3');
+        $response = $resend('token-4');
 
         $response->assertSessionHas('landing_status', fn ($msg) => str_contains($msg, 'Too many attempts') || str_contains($msg, 'تلاش'));
-        Mail::assertSentCount(3); // the two allowed resends, not the refused third
+        Mail::assertSentCount(3); // the initial send + the two allowed resends, not the refused third
     }
 
     public function test_an_old_link_is_invalidated_by_a_resend(): void
