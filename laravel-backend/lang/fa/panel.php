@@ -129,6 +129,7 @@ return [
     'timeout_seconds' => 'مهلت زمانی (ثانیه)',
     'token_usage' => 'مصرف توکن',
     'trial_ends_at' => 'پایان آزمایشی',
+    'trial_ends_at_edit_help' => 'بر اساس ساعت سرور. برای تمدید آزمایشی، جلو ببرید؛ برای پایان زودتر، عقب.',
     'zarinpal_section' => 'زرین‌پال',
     'zarinpal_section_desc' => 'درگاه پرداخت شارژ کیف پول. این اطلاعات رو از پنل زرین‌پال (zarinpal.com) بردار.',
     'plugin_key_issued' => 'کلید افزونه',

@@ -6,7 +6,7 @@ use App\Support\PlatformAccess;
 use App\Models\Tenant;
 use App\Models\Plan;
 use Filament\Forms\Form;
-use Filament\Forms\Components\{TextInput, Select, Section, Textarea};
+use Filament\Forms\Components\{TextInput, Select, Section, Textarea, DateTimePicker};
 use Filament\Resources\Resource;
 use Filament\Tables\Table;
 use Filament\Tables\Columns\{TextColumn, BadgeColumn, IconColumn};
@@ -94,6 +94,17 @@ class TenantResource extends Resource {
                 'suspended' => __('common.status_suspended'),
                 'cancelled' => __('common.status_cancelled'),
             ])->required(),
+            // Editable so support/admin can actually extend a trial or
+            // correct it by hand — previously shown read-only in the table
+            // with no way in the panel to change it at all, which left
+            // "give this customer a few more days" as a request only a
+            // direct DB write could satisfy. Not restricted to status ===
+            // 'trial': a tenant already past trial that gets switched back
+            // to it should be able to have this set alongside the status
+            // change, not in a second edit afterward.
+            DateTimePicker::make('trial_ends_at')->label(__('panel.trial_ends_at'))
+                ->helperText(__('panel.trial_ends_at_edit_help'))
+                ->native(false),
             // Read-only — these live on the owning User row (phone-based
             // signup profile), not on Tenant itself, so they're populated via
             // afterStateHydrated() rather than a normal bound field. disabled()

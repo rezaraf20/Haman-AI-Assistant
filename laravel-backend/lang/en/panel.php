@@ -126,6 +126,7 @@ return [
     'timeout_seconds' => 'Timeout (seconds)',
     'token_usage' => 'Token Usage',
     'trial_ends_at' => 'Trial Ends',
+    'trial_ends_at_edit_help' => 'Server timezone. Push this forward to extend a trial, or back to end it sooner.',
     'zarinpal_section' => 'Zarinpal',
     'zarinpal_section_desc' => 'Wallet top-up payment gateway. Get these from your Zarinpal dashboard (zarinpal.com).',
     'plugin_key_issued' => 'Plugin key',
