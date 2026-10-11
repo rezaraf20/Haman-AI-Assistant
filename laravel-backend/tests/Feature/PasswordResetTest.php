@@ -95,6 +95,29 @@ class PasswordResetTest extends TestCase
         Mail::assertSentCount(1); // only the real account actually got one
     }
 
+    public function test_an_unverified_email_gets_the_generic_message_but_no_email(): void
+    {
+        Mail::fake();
+        // Still mid-funnel -- e.g. signed up, never clicked the
+        // verification link. Nothing has confirmed this address belongs to
+        // whoever is asking for a reset, so sendResetLink() must not send
+        // one, same gate as createTrialChatbot()'s is_active check.
+        User::create([
+            'email' => 'unverified@example.test',
+            'password' => Hash::make('whatever'), 'password_hash' => Hash::make('whatever'),
+            'name' => 'Unverified', 'role' => 'owner', 'email_verified_at' => null,
+        ]);
+
+        $response = $this->withSession(['_token' => 'tok'])->post('/forgot-password', [
+            '_token' => 'tok', 'email' => 'unverified@example.test',
+        ]);
+
+        // Same generic message as a nonexistent address -- revealing
+        // "this account exists but is unverified" would be its own leak.
+        $response->assertSessionHas('landing_status', __('auth_email.reset_link_sent_generic'));
+        Mail::assertNothingSent();
+    }
+
     public function test_a_reset_link_is_single_use(): void
     {
         Mail::fake();

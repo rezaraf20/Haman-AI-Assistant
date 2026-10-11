@@ -16,17 +16,34 @@ use Illuminate\Support\Str;
  * docblocks) rather than Laravel's built-in Password facade, for the exact
  * same reason: one proven-correct plain-text-email-link shape, not two.
  *
- * Who this is actually for: email+password accounts. A phone+OTP signup
- * (registerViaPhone()) also has a `password` column, but set to an
- * unguessable random value never meant for login — auth there is phone+
- * OTP only (see that method's own comment). This reset flow is keyed on
- * email alone and does not distinguish the two: a phone-signup tenant who
- * also has a real email on file CAN request a reset and will end up with
- * a real, usable password afterward, which quietly also enables email+
- * password login for an account that was never meant to use it. Nothing
- * in the product today forbids that, so this does not block it — flagging
- * it here because it is the one real behavioural edge this reuses rather
- * than a deliberate design decision made for this feature specifically.
+ * Who this is actually for: email+password accounts, gated on
+ * email_verified_at (see sendResetLink()) — no account can get a reset
+ * link until something has actually confirmed it owns that address.
+ *
+ * A phone+OTP signup (registerViaPhone()) also has a `password` column,
+ * set to an unguessable random value never meant for login — auth there
+ * is phone+OTP only (see that method's own comment). registerViaPhone()
+ * stamps email_verified_at = now() unconditionally at signup (the phone
+ * number was just proven by a real OTP; the email on file is simply
+ * trusted, not separately confirmed), so a phone-signup tenant passes the
+ * same email_verified_at gate as anyone else and CAN request a reset,
+ * ending up with a real, usable password that also quietly enables
+ * email+password login for an account that was never meant to use it.
+ * Confirmed on production 2026-10-11: 2 of 8 users have phone filled, both
+ * already have email_verified_at set (0 with phone filled and it null) —
+ * so today this path only ever reaches an account whose email was already
+ * trusted one way or another, by registration design, not by accident.
+ * Nothing in the product forbids a phone-signup user ending up with a
+ * real password this way, so this does not block it — flagging it here
+ * because it is a real behavioural edge this reuses rather than a
+ * deliberate decision made for this feature specifically.
+ *
+ * If a future path ever creates a user with phone filled and
+ * email_verified_at null (there is none today), that account could never
+ * get a reset link and also has no "verify my email" button anywhere in
+ * the portal — this reset flow is the only thing that currently sets
+ * email_verified_at after initial signup. That combination should be
+ * caught before it ships, not discovered by a stuck user.
  */
 class PasswordResetController extends Controller
 {
@@ -46,7 +63,14 @@ class PasswordResetController extends Controller
         }
         if ($cap > 0) RateLimiter::hit($key, 3600);
 
-        $user = User::where('email', $data['email'])->first();
+        // email_verified_at gates this the same way it gates
+        // createTrialChatbot()'s is_active: an address nobody has proven
+        // belongs to the account holder (unverified email+password signup
+        // still mid-funnel, or any future path that leaves this null)
+        // doesn't get a reset link either — see the class docblock for why
+        // phone+OTP accounts, which registerViaPhone() always marks
+        // verified at signup, pass this check and are unaffected.
+        $user = User::where('email', $data['email'])->whereNotNull('email_verified_at')->first();
         if ($user && MailSettings::isUsable()) {
             $this->sendResetEmail($user);
         }
