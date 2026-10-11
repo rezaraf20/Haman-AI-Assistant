@@ -1,7 +1,8 @@
 """
-Retrieval quality evaluation: recall@5 and MRR@5, before (pure vector
-similarity — retrieve_chunks(), unchanged) vs. after (hybrid search + RRF +
-optional rerank — hybrid_retrieve()).
+Retrieval quality evaluation: recall@5 and MRR@5 across three pipelines —
+(a) pure vector similarity (retrieve_chunks(), unchanged), (b) hybrid search
++ RRF with no rerank, (c) hybrid + RRF + rerank — plus the rerank leg's own
+extra token cost per message.
 
 Ground truth is built from real production data, not a curated gold set:
 for every historically *successfully answered* message (role=assistant,
@@ -12,6 +13,15 @@ reproducible methodology — it measures "does the new pipeline still find
 what the old pipeline actually used to answer this", not an idealized
 benchmark — and is stated as such in the printed report rather than
 presented as more than it is.
+
+Token cost, not Toman: _compute_cost_toman() multiplies token counts by
+each LLM provider profile's admin-entered input/output price per 1M
+tokens (LlmProviderProfileResource), and that price defaults to, and on
+every profile active at the time this was last run WAS, 0 — so a Toman
+figure here would read as "rerank is free" when it actually means "nobody
+has priced this profile yet". Reporting raw prompt/completion tokens per
+rerank call instead is the number that stays true regardless of whether
+pricing was ever filled in.
 
 Run inside the python-ai-service container (needs DATABASE_URL,
 GEMINI_API_KEY, and at least one active LLM provider profile for the rerank
@@ -116,9 +126,13 @@ def main():
 
         print(f"\nTotal eval set: {len(items)} real questions\n")
 
-        before_recalls, before_mrrs = [], []
-        after_recalls, after_mrrs = [], []
-        newly_answered = []  # items where "before" missed but "after" hit
+        a_recalls, a_mrrs = [], []  # (a) pure vector
+        b_recalls, b_mrrs = [], []  # (b) hybrid + RRF, no rerank
+        c_recalls, c_mrrs = [], []  # (c) hybrid + RRF + rerank
+        rerank_prompt_tokens, rerank_completion_tokens = [], []
+        rerank_fallback_count = 0
+        newly_answered_b = []  # (a) missed, (b) hit
+        newly_answered_c = []  # (b) missed, (c) hit
 
         for i, item in enumerate(items, start=1):
             db.execute(text(f"SET search_path TO {item['schema']}, public"))
@@ -135,69 +149,123 @@ def main():
             # get_chatbot_settings() resets search_path to public when it
             # returns (mirrors collect_eval_items()'s own cleanup) — must be
             # switched back to the tenant schema before every query that
-            # touches tenant-schema tables (chunks, chatbots), here and in
-            # the AFTER block below.
+            # touches tenant-schema tables (chunks, chatbots), here and
+            # before each retrieval call below.
             db.execute(text(f"SET search_path TO {item['schema']}, public"))
             db.commit()
 
-            # BEFORE: retrieve_chunks() is untouched — the exact pre-hybrid-
-            # search pure vector query, still live in rag_service.py for
-            # /search/semantic.
-            before_chunks = retrieve_chunks(db, item["chatbot_id"], emb, settings["top_k"], settings["threshold"])
-            before_ids = [c["id"] for c in before_chunks]
-            b_recall, b_mrr = score_result(before_ids, item["ground_truth"])
-            before_recalls.append(b_recall)
-            before_mrrs.append(b_mrr)
+            # (a) pure vector similarity — retrieve_chunks() is untouched,
+            # the exact pre-hybrid-search query still live for /search/semantic.
+            a_chunks = retrieve_chunks(db, item["chatbot_id"], emb, settings["top_k"], settings["threshold"])
+            a_ids = [c["id"] for c in a_chunks]
+            a_recall, a_mrr = score_result(a_ids, item["ground_truth"])
+            a_recalls.append(a_recall)
+            a_mrrs.append(a_mrr)
 
-            # AFTER: hybrid search + RRF + rerank (using this chatbot's own
-            # real, admin-configured settings — not a forced comparison mode).
+            # (b) hybrid + RRF, rerank forced off — isolates what fusion
+            # alone buys over pure vector, before rerank's own cost/benefit
+            # is added on top.
             db.execute(text(f"SET search_path TO {item['schema']}, public"))
             db.commit()
-            # conversation_id=None: this is an offline eval run, not a real
-            # conversation — hybrid_retrieve()'s event logging (see
-            # rag_service.py) already no-ops on a missing conversation_id
-            # rather than attempting an insert with a null FK.
-            result = hybrid_retrieve(
+            b_result = hybrid_retrieve(
+                db, item["chatbot_id"], None, item["question"], emb,
+                settings["top_k"], settings["threshold"], settings["language"],
+                rerank_enabled=False, rerank_threshold=settings["rerank_threshold"],
+            )
+            b_ids = [c["id"] for c in b_result["chunks"]]
+            b_recall, b_mrr = score_result(b_ids, item["ground_truth"])
+            b_recalls.append(b_recall)
+            b_mrrs.append(b_mrr)
+
+            # (c) hybrid + RRF + rerank — forced ON regardless of this
+            # chatbot's own saved setting, specifically so every item in
+            # the eval set exercises the rerank leg and its token cost,
+            # rather than silently skipping it for chatbots that currently
+            # have it off (the whole point of this run is to decide
+            # whether to turn it on).
+            db.execute(text(f"SET search_path TO {item['schema']}, public"))
+            db.commit()
+            c_result = hybrid_retrieve(
                 db, item["chatbot_id"], None, item["question"], emb,
                 settings["top_k"], settings["threshold"], settings["language"],
                 rerank_enabled=True, rerank_threshold=settings["rerank_threshold"],
             )
-            after_ids = [c["id"] for c in result["chunks"]]
-            a_recall, a_mrr = score_result(after_ids, item["ground_truth"])
-            after_recalls.append(a_recall)
-            after_mrrs.append(a_mrr)
+            c_ids = [c["id"] for c in c_result["chunks"]]
+            c_recall, c_mrr = score_result(c_ids, item["ground_truth"])
+            c_recalls.append(c_recall)
+            c_mrrs.append(c_mrr)
+
+            usage = c_result.get("rerank_usage") or {}
+            if usage:
+                rerank_prompt_tokens.append(usage.get("prompt_tokens", 0) or 0)
+                rerank_completion_tokens.append(usage.get("completion_tokens", 0) or 0)
+            else:
+                # Empty usage means every active provider failed the
+                # rerank call and hybrid_retrieve() fell back to plain RRF
+                # order (see _rerank_llm()) — (c) for this item is really
+                # just (b) again, not a genuine rerank measurement.
+                rerank_fallback_count += 1
 
             marker = ""
-            if b_recall == 0.0 and a_recall == 1.0:
-                marker = "  <-- newly answered by hybrid+rerank"
-                newly_answered.append(item["question"])
+            if a_recall == 0.0 and b_recall == 1.0:
+                marker += "  <-- (a)->(b) newly answered by hybrid+RRF"
+                newly_answered_b.append(item["question"])
+            if b_recall == 0.0 and c_recall == 1.0:
+                marker += "  <-- (b)->(c) newly answered by rerank"
+                newly_answered_c.append(item["question"])
 
-            print(f"  [{i}/{len(items)}] before: recall={b_recall:.0f} mrr={b_mrr:.2f} | after: recall={a_recall:.0f} mrr={a_mrr:.2f}{marker}")
+            print(f"  [{i}/{len(items)}] (a) r={a_recall:.0f} mrr={a_mrr:.2f} | (b) r={b_recall:.0f} mrr={b_mrr:.2f} | (c) r={c_recall:.0f} mrr={c_mrr:.2f}{marker}")
 
-            # 25 back-to-back rerank calls is a self-inflicted burst no real
-            # traffic pattern produces — space them out enough to stay under
-            # Groq's per-minute rate limit rather than exhausting it against
-            # ourselves and only ever exercising the failover/fallback path.
+            # 25 back-to-back rerank calls (now on EVERY item, not just the
+            # chatbots that already had it on) is a self-inflicted burst no
+            # real traffic pattern produces — space them out enough to stay
+            # under Groq's per-minute rate limit rather than exhausting it
+            # against ourselves and only ever exercising the failover path.
             time.sleep(2)
 
-        n = len(before_recalls)
-        print("\n" + "=" * 60)
+        n = len(a_recalls)
+        print("\n" + "=" * 70)
         print(f"RESULTS  (n={n} real questions, top_{TOP_N})")
-        print("=" * 60)
-        print(f"BEFORE (pure vector similarity):")
-        print(f"  recall@{TOP_N} = {sum(before_recalls)/n:.3f}")
-        print(f"  MRR@{TOP_N}    = {sum(before_mrrs)/n:.3f}")
-        print(f"AFTER (hybrid search + RRF + rerank):")
-        print(f"  recall@{TOP_N} = {sum(after_recalls)/n:.3f}")
-        print(f"  MRR@{TOP_N}    = {sum(after_mrrs)/n:.3f}")
-        print("=" * 60)
+        print("=" * 70)
+        print(f"(a) pure vector similarity:")
+        print(f"  recall@{TOP_N} = {sum(a_recalls)/n:.3f}")
+        print(f"  MRR@{TOP_N}    = {sum(a_mrrs)/n:.3f}")
+        print(f"(b) hybrid search + RRF, no rerank:")
+        print(f"  recall@{TOP_N} = {sum(b_recalls)/n:.3f}  (delta vs a: {sum(b_recalls)/n - sum(a_recalls)/n:+.3f})")
+        print(f"  MRR@{TOP_N}    = {sum(b_mrrs)/n:.3f}  (delta vs a: {sum(b_mrrs)/n - sum(a_mrrs)/n:+.3f})")
+        print(f"(c) hybrid search + RRF + rerank:")
+        print(f"  recall@{TOP_N} = {sum(c_recalls)/n:.3f}  (delta vs b: {sum(c_recalls)/n - sum(b_recalls)/n:+.3f})")
+        print(f"  MRR@{TOP_N}    = {sum(c_mrrs)/n:.3f}  (delta vs b: {sum(c_mrrs)/n - sum(b_mrrs)/n:+.3f})")
+        print("=" * 70)
 
-        if newly_answered:
-            print(f"\n{len(newly_answered)} question(s) previously missed (before) but now correctly retrieved (after):")
-            for q in newly_answered:
-                print(f"  - {q}")
+        n_priced = len(rerank_prompt_tokens)
+        if n_priced:
+            avg_prompt = sum(rerank_prompt_tokens) / n_priced
+            avg_completion = sum(rerank_completion_tokens) / n_priced
+            print(f"\nRerank leg token cost per message (n={n_priced} genuine rerank calls, "
+                  f"{rerank_fallback_count} fell back to plain RRF and are excluded from this average):")
+            print(f"  avg prompt tokens     = {avg_prompt:.0f}")
+            print(f"  avg completion tokens = {avg_completion:.0f}")
+            print(f"  avg total tokens      = {avg_prompt + avg_completion:.0f}")
+            print(f"  (reported as tokens, not Toman: every active LLM provider profile currently has "
+                  f"input/output price per 1M tokens left at 0, so _compute_cost_toman() would print "
+                  f"\"0 Toman\" regardless of real usage — that is an unpriced profile, not a free call.)")
         else:
-            print("\nNo question in this eval set flipped from miss to hit — see report for interpretation.")
+            print(f"\nEvery rerank call fell back to plain RRF order ({rerank_fallback_count}/{n}) — "
+                  f"no genuine rerank token usage was observed. Check that at least one active LLM "
+                  f"provider profile is actually reachable before trusting the (c) numbers above: a "
+                  f"100% fallback rate means (c) silently measured (b) again.")
+
+        if newly_answered_b:
+            print(f"\n{len(newly_answered_b)} question(s) hybrid+RRF alone fixed over pure vector:")
+            for q in newly_answered_b:
+                print(f"  - {q}")
+        if newly_answered_c:
+            print(f"\n{len(newly_answered_c)} question(s) rerank fixed over hybrid+RRF alone:")
+            for q in newly_answered_c:
+                print(f"  - {q}")
+        if not newly_answered_b and not newly_answered_c:
+            print("\nNo question in this eval set flipped from miss to hit at either stage — see report for interpretation.")
 
     finally:
         db.close()

@@ -101,6 +101,27 @@ class LandingContent
             }
 
             if ($lines) {
+                // Translator::addLines() writes straight into
+                // $translator->loaded[...] via Arr::set() without ever
+                // consulting the file loader first. The very first call
+                // for a given group+locale therefore creates a loaded
+                // entry containing ONLY the override keys just written —
+                // Translator::isLoaded() then reports that group+locale as
+                // already loaded, so the real lang/landing.php or
+                // lang/legal.php lines never get merged in at all for the
+                // rest of the request. Every key nobody has overridden
+                // yet (e.g. a legal page whose body was customized here
+                // but whose title never was) silently prints its own raw
+                // translation key instead of the file's default — this is
+                // exactly the bug that shipped: legal.terms_title/
+                // legal.terms_body on the live /legal/terms page, and
+                // legal.about_title/legal.contact_title alongside their
+                // admin-overridden (and therefore fine) body text.
+                // Forcing the real group to load first, before addLines()
+                // overlays the overrides on top, keeps every untouched key
+                // reading its file default exactly as LANG_PATH intends.
+                $translator->load('*', 'landing', $locale);
+                $translator->load('*', 'legal', $locale);
                 $translator->addLines($lines, $locale);
             }
         }
