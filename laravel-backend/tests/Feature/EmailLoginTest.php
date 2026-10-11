@@ -57,15 +57,20 @@ class EmailLoginTest extends TestCase
         $this->configureSmtp();
         Mail::fake();
 
-        Livewire::test(EmailLogin::class)
+        // Not /portal (2026-10-10): nothing exists there yet under
+        // signup.require_email_verification, and /portal never rendered
+        // a "check your email" message either — see
+        // LandingSignupController::register()'s own comment.
+        $component = Livewire::test(EmailLogin::class)
             ->set('mode', 'register')
             ->set('name', 'Jane Doe')
             ->set('email', 'jane@example.test')
             ->set('password', 'password123')
             ->set('password_confirmation', 'password123')
             ->set('mountedAt', now()->timestamp - 30) // a real human takes more than an instant — see SignupRisk::blockReason()
-            ->call('submitRegister')
-            ->assertRedirect('/portal');
+            ->call('submitRegister');
+        $component->assertRedirect();
+        $this->assertStringContainsString('/check-email', $component->effects['redirect'] ?? '');
 
         $user = User::where('email', 'jane@example.test')->first();
         $this->assertNotNull($user);
@@ -123,15 +128,16 @@ class EmailLoginTest extends TestCase
         Mail::fake();
         Settings::set('limits.register_per_ip_per_day', 1);
 
-        Livewire::test(EmailLogin::class)
+        $first = Livewire::test(EmailLogin::class)
             ->set('mode', 'register')
             ->set('name', 'First User')
             ->set('email', 'first@example.test')
             ->set('password', 'password123')
             ->set('password_confirmation', 'password123')
             ->set('mountedAt', now()->timestamp - 30)
-            ->call('submitRegister')
-            ->assertRedirect('/portal');
+            ->call('submitRegister');
+        $first->assertRedirect();
+        $this->assertStringContainsString('/check-email', $first->effects['redirect'] ?? '');
 
         $second = Livewire::test(EmailLogin::class)
             ->set('mode', 'register')

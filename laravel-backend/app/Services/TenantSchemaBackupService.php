@@ -26,7 +26,14 @@ class TenantSchemaBackupService
     {
         $filename = sprintf('%s-%s.dump', $schemaName, now()->format('Y-m-d-His'));
         $path = $this->localPath($filename);
-        @mkdir(dirname($path), 0775, true);
+        // The @ here never reliably suppressed this: a second deletion in
+        // the same directory (confirmed 2026-10-09, two test tenants
+        // deleted minutes apart) logged "mkdir(): File exists" every time,
+        // because mkdir() warns on an already-existing target regardless
+        // of the recursive flag. Checking first is the actual fix.
+        if (!is_dir(dirname($path))) {
+            mkdir(dirname($path), 0775, true);
+        }
 
         $config = config('database.connections.pgsql');
 

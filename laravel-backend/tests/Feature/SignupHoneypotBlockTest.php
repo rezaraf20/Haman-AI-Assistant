@@ -69,12 +69,14 @@ class SignupHoneypotBlockTest extends TestCase
             'company_fax' => 'http://spam.example', // honeypot filled
         ]);
 
-        // Looks exactly like a real success to whatever submitted it —
-        // BrandDomains::appUrl() resolves to whichever brand domain is
-        // actually configured (production: app.hamanai.com), so this only
-        // pins the path, not the host.
+        // Looks exactly like a real success to whatever submitted it — a
+        // real success also redirects to /check-email now, not /portal
+        // (2026-10-10: nothing exists yet under signup.require_email_
+        // verification, and /portal never rendered this flash message
+        // anyway). BrandDomains::appUrl() resolves to whichever brand
+        // domain is actually configured, so this only pins the path.
         $response->assertRedirect();
-        $this->assertStringEndsWith('/portal', $response->headers->get('Location'));
+        $this->assertStringContainsString('/check-email', $response->headers->get('Location'));
 
         $this->assertSame($before, $this->counts(), 'a blocked signup must create no user and no tenant');
         $this->assertDatabaseHas('signup_blocks', ['reason' => 'honeypot_filled', 'source' => 'landing']);
@@ -164,7 +166,7 @@ class SignupHoneypotBlockTest extends TestCase
     {
         $before = $this->counts();
 
-        Livewire::test(EmailLogin::class)
+        $component = Livewire::test(EmailLogin::class)
             ->set('mode', 'register')
             ->set('name', 'Bot')
             ->set('email', 'livebot-' . time() . '@example.test')
@@ -172,8 +174,9 @@ class SignupHoneypotBlockTest extends TestCase
             ->set('password_confirmation', 'Password123!')
             ->set('mountedAt', now()->timestamp - 30)
             ->set('companyFax', 'http://spam.example')
-            ->call('submitRegister')
-            ->assertRedirect('/portal');
+            ->call('submitRegister');
+        $component->assertRedirect();
+        $this->assertStringContainsString('/check-email', $component->effects['redirect'] ?? '');
 
         $this->assertSame($before, $this->counts(), 'a blocked Livewire signup must create no user and no tenant');
         $this->assertDatabaseHas('signup_blocks', ['reason' => 'honeypot_filled', 'source' => 'portal_email']);

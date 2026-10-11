@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\SeoController;
 use App\Http\Controllers\LandingSignupController;
+use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Middleware\SetLocale;
 use App\Services\TrendsService;
@@ -46,14 +47,53 @@ Route::post('/signup', [LandingSignupController::class, 'register'])
     ->middleware([SetLocale::class, 'throttle:register'])
     ->name('landing.register');
 
-// Signed and expiring; the hash covers the address the link was issued for.
-Route::get('/verify-email/{id}/{hash}', [LandingSignupController::class, 'verify'])
+// The "check your email" page register() actually redirects to now — see
+// that method's own comment on why /portal silently swallowed this flash
+// message under signup.require_email_verification=true (2026-10-10 fix:
+// nowhere on a Filament panel page ever read session('landing_status')).
+Route::get('/check-email', [LandingSignupController::class, 'checkEmailPage'])
+    ->middleware([SetLocale::class, 'throttle:public-read'])
+    ->name('check.email');
+
+// Signed and expiring; the hash covers the address the link was issued
+// for, the nonce covers which SEND it was issued for — see
+// sendVerification()'s own docblock for why both are needed.
+Route::get('/verify-email/{id}/{hash}/{nonce}', [LandingSignupController::class, 'verify'])
     ->middleware([SetLocale::class, 'signed', 'throttle:public-read'])
     ->name('verify.email');
 
 Route::post('/verify-email/resend', [LandingSignupController::class, 'resend'])
     ->middleware([SetLocale::class, 'auth', 'throttle:public-read'])
     ->name('verify.email.resend');
+
+// Public — no login required, since the whole point is reaching someone
+// who never got far enough to be in a session (closed the tab, came back a
+// day later). Deliberately NOT throttle:register (/signup's per-IP DAILY
+// cap on actual tenant/schema creation) — sharing that counter would let
+// someone's signup attempts starve their own ability to request a
+// password reset or a resend from the same IP for the rest of the day,
+// for two routes that create nothing. throttle:public-read is just the
+// volumetric backstop; the cap that actually matters here is the
+// per-EMAIL one inside LandingSignupController::resendVerificationFor().
+Route::post('/resend-verification', [LandingSignupController::class, 'resendPublic'])
+    ->middleware([SetLocale::class, 'throttle:public-read'])
+    ->name('verify.resend.public');
+
+// Password reset — see PasswordResetController's own docblock. Same
+// signed-URL + single-use-nonce shape as email verification above, on
+// purpose: one proven-correct pattern, not two.
+Route::get('/forgot-password', [PasswordResetController::class, 'showRequestForm'])
+    ->middleware([SetLocale::class, 'throttle:public-read'])
+    ->name('password.request');
+Route::post('/forgot-password', [PasswordResetController::class, 'sendResetLink'])
+    ->middleware([SetLocale::class, 'throttle:public-read'])
+    ->name('password.email');
+Route::get('/reset-password/{id}/{hash}/{nonce}', [PasswordResetController::class, 'showResetForm'])
+    ->middleware([SetLocale::class, 'signed', 'throttle:public-read'])
+    ->name('password.reset');
+Route::post('/reset-password/{id}/{hash}/{nonce}', [PasswordResetController::class, 'resetPassword'])
+    ->middleware([SetLocale::class, 'signed', 'throttle:public-read'])
+    ->name('password.reset.store');
 
 // Zarinpal redirects the end user's browser here after payment — deliberately
 // outside any auth guard (see PaymentController for why that's safe).

@@ -510,7 +510,12 @@ class PublicSiteTest extends TestCase
         $this->configureSmtp();
         Mail::fake();
 
-        $this->submitSignup('new@example.test', 'New Shop')->assertRedirect('https://app.hamanai.com/portal');
+        // Not /portal: under signup.require_email_verification=true there is
+        // nothing there yet, and that flash message has nowhere to render on
+        // a Filament panel page anyway — see LandingSignupController::
+        // register()'s own comment (2026-10-10 fix).
+        $this->submitSignup('new@example.test', 'New Shop')
+            ->assertRedirect('https://app.hamanai.com/check-email?email=new%40example.test');
 
         $user = User::where('email', 'new@example.test')->first();
 
@@ -601,16 +606,26 @@ class PublicSiteTest extends TestCase
         $this->submitSignup('v@example.test', 'V');
 
         $user = User::where('email', 'v@example.test')->first();
+        $nonce = $user->email_verification_nonce;
+        $this->assertNotNull($nonce, 'sendVerification() must store a nonce for the link it just sent');
 
         // Wrong hash: the link is bound to the address it was issued for.
         $this->get(\Illuminate\Support\Facades\URL::temporarySignedRoute('verify.email', now()->addHour(), [
-            'id' => $user->id, 'hash' => sha1('someone-else@example.test'),
+            'id' => $user->id, 'hash' => sha1('someone-else@example.test'), 'nonce' => $nonce,
         ]))->assertRedirect();
         $this->assertNull($user->fresh()->email_verified_at);
 
-        // Correct hash.
+        // Right hash, wrong (stale/guessed) nonce — see sendVerification()'s
+        // own docblock: this is what actually invalidates a superseded link,
+        // not just the signature itself.
         $this->get(\Illuminate\Support\Facades\URL::temporarySignedRoute('verify.email', now()->addHour(), [
-            'id' => $user->id, 'hash' => sha1($user->email),
+            'id' => $user->id, 'hash' => sha1($user->email), 'nonce' => 'not-the-real-nonce',
+        ]))->assertRedirect();
+        $this->assertNull($user->fresh()->email_verified_at);
+
+        // Correct hash AND correct nonce.
+        $this->get(\Illuminate\Support\Facades\URL::temporarySignedRoute('verify.email', now()->addHour(), [
+            'id' => $user->id, 'hash' => sha1($user->email), 'nonce' => $nonce,
         ]))->assertRedirect();
         $this->assertNotNull($user->fresh()->email_verified_at);
     }
@@ -623,7 +638,7 @@ class PublicSiteTest extends TestCase
         $this->submitSignup('u@example.test', 'U');
         $user = User::where('email', 'u@example.test')->first();
 
-        $this->get("/verify-email/{$user->id}/" . sha1($user->email))->assertForbidden();
+        $this->get("/verify-email/{$user->id}/" . sha1($user->email) . '/' . $user->email_verification_nonce)->assertForbidden();
         $this->assertNull($user->fresh()->email_verified_at);
     }
 
@@ -637,7 +652,7 @@ class PublicSiteTest extends TestCase
         Mail::fake();
 
         $this->submitSignup('old-host@example.test', 'Old Host', 'api.arshanweb.ir')
-            ->assertRedirect('https://api.arshanweb.ir/portal');
+            ->assertRedirect('https://api.arshanweb.ir/check-email?email=old-host%40example.test');
     }
 
     public function test_signup_stops_accepting_once_the_daily_limit_is_reached(): void
@@ -646,8 +661,8 @@ class PublicSiteTest extends TestCase
         Mail::fake();
         Settings::set('limits.register_per_ip_per_day', 2);
 
-        $this->submitSignup('one@example.test')->assertRedirect('https://app.hamanai.com/portal');
-        $this->submitSignup('two@example.test')->assertRedirect('https://app.hamanai.com/portal');
+        $this->submitSignup('one@example.test')->assertRedirect('https://app.hamanai.com/check-email?email=one%40example.test');
+        $this->submitSignup('two@example.test')->assertRedirect('https://app.hamanai.com/check-email?email=two%40example.test');
 
         // Signup creates a tenant AND a Postgres schema, so it carries the
         // same daily limiter the API's register does.

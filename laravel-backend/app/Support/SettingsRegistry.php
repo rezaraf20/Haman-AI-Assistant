@@ -249,6 +249,18 @@ class SettingsRegistry
             'signup.require_email_verification' => [
                 'tab' => 'limits', 'group' => 'auth', 'type' => 'bool', 'default' => false,
             ],
+            // Recovery funnel (2026-10-10): resending a verification email
+            // or requesting a password reset both spend real SMTP sends,
+            // and both are keyed by EMAIL (not IP, unlike register_per_ip_
+            // per_day above) since the actual abuse this guards against is
+            // someone hammering ONE address's inbox, not one IP trying many
+            // addresses -- the per-IP register limiter already covers that.
+            'limits.verification_resend_per_hour' => [
+                'tab' => 'limits', 'group' => 'auth', 'type' => 'int', 'default' => 3,
+            ],
+            'limits.password_reset_request_per_hour' => [
+                'tab' => 'limits', 'group' => 'auth', 'type' => 'int', 'default' => 3,
+            ],
             'limits.portal_otp_per_ip_per_day' => [
                 'tab' => 'limits', 'group' => 'otp', 'type' => 'int', 'default' => 10,
             ],

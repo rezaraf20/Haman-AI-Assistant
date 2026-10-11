@@ -34,7 +34,10 @@
                     @error('password') <span style="{{ $fieldErrStyle }}">{{ $message }}</span> @enderror
                 </div>
                 <button type="submit" style="{{ $btnStyle }}" wire:loading.attr="disabled">{{ __('common.login_button') }}</button>
-                <p style="text-align:center;font-size:13px;color:#64748B;margin:16px 0 0;">
+                <p style="text-align:center;font-size:13px;margin:12px 0 0;">
+                    <a href="{{ \App\Support\BrandDomains::appUrl('/forgot-password') }}" style="color:{{ $primary }};text-decoration:none;">{{ __('auth_email.forgot_password_link') }}</a>
+                </p>
+                <p style="text-align:center;font-size:13px;color:#64748B;margin:12px 0 0;">
                     {{ __('common.no_account_yet') }}
                     <button type="button" wire:click="toggleMode" style="background:none;border:none;color:{{ $primary }};cursor:pointer;padding:0;font-size:13px;">{{ __('common.register_link') }}</button>
                 </p>

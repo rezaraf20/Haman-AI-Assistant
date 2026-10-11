@@ -117,8 +117,22 @@ class EmailLogin extends Component {
         $blockReason = \App\Support\SignupRisk::blockReason($this->companyFax, $secondsToSubmit);
         if ($blockReason) {
             \App\Support\SignupRisk::recordBlock($blockReason, 'portal_email', request()->ip(), request()->userAgent());
-            $this->redirect('/portal', navigate: false);
+            $this->redirect($this->checkEmailUrl($this->email), navigate: false);
             return;
+        }
+
+        // Same gap, same fix as LandingSignupController::register() (see
+        // its own comment, 2026-10-10): an email that exists but was never
+        // verified is not a real conflict yet — resend instead of just
+        // failing the unique:users,email rule below with nothing to do
+        // about it except contact support.
+        if ($this->email !== '') {
+            $existing = User::where('email', $this->email)->whereNull('email_verified_at')->first();
+            if ($existing) {
+                app(LandingSignupController::class)->resendVerificationFor($existing);
+                $this->redirect($this->checkEmailUrl($this->email), navigate: false);
+                return;
+            }
         }
 
         $this->validate([
@@ -170,7 +184,16 @@ class EmailLogin extends Component {
         app(LandingSignupController::class)->sendVerification($user);
 
         Auth::guard('web')->login($user, remember: true);
-        $this->redirect('/portal', navigate: false);
+        // Not /portal — see LandingSignupController::register()'s own
+        // comment: under signup.require_email_verification=true there is
+        // nothing there yet, and this path never had anywhere to show a
+        // "check your email" message either.
+        $this->redirect($this->checkEmailUrl($user->email), navigate: false);
+    }
+
+    private function checkEmailUrl(string $email): string
+    {
+        return \App\Support\BrandDomains::appUrl('/check-email') . '?' . http_build_query(['email' => $email]);
     }
 
     public function render() {

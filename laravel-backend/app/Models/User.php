@@ -14,8 +14,8 @@ class User extends Authenticatable implements FilamentUser {
     // never be settable through mass assignment (a Filament form, an API
     // payload, anything). The only writers are the one-time migration that
     // grants it and a human with direct database access.
-    protected $fillable = ['tenant_id','email','phone','first_name','last_name','national_id','address','password','password_hash','name','role','avatar_url','email_verified_at','last_login_at','last_login_ip','failed_login_count','locked_until','preferences','locale'];
-    protected $hidden = ['password','password_hash'];
+    protected $fillable = ['tenant_id','email','phone','first_name','last_name','national_id','address','password','password_hash','name','role','avatar_url','email_verified_at','last_login_at','last_login_ip','failed_login_count','locked_until','preferences','locale','email_verification_nonce','password_reset_nonce'];
+    protected $hidden = ['password','password_hash','email_verification_nonce','password_reset_nonce'];
 
     // Mirrors the column default. platform_is_active is not fillable, so a
     // freshly created User would otherwise hold null for it while the row

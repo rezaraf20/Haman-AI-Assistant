@@ -212,6 +212,8 @@ return [
     'field_limits_register_per_ip_per_day' => 'Registrations per IP per day',
     'field_limits_signup_too_fast_block_seconds' => 'Block signup if submitted faster than (seconds)',
     'field_limits_signup_too_fast_tag_seconds' => 'Flag signup as suspicious if submitted faster than (seconds)',
+    'field_limits_verification_resend_per_hour' => 'Verification emails per address per hour',
+    'field_limits_password_reset_request_per_hour' => 'Password reset requests per address per hour',
     'field_signup_require_email_verification' => 'Require email verification before creating a schema/chatbot (only turn on once SMTP is confirmed working)',
     'field_limits_portal_otp_per_ip_per_day' => 'Portal login codes per IP per day',
     'field_limits_sync_requests_per_minute' => 'Sync requests per minute (per key)',
