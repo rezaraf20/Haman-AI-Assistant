@@ -48,7 +48,21 @@ class Haman_Product_Sync {
     }
 
     public function sync_all( string $cid ): array {
-        if (!class_exists('WooCommerce')) return ['skipped'=>'WooCommerce not active'];
+        // Same shape as every other empty/not-applicable result (see
+        // Haman_Faq_Sync::sync_all()'s own comment on exactly this) — a
+        // bare ['skipped' => 'WooCommerce not active'] used to reach the
+        // admin results table directly as $row, and settings-page.php's
+        // table cell (esc_html($row['skipped'] ?? 0)) printed that string
+        // raw into what every other row shows as a plain count, with
+        // 'new'/'updated'/'deleted'/'failed' silently missing from the
+        // row entirely. The real explanation now travels separately, in
+        // 'note', which the table ignores and the notice block below it
+        // renders instead.
+        if (!class_exists('WooCommerce')) {
+            return array_merge(Haman_Sync_Counts::empty(), [
+                'note' => 'محصولات همگام نشدند چون ووکامرس روی این سایت فعال نیست. / Products were not synced because WooCommerce is not active on this site.',
+            ]);
+        }
         $this->bump_query_version();
         $page=1; $counts=Haman_Sync_Counts::empty(); $errors=[]; $batch=[]; $batchBytes=0;
         do {

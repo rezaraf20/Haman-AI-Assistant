@@ -177,6 +177,11 @@ $authenticity_field_labels = [
         <?php endforeach; ?>
         </tbody>
         </table>
+        <?php foreach ($labels as $key => $label):
+            if (empty($r[$key]['note'])) continue;
+        ?>
+            <div class="notice notice-info inline"><p><?php echo esc_html($r[$key]['note']); ?></p></div>
+        <?php endforeach; ?>
         <?php if (!empty($r['error'])): ?>
             <div class="notice notice-error inline"><p><?php echo esc_html($r['error']); ?></p></div>
         <?php endif; ?>
