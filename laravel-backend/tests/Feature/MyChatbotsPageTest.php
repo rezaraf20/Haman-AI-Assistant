@@ -1,13 +1,11 @@
 <?php
 namespace Tests\Feature;
 
-use App\Filament\Customer\Pages\MyChatbots;
 use App\Models\{Plan, Tenant, User};
 use App\Services\TenantService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
@@ -72,7 +70,12 @@ class MyChatbotsPageTest extends TestCase
         $owner = $this->makeOwnerWithChatbots(2);
         $this->actingAs($owner, 'web');
 
-        Livewire::test(MyChatbots::class)->assertOk();
+        // A real HTTP GET to the actual panel-routed URL -- not
+        // Livewire::test() directly on the page class, which never carries
+        // panel context and so can't resolve WidgetSettings::getUrl() (no
+        // 'customer' panel to resolve against), failing a different way
+        // than the real bug this test exists to catch.
+        $this->get('/portal/my-chatbots')->assertOk();
     }
 
     public function test_the_page_loads_for_a_tenant_with_no_chatbots_at_all(): void
@@ -80,6 +83,6 @@ class MyChatbotsPageTest extends TestCase
         $owner = $this->makeOwnerWithChatbots(0);
         $this->actingAs($owner, 'web');
 
-        Livewire::test(MyChatbots::class)->assertOk();
+        $this->get('/portal/my-chatbots')->assertOk();
     }
 }
