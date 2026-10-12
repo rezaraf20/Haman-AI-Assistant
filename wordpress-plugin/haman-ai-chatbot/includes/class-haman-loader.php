@@ -30,6 +30,12 @@ class Haman_Loader {
         $this->add_action( 'wp_ajax_haman_get_sync_settings',         $admin, 'ajax_get_sync_settings' );
         $this->add_action( 'wp_ajax_haman_clear_and_reindex',         $admin, 'ajax_clear_and_reindex' );
         $this->add_action( 'wp_enqueue_scripts',   $public, 'enqueue_assets' );
+        // add_filter() and add_action() are the same WordPress hook
+        // mechanism under the hood, so reusing this same helper is
+        // correct, not a shortcut — see exclude_from_optimization()'s own
+        // docblock for why this needs to run unconditionally alongside
+        // enqueue_assets(), not just when it actually enqueues anything.
+        $this->add_action( 'wp_enqueue_scripts',   $public, 'exclude_from_optimization' );
         $this->add_action( 'haman_hourly_sync',   $sync,   'run_incremental_sync' );
         // create_payment_link (doc-04) — auto-cancel rule for unpaid draft
         // orders this integration created; scheduled hourly at activation

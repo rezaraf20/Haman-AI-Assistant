@@ -29,6 +29,54 @@ class Haman_Public {
         wp_localize_script('haman-widget', 'HamanWidgetConfig', $this->build_config($chatbot_id));
     }
 
+    /**
+     * Performance plugins (WP Rocket, Autoptimize, Perfmatters,
+     * FlyingPress, ...) defer/lazy-load third-party scripts and minify or
+     * combine stylesheets by default — entirely reasonable for a typical
+     * static asset, but this widget boots itself and builds its own Shadow
+     * DOM the instant it runs, and any delay or rewrite that changes its
+     * CSS even slightly produces exactly the "looks right at first, then
+     * falls apart" symptom a site owner has no way to diagnose themselves.
+     * WP Rocket's "Delay JavaScript Execution" in particular holds the
+     * script until a real user interaction (click/scroll/touch), so the
+     * widget simply never initializes until something else on the page
+     * happens to trigger it.
+     *
+     * Confirmed necessary on a real customer's live site running WP Rocket
+     * (2026-10-12) — reported as "pretty then breaks", traced to the
+     * script tag arriving as type="text/rocketlazyloadscript" with the
+     * real URL stashed in data-rocket-src, and the CSS served through WP
+     * Rocket's own minify/cache proxy. Excluding by handle/URL here fixes
+     * this for every site running these plugins, not just the one that
+     * happened to report it, without asking any site owner to go find a
+     * settings page and guess what to type into it.
+     */
+    public function exclude_from_optimization(): void {
+        $js_path  = 'haman-ai-chatbot/public/js/haman-widget.js';
+        $css_path = 'haman-ai-chatbot/public/css/haman-widget.css';
+
+        // WP Rocket: each of these is a distinct opt-out list — "delay
+        // execution" and "load deferred" are two different WP Rocket
+        // features (the live site above had the script tagged for both),
+        // and minify/combine for JS and CSS are separate from either.
+        add_filter('rocket_delay_js_exclusions', fn (array $e) => array_merge($e, [$js_path]));
+        add_filter('rocket_exclude_defer_js',    fn (array $e) => array_merge($e, [$js_path]));
+        add_filter('rocket_exclude_js',          fn (array $e) => array_merge($e, [$js_path]));
+        add_filter('rocket_exclude_css',         fn (array $e) => array_merge($e, [$css_path]));
+
+        // Autoptimize, Perfmatters, FlyingPress and others honor this
+        // de-facto data-no-optimize attribute directly on the tag;
+        // data-cfasync="false" is the equivalent Cloudflare Rocket Loader
+        // respects (an unrelated "Rocket" from WP Rocket, same idea).
+        add_filter('script_loader_tag', [$this, 'addNoOptimizeAttribute'], 10, 2);
+        add_filter('style_loader_tag',  [$this, 'addNoOptimizeAttribute'], 10, 2);
+    }
+
+    public function addNoOptimizeAttribute(string $tag, string $handle): string {
+        if ($handle !== 'haman-widget' || str_contains($tag, 'data-no-optimize')) return $tag;
+        return preg_replace('/^<(script|link)\b/', '<$1 data-no-optimize="1" data-cfasync="false"', $tag, 1);
+    }
+
     private function build_config(string $chatbot_id): array {
         $api_url = rtrim(get_option('haman_api_url', HAMAN_API_BASE), '/');
 
