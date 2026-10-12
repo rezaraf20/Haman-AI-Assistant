@@ -1145,7 +1145,18 @@
         fetch(H.apiUrl + '/chat/session', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chatbot_id: H.chatbotId, session_id: H.sessionId, page_url: window.location.href }),
+            // This request never carried a language at all, so the server's
+            // own default ('en' — see ChatController::createSession())
+            // always won, and that same value echoes straight back as
+            // d.language below, which applyWidgetConfig() uses to force
+            // dir — overwriting the correct rtl this page already set from
+            // CFG.dir moments earlier. On every Persian site, every single
+            // new conversation: starts rtl, flips to ltr a moment after
+            // /chat/session responds. CFG.dir is the one thing already
+            // known for certain at this point (get_locale() on a
+            // server-rendered page, not a guess), so it is also the
+            // correct source for what to tell the server here.
+            body: JSON.stringify({ chatbot_id: H.chatbotId, session_id: H.sessionId, page_url: window.location.href, language: CFG.dir === 'rtl' ? 'fa' : 'en' }),
         })
             .then(function (r) { if (!r.ok) throw new Error('unavailable'); return r.json(); })
             .then(function (data) {
