@@ -44,7 +44,20 @@ class MyChatbots extends Page implements HasTable {
                 // this" without a support ticket.
                 TextColumn::make('disabled_reason')
                     ->label(__('chatbot.status_label'))
-                    ->visible(fn (ChatbotIndexEntry $record) => !$record->is_active && $record->disabled_reason)
+                    // Filament evaluates a column's visible() closure once
+                    // with no record at all, independent of any row, to
+                    // decide whether to list this column in the "toggle
+                    // columns" menu -- not just per-row while rendering
+                    // actual data. A non-nullable type hint here crashed
+                    // that call with a TypeError on every single visit to
+                    // this page, for every tenant regardless of how many
+                    // chatbots they had (confirmed on a real account with
+                    // 2 real chatbots) -- this was never a zero-rows edge
+                    // case, the column-level call is unconditional. Treat
+                    // no-record as "available to toggle"; the per-row
+                    // visibility check below still runs normally once a
+                    // real record is being rendered.
+                    ->visible(fn (?ChatbotIndexEntry $record) => !$record || (!$record->is_active && $record->disabled_reason))
                     ->formatStateUsing(fn (?string $state) => $state ? __('chatbot.disabled_reason_' . $state) : null)
                     ->color('danger'),
                 TextColumn::make('expires_at')->label(__('chatbot.expiry_date'))->formatStateUsing(fn ($state) => Jalali::date($state))
