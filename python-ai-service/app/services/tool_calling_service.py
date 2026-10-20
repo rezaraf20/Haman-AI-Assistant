@@ -32,6 +32,7 @@ from app.services.llm_provider_service import _redis
 from app.services.tools.registry import get_enabled_tools, to_openai_schema, Tool
 from app.services.answer_format import strip_source_labels
 from app.services.claim_guard import proven_actions, verify_claims
+from app.services.widget_reference_guard import strip_unbacked_widget_references
 from app.lang.tool_results import PHRASED_TOOLS, tool_result_phrase
 from app.services.tool_router import route
 
@@ -383,7 +384,7 @@ def _tool_calling_chat(db: Session, messages: List[dict], tools_schema: Optional
     # Local import — avoids a circular import at module load time (rag_service
     # imports this module too, from inside a function, at call time, by
     # which point rag_service is already fully loaded).
-    from app.services.rag_service import _compute_cost_toman
+    from app.services.rag_service import _compute_cost_toman, EmptyCompletionError
 
     profiles = llm_provider_service.get_active_tool_calling_profiles(db)
     if not profiles:
@@ -393,7 +394,16 @@ def _tool_calling_chat(db: Session, messages: List[dict], tools_schema: Optional
     for profile in profiles:
         try:
             message, usage = _openai_tool_chat(profile, messages, tools_schema, max_tokens, temperature, forced_tool)
+            # Same blank-200 check as rag_service._chat_completion(): a tool
+            # call is a legitimate "no content" response, but a turn with
+            # neither a tool call nor any text is not a usable answer, even
+            # though the HTTP call itself succeeded.
+            if not message.get("tool_calls") and not (message.get("content") or "").strip():
+                raise EmptyCompletionError(
+                    f"{profile['name']} returned HTTP 200 with no tool call and empty content (usage={usage})"
+                )
             cost_toman = _compute_cost_toman(profile, usage)
+            logger.info(f"Tool-calling provider '{profile['name']}' succeeded ({usage.get('completion_tokens', '?')} completion tokens).")
             llm_provider_service.record_outcome(db, profile["name"], success=True)
             return message, f"{profile['provider']}/{profile['model_name']}", usage, cost_toman
         except ProviderRateLimitedError as e:
@@ -648,6 +658,17 @@ def run_tool_calling_pipeline(
                 logger.warning(f"Unproven claim(s) removed for chatbot {chatbot_id}: {sorted(set(cut))}")
                 _log_event(db, conversation_id, chatbot_id, "unproven_claim_removed", {
                     "actions": sorted(set(cut)),
+                })
+            # widget_blocks is this turn's real, checkable fact: a sentence
+            # pointing the customer at a button/link is only ever true if
+            # something here actually built one. See widget_reference_guard.py
+            # for the reported incident (offered a cart button no tool call
+            # that turn had produced).
+            answer, dropped_refs = strip_unbacked_widget_references(answer, has_widget_blocks=bool(widget_blocks))
+            if dropped_refs:
+                logger.warning(f"Unbacked UI reference(s) removed for chatbot {chatbot_id}: {dropped_refs}")
+                _log_event(db, conversation_id, chatbot_id, "unbacked_widget_reference_removed", {
+                    "sentences": dropped_refs,
                 })
             return {
                 "response": answer,

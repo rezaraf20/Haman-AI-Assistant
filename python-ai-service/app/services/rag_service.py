@@ -11,9 +11,17 @@ from app.services import llm_provider_service
 from app.services.intent_classifier import classify_intent
 from app.services.answer_format import strip_source_labels
 from app.services.claim_guard import verify_claims
+from app.services.widget_reference_guard import strip_unbacked_widget_references
 from app.services.tool_router import is_tool_candidate
 
 logger = logging.getLogger(__name__)
+
+
+class EmptyCompletionError(Exception):
+    """Raised when a provider returns HTTP 200 with a well-formed body but a
+    blank answer — not a transport/HTTP failure, so nothing else would ever
+    catch it, but just as unusable to a customer as one."""
+
 
 GEMINI_V1_EMBED_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-embedding-001:embedContent"
 
@@ -85,7 +93,13 @@ GROUNDING_RULES = (
     "looked at just now — it might be listed under another name. Here's what I do "
     "have: ...'. This applies however the question was asked — 'do you have X', 'do "
     "you carry X', 'is there an X' — the answer is about your search, never a "
-    "certainty about the whole catalog."
+    "certainty about the whole catalog.\n\n"
+    "Never tell the customer to click a button or a link, or refer to any "
+    "other interactive element, unless a tool call this exact turn actually "
+    "built one for the interface to render — your own text is never what "
+    "puts a button on the screen. If you haven't called a tool that "
+    "produces one, don't describe clicking anything; say what you can "
+    "offer in plain words instead."
 )
 DEFAULT_SYSTEM = GROUNDING_RULES
 
@@ -145,7 +159,11 @@ GROUNDING_RULES_FA = (
     "کردی را نشان بده تا مشتری دست‌خالی نماند. غلط: «ماگ سبز نداریم.» درست: «در چیزی که همین الان "
     "بررسی کردم ماگ سبزی پیدا نکردم — ممکن است با نام دیگری ثبت شده باشد. این‌ها را دارم: ...». این "
     "قانون به هر شکلی که سؤال پرسیده شود صدق می‌کند — «دارید؟»، «موجود دارید؟»، «هست؟» — پاسخ درباره‌ی "
-    "جستجوی خودت است، نه یک قطعیت درباره‌ی کل کاتالوگ."
+    "جستجوی خودت است، نه یک قطعیت درباره‌ی کل کاتالوگ.\n\n"
+    "هرگز به مشتری نگو روی دکمه یا لینکی کلیک کند، یا به هر عنصر تعاملی دیگری ارجاع نده، مگر این‌که "
+    "همین نوبت یک ابزار واقعاً آن را ساخته باشد — متن خودت هرگز چیزی روی صفحه قرار نمی‌دهد. اگر "
+    "ابزاری که چنین چیزی می‌سازد را صدا نزده‌ای، از کلیک کردن روی چیزی صحبت نکن؛ به‌جایش همان چیزی "
+    "که می‌توانی ارائه کنی را با کلام ساده بگو."
 )
 
 # Used only when: (a) the chatbot has no custom fallback_response configured
@@ -667,6 +685,17 @@ def _strip_unproven_claims(
         logger.warning(f"Unproven claim(s) removed for chatbot {chatbot_id}: {sorted(set(cut))}")
         _log_event(db, conversation_id, chatbot_id, "unproven_claim_removed", {
             "actions": sorted(set(cut)),
+        })
+
+    # No tool ran on this path, so widget_blocks is always empty here —
+    # any sentence pointing at a button/link the response isn't rendering
+    # is necessarily false. See widget_reference_guard.py's module docstring
+    # for the reported incident this covers.
+    cleaned, dropped_refs = strip_unbacked_widget_references(cleaned, has_widget_blocks=False)
+    if dropped_refs:
+        logger.warning(f"Unbacked UI reference(s) removed for chatbot {chatbot_id}: {dropped_refs}")
+        _log_event(db, conversation_id, chatbot_id, "unbacked_widget_reference_removed", {
+            "sentences": dropped_refs,
         })
     return cleaned, cut
 
@@ -1213,6 +1242,20 @@ def _chat_completion(db: Session, prompt: str, max_tokens: int, temperature: flo
         for attempt in range(attempts):
             try:
                 answer, usage = _openai_compatible_chat(profile, prompt, max_tokens, temperature)
+                # A 200 with a well-formed body and an empty/blank answer is
+                # not success — a real incident showed gpt-oss-20b return
+                # exactly this (completion_tokens burned to the max_tokens
+                # cap, content still ""), and raise_for_status()/json parsing
+                # both pass clean, so nothing upstream of here ever noticed.
+                # Routed through the same except block below so it gets the
+                # same retry-then-failover treatment as a real error, not a
+                # parallel branch.
+                if not (answer or "").strip():
+                    raise EmptyCompletionError(
+                        f"{profile['name']} returned HTTP 200 with empty content "
+                        f"(usage={usage})"
+                    )
+                logger.info(f"LLM provider '{profile['name']}' succeeded ({usage.get('completion_tokens', '?')} completion tokens).")
                 llm_provider_service.record_outcome(db, profile['name'], success=True)
                 cost_toman = _compute_cost_toman(profile, usage)
                 return answer, f"{profile['provider']}/{profile['model_name']}", usage, cost_toman
@@ -1348,6 +1391,16 @@ def _chat_completion_stream(db: Session, prompt: str, max_tokens: int, temperatu
                     yield ("delta", payload)
                 elif kind == "usage":
                     usage = payload
+            if not started:
+                # The stream ended clean (no transport error) but never
+                # yielded a single delta — same blank-200 failure mode as
+                # _chat_completion(), just discovered at the end instead of
+                # up front. Caught by the except below, which already knows
+                # not to re-raise when started is False.
+                raise EmptyCompletionError(
+                    f"{profile['name']} streamed zero content before ending (usage={usage})"
+                )
+            logger.info(f"LLM provider '{profile['name']}' succeeded ({usage.get('completion_tokens', '?')} completion tokens).")
             llm_provider_service.record_outcome(db, profile['name'], success=True)
             cost_toman = _compute_cost_toman(profile, usage)
             yield ("meta", {
