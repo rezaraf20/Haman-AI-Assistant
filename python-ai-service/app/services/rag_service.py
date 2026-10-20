@@ -73,7 +73,19 @@ GROUNDING_RULES = (
     "context for the exact thing being asked about — never round, combine, rephrase, "
     "or reuse a real number from a different topic in the context to answer a "
     "question it wasn't actually about, and never state a number you're not certain "
-    "is in the context at all."
+    "is in the context at all.\n\n"
+    "Never tell a customer the business does not carry something, or does not have it "
+    "in a given attribute (color, size, model, etc.), just because the context you were "
+    "given doesn't show it — the context is one search's results, not the whole "
+    "catalog, and a flat 'we don't have that' is very often simply wrong and costs a "
+    "sale. Say only what your own search found: that you didn't find a match for that "
+    "specific request in what you looked at, that it may be listed under different "
+    "wording, and then show what you did find so the customer isn't left with nothing. "
+    "Wrong: 'We don't have a green mug.' Right: 'I didn't find a green mug in what I "
+    "looked at just now — it might be listed under another name. Here's what I do "
+    "have: ...'. This applies however the question was asked — 'do you have X', 'do "
+    "you carry X', 'is there an X' — the answer is about your search, never a "
+    "certainty about the whole catalog."
 )
 DEFAULT_SYSTEM = GROUNDING_RULES
 
@@ -124,7 +136,16 @@ GROUNDING_RULES_FA = (
     "می‌دهد»، «X برابر فروش بیشتر»، «تیکت‌های پشتیبانی را X درصد کاهش می‌دهد») هم صدق می‌کند: فقط "
     "عددی را بگو که دقیقاً همان‌طور در زمینه، برای همان موضوعی که سوال شده، آمده — هرگز عددی از یک "
     "موضوع دیگر در زمینه را گرد نکن، ترکیب نکن، بازنویسی نکن یا برای پاسخ به سوالی که واقعاً درباره‌ی "
-    "آن نبوده استفاده نکن، و هرگز عددی را که مطمئن نیستی اصلاً در زمینه هست بیان نکن."
+    "آن نبوده استفاده نکن، و هرگز عددی را که مطمئن نیستی اصلاً در زمینه هست بیان نکن.\n\n"
+    "هرگز به مشتری نگو این کسب‌وکار چیزی را ندارد — نه یک محصول، نه یک محصول با یک ویژگی خاص (رنگ، "
+    "سایز، مدل و مانند آن) — فقط به این دلیل که زمینه‌ای که به تو داده شده آن را نشان نمی‌دهد: آنچه "
+    "داری نتیجه‌ی یک جستجو است، نه کل کاتالوگ، و «این را نداریم» با قطعیت اغلب اشتباه است و یک فروش را "
+    "از دست می‌دهد. فقط همان چیزی را بگو که جستجوی خودت نشان داده: که برای این درخواست مشخص در آنچه "
+    "بررسی کردی چیزی پیدا نکردی، ممکن است با نام یا عبارت دیگری ثبت شده باشد، و سپس آنچه واقعاً پیدا "
+    "کردی را نشان بده تا مشتری دست‌خالی نماند. غلط: «ماگ سبز نداریم.» درست: «در چیزی که همین الان "
+    "بررسی کردم ماگ سبزی پیدا نکردم — ممکن است با نام دیگری ثبت شده باشد. این‌ها را دارم: ...». این "
+    "قانون به هر شکلی که سؤال پرسیده شود صدق می‌کند — «دارید؟»، «موجود دارید؟»، «هست؟» — پاسخ درباره‌ی "
+    "جستجوی خودت است، نه یک قطعیت درباره‌ی کل کاتالوگ."
 )
 
 # Used only when: (a) the chatbot has no custom fallback_response configured
@@ -523,7 +544,8 @@ def _grounding_reminder(is_fa: bool, is_first_turn: bool = True) -> str:
             "را که در بالا صراحتاً به‌عنوان نام این کسب‌وکار داده نشده، نساز یا به‌کار نبر — اگر نام "
             "دقیق را نمی‌دانی، صادقانه بگو نمی‌دانی. همچنین هیچ نام پلتفرم/نرم‌افزار شخص ثالث (مثل "
             "Shopify، Magento، GPT-4، Claude) و هیچ عدد یا درصدی که دقیقاً در زمینه، برای همین سوال، "
-            "نیامده نساز — اگر زمینه چیزی نگفته، بگو این اطلاعات فهرست نشده."
+            "نیامده نساز — اگر زمینه چیزی نگفته، بگو این اطلاعات فهرست نشده. و اگر چیزی در زمینه "
+            "نبود، هرگز نگو «نداریم» — بگو در جستجوی خودت پیدا نکردی، و همان را که پیدا کردی نشان بده."
         )
         if not is_first_turn:
             base += " مکالمه از قبل در جریان است؛ دوباره سلام نکن و امضای پایانی/اطلاعات تماس را تکرار نکن."
@@ -534,7 +556,9 @@ def _grounding_reminder(is_fa: bool, is_first_turn: bool = True) -> str:
         "above as this business's own name — if you don't know its exact name, say so. "
         "Also never invent a third-party platform/software name (e.g. Shopify, Magento, "
         "GPT-4, Claude) or any number/percentage that doesn't appear verbatim in the "
-        "context for this exact question — if the context doesn't say, say it isn't listed."
+        "context for this exact question — if the context doesn't say, say it isn't listed. "
+        "And if something isn't in the context, never say 'we don't have that' — say you "
+        "didn't find it in your own search, and show what you did find."
     )
     if not is_first_turn:
         base += " The conversation is already under way; do not greet again, and do not repeat a closing signature or contact info."

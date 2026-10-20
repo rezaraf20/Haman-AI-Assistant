@@ -568,7 +568,11 @@ register(Tool(
         "Search the store's LIVE catalog with structured filters — category, price range, "
         "brand, in-stock-only — not a meaning/similarity search (use this for 'show me "
         "shoes under 500000 toman that are in stock', not for open-ended questions the "
-        "regular knowledge base already answers)."
+        "regular knowledge base already answers). An empty result means this one search "
+        "matched nothing — it is not proof the store doesn't carry the thing at all. Never "
+        "tell the customer the business 'doesn't have' or 'doesn't carry' it; say you "
+        "didn't find a match for that specific search, that it may be listed under "
+        "different wording, and show whatever related products you do have."
     ),
     parameters={
         "type": "object",
@@ -594,7 +598,10 @@ register(Tool(
         "Always returns only in-stock products. For each product returned, base your one-"
         "sentence explanation of why it fits ONLY on the short_description the tool gives "
         "you — never invent a reason. If the tool returns fewer than 3 products, recommend "
-        "only that many; never pad the list with something not returned here."
+        "only that many; never pad the list with something not returned here. Zero products "
+        "returned means this search found no fit — never tell the customer the business "
+        "'doesn't have' or 'doesn't carry' anything like it; say you didn't find a match this "
+        "time and offer to search differently."
     ),
     parameters={
         "type": "object",
