@@ -4,7 +4,6 @@ namespace Tests\Feature;
 use Tests\TestCase;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Str;
 
 /**
@@ -13,10 +12,40 @@ use Illuminate\Support\Str;
  * isn't reachable from a PHP test): once that Redis key is set, a real
  * customer already got the fallback message instead of an answer, and this
  * command's only job is telling an admin, once per outage window.
+ *
+ * Uses a real, raw \Redis connection -- not the Redis:: facade, not a mock --
+ * because that is exactly what the command itself uses and exactly what a
+ * live incident proved the facade gets wrong here: database.redis.options.prefix
+ * (Laravel's own stock default, derived from APP_NAME) silently prefixes every
+ * facade command, so Redis::get() on the bare key Python actually writes reads
+ * back null every time. A mock of the facade would have kept that bug green
+ * forever; this test would have caught it on day one.
  */
 class NotifyProviderOutageTest extends TestCase
 {
     use RefreshDatabase;
+
+    private const ALERT_KEY    = 'haman:alerts:all_providers_failed_at';
+    private const COOLDOWN_KEY = 'haman:alerts:all_providers_failed_notified';
+
+    private \Redis $redis;
+
+    protected function setUp(): void {
+        parent::setUp();
+        $this->redis = new \Redis();
+        $this->redis->connect(config('database.redis.default.host'), (int) config('database.redis.default.port'));
+        $password = config('database.redis.default.password');
+        if ($password) {
+            $this->redis->auth($password);
+        }
+        $this->redis->select((int) config('database.redis.default.database', 0));
+        $this->redis->del(self::ALERT_KEY, self::COOLDOWN_KEY);
+    }
+
+    protected function tearDown(): void {
+        $this->redis->del(self::ALERT_KEY, self::COOLDOWN_KEY);
+        parent::tearDown();
+    }
 
     private function makeAdmin(): User {
         $admin = User::create([
@@ -37,29 +66,18 @@ class NotifyProviderOutageTest extends TestCase
         $admin1 = $this->makeAdmin();
         $admin2 = $this->makeAdmin();
 
-        Redis::shouldReceive('get')
-            ->with('haman:alerts:all_providers_failed_at')
-            ->andReturn(json_encode(['at' => now()->timestamp, 'reason' => 'all providers 429/empty']));
-        Redis::shouldReceive('get')
-            ->with('haman:alerts:all_providers_failed_notified')
-            ->andReturn(null);
-        Redis::shouldReceive('set')
-            ->with('haman:alerts:all_providers_failed_notified', '1', 'EX', 1800)
-            ->once();
+        $this->redis->set(self::ALERT_KEY, json_encode(['at' => now()->timestamp, 'reason' => 'all providers 429/empty']));
 
         $this->artisan('haman:notify-provider-outage')->assertSuccessful();
 
         $this->assertEquals(1, $admin1->fresh()->unreadNotifications()->count());
         $this->assertEquals(1, $admin2->fresh()->unreadNotifications()->count());
+        $this->assertNotNull($this->redis->get(self::COOLDOWN_KEY));
     }
 
     public function test_no_signal_notifies_no_one(): void
     {
         $admin = $this->makeAdmin();
-
-        Redis::shouldReceive('get')
-            ->with('haman:alerts:all_providers_failed_at')
-            ->andReturn(null);
 
         $this->artisan('haman:notify-provider-outage')->assertSuccessful();
 
@@ -70,13 +88,8 @@ class NotifyProviderOutageTest extends TestCase
     {
         $admin = $this->makeAdmin();
 
-        Redis::shouldReceive('get')
-            ->with('haman:alerts:all_providers_failed_at')
-            ->andReturn(json_encode(['at' => now()->timestamp, 'reason' => 'still failing']));
-        Redis::shouldReceive('get')
-            ->with('haman:alerts:all_providers_failed_notified')
-            ->andReturn('1');
-        Redis::shouldReceive('set')->never();
+        $this->redis->set(self::ALERT_KEY, json_encode(['at' => now()->timestamp, 'reason' => 'still failing']));
+        $this->redis->set(self::COOLDOWN_KEY, '1');
 
         $this->artisan('haman:notify-provider-outage')->assertSuccessful();
 
