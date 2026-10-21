@@ -133,9 +133,15 @@ curl -X POST http://localhost/api/v1/chatbots \
 # پوشه plugin را در WordPress کپی کنید
 cp -r wordpress-plugin/haman-ai-chatbot/ /path/to/wordpress/wp-content/plugins/
 
-# یا ZIP کنید و از پنل WordPress آپلود کنید
-cd wordpress-plugin
-zip -r haman-ai-chatbot.zip haman-ai-chatbot/
+# یا ZIP بسازید و از پنل WordPress آپلود کنید — همیشه با این اسکریپت، نه
+# zip -r دستی. zip -r از روی یک dev checkout هر چیزی که فیزیکی روی دیسک
+# باشد را جارو می‌کند، چه در .gitignore باشد چه نه — یک بار node_modules
+# (برای تست‌های JS) و tests/ وارد ZIP شدند و حجمش از ۹۳KB به ۳.۷MB رسید.
+# این اسکریپت فهرست صریح فایل‌ها دارد و خودش هم بررسی می‌کند که هیچ
+# node_modules، vendor، .git، .env یا فایل خارج از ریشه‌ی افزونه نیست، و
+# هدر/نسخه درست round-trip می‌کند — اگر هر بررسی رد شود، ZIP ساخته‌نشده
+# می‌ماند.
+bash scripts/build-plugin-zip.sh
 ```
 
 سپس در WordPress:
