@@ -1,6 +1,7 @@
 import json
 import base64
 import logging
+import time
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -24,6 +25,20 @@ CACHE_TTL_SECONDS = 45
 # scheduler still finds a real, recent signal instead of a stale one.
 ALL_PROVIDERS_FAILED_KEY = "haman:alerts:all_providers_failed_at"
 ALL_PROVIDERS_FAILED_TTL_SECONDS = 3600
+
+# Several profiles sharing the same priority (e.g. four Gemini keys from
+# separate projects/quota pools, each with its own TPM limit) were still
+# all hammering whichever one sorted first in that tier every single
+# request -- same-priority was never actually spreading load, it was just
+# a longer failover chain. These two prefixes back a least-recently-used
+# ordering within a tier: order_for_attempt() reads them, mark_attempted()
+# writes the LRU timestamp, mark_rate_limited() sets a short cooldown that
+# pulls a 429'd profile out of its tier's rotation without touching
+# consecutive_failures/auto-disable at all -- a profile that's merely
+# rate-limited this minute is not "structurally broken".
+LRU_KEY_PREFIX = "haman:llm_rr:last_used:"
+COOLDOWN_KEY_PREFIX = "haman:llm_rr:cooldown:"
+COOLDOWN_SECONDS = 60
 
 # A dead provider left active in the failover chain doesn't just do nothing —
 # every request routed to it (before falling through to the next one) pays
@@ -173,6 +188,74 @@ def record_outcome(db: Session, profile_name: str, success: bool) -> None:
     except Exception as e:
         logger.warning(f"Failed to record provider outcome for {profile_name}: {e}")
         db.rollback()
+
+
+def mark_attempted(profile_name: str) -> None:
+    """Call the moment a profile is actually about to be tried (not only on
+    success) -- the point is "whoever went most recently, regardless of
+    outcome, goes to the back of its tier's queue next time", so every
+    same-priority sibling gets a turn instead of one eating every request
+    that happens to make it past routing."""
+    try:
+        _redis.set(f"{LRU_KEY_PREFIX}{profile_name}", str(time.time()))
+    except Exception as e:
+        logger.warning(f"Failed to record LRU timestamp for {profile_name}: {e}")
+
+
+def mark_rate_limited(profile_name: str) -> None:
+    """A 429 means this profile's own quota window is spent, not that it's
+    broken -- pull it out of rotation for COOLDOWN_SECONDS rather than
+    counting it toward auto-disable (same reasoning _chat_completion()
+    already applies to 429s individually)."""
+    try:
+        _redis.set(f"{COOLDOWN_KEY_PREFIX}{profile_name}", "1", ex=COOLDOWN_SECONDS)
+    except Exception as e:
+        logger.warning(f"Failed to record rate-limit cooldown for {profile_name}: {e}")
+
+
+def order_for_attempt(profiles: List[dict]) -> List[dict]:
+    """Reorders an already priority-ascending list (as returned by
+    get_active_profiles()/get_active_tool_calling_profiles()) for one
+    attempt: within each priority tier, least-recently-used first instead
+    of always the same one, and a profile currently in its 429 cooldown is
+    dropped from this attempt entirely -- it simply isn't offered a turn
+    until the cooldown clears, same as it not being in this tier at all.
+    If that empties a tier, the next-priority tier is still tried, which is
+    exactly the desired behavior under a real rate-limit burst rather than
+    an error.
+
+    Falls back to the plain input order on any Redis failure -- ordering is
+    an optimization, never a reason to refuse an otherwise-active profile.
+    """
+    if not profiles:
+        return profiles
+    try:
+        names = [p["name"] for p in profiles]
+        pipe = _redis.pipeline()
+        for n in names:
+            pipe.get(f"{COOLDOWN_KEY_PREFIX}{n}")
+        for n in names:
+            pipe.get(f"{LRU_KEY_PREFIX}{n}")
+        results = pipe.execute()
+        cooldowns = {n for n, v in zip(names, results[: len(names)]) if v}
+        lru_times = {n: float(v) for n, v in zip(names, results[len(names) :]) if v}
+    except Exception as e:
+        logger.warning(f"Failed to read LRU/cooldown state, using plain priority order: {e}")
+        return profiles
+
+    available = [p for p in profiles if p["name"] not in cooldowns]
+
+    ordered: List[dict] = []
+    i = 0
+    while i < len(available):
+        j = i
+        tier_priority = available[i]["priority"]
+        while j < len(available) and available[j]["priority"] == tier_priority:
+            j += 1
+        tier = sorted(available[i:j], key=lambda p: lru_times.get(p["name"], 0.0))
+        ordered.extend(tier)
+        i = j
+    return ordered
 
 
 def record_all_providers_failed(reason: str) -> None:

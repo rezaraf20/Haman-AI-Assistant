@@ -1201,7 +1201,26 @@ def _openai_compatible_chat(profile: dict, prompt: str, max_tokens: int, tempera
     )
     resp.raise_for_status()
     body = resp.json()
-    return body["choices"][0]["message"]["content"], body.get("usage", {})
+    message = body["choices"][0]["message"]
+    content = message.get("content")
+    # The exact shape of a real incident: gpt-oss-20b spent its whole
+    # completion-token budget on an internal reasoning channel (OpenAI-
+    # compatible providers return it as message.reasoning) and never
+    # reached the content channel at all -- a blank 200, no exception, no
+    # trace anywhere, discovered only by reading production conversation
+    # rows days later. This is the one place that can see both fields at
+    # once, so it's the one place that can say so immediately instead of
+    # leaving EmptyCompletionError's caller to guess why.
+    if not (content or "").strip() and (message.get("reasoning") or "").strip():
+        usage_now = body.get("usage", {})
+        reasoning_tokens = (usage_now.get("completion_tokens_details") or {}).get("reasoning_tokens")
+        logger.warning(
+            f"'{profile['name']}' ({profile['model_name']}) returned empty content but a populated "
+            f"reasoning field ({len(message['reasoning'])} chars, {reasoning_tokens} reasoning_tokens of "
+            f"{usage_now.get('completion_tokens')} completion_tokens) -- reasoning consumed the whole "
+            f"budget before any content was written."
+        )
+    return content, body.get("usage", {})
 
 
 def _compute_cost_toman(profile: dict, usage: dict) -> float:
@@ -1225,7 +1244,7 @@ def _chat_completion(db: Session, prompt: str, max_tokens: int, temperature: flo
     empty if it didn't include one; cost_toman is computed from the profile's
     admin-entered per-1M-token prices.
     """
-    profiles = llm_provider_service.get_active_profiles(db)
+    profiles = llm_provider_service.order_for_attempt(llm_provider_service.get_active_profiles(db))
     if not profiles:
         raise RuntimeError("No active LLM provider profiles configured")
 
@@ -1239,9 +1258,11 @@ def _chat_completion(db: Session, prompt: str, max_tokens: int, temperature: flo
         # rejected won't have refilled a second later, so retrying just
         # burns time before falling through to the next provider anyway.
         attempts = 2
+        attempt_max_tokens = max_tokens
         for attempt in range(attempts):
+            llm_provider_service.mark_attempted(profile['name'])
             try:
-                answer, usage = _openai_compatible_chat(profile, prompt, max_tokens, temperature)
+                answer, usage = _openai_compatible_chat(profile, prompt, attempt_max_tokens, temperature)
                 # A 200 with a well-formed body and an empty/blank answer is
                 # not success — a real incident showed gpt-oss-20b return
                 # exactly this (completion_tokens burned to the max_tokens
@@ -1263,17 +1284,35 @@ def _chat_completion(db: Session, prompt: str, max_tokens: int, temperature: flo
                 last_error = e
                 status = getattr(getattr(e, 'response', None), 'status_code', None)
                 is_last_attempt = attempt == attempts - 1
-                if status == 429 or is_last_attempt:
+                if status == 429:
                     logger.warning(f"LLM provider '{profile['name']}' failed, trying next: {e}")
                     # A 429 is transient and expected under load. Counting it
                     # towards auto-disable turned a momentary throttle into a
                     # permanent outage: five rate-limited messages in a row
                     # disabled the only working profile and every request
                     # after that failed instantly until a human re-enabled it.
-                    if status != 429:
-                        llm_provider_service.record_outcome(db, profile['name'], success=False)
+                    # mark_rate_limited() pulls it out of its priority tier's
+                    # rotation for a short cooldown instead — a separate,
+                    # cheaper lever than auto-disable for the same "don't keep
+                    # hitting this one right now" intent.
+                    llm_provider_service.mark_rate_limited(profile['name'])
                     break
-                logger.warning(f"LLM provider '{profile['name']}' failed (attempt {attempt + 1}/{attempts}), retrying: {e}")
+                if is_last_attempt:
+                    logger.warning(f"LLM provider '{profile['name']}' failed, trying next: {e}")
+                    llm_provider_service.record_outcome(db, profile['name'], success=False)
+                    break
+                if isinstance(e, EmptyCompletionError):
+                    # Cheaper than failing over to the next profile: the
+                    # budget is the one thing known to have run out, so try
+                    # this same profile once more with more of it before
+                    # giving up on it entirely.
+                    attempt_max_tokens = int(attempt_max_tokens * 1.5)
+                    logger.warning(
+                        f"LLM provider '{profile['name']}' returned empty content, retrying with "
+                        f"max_tokens={attempt_max_tokens} before failover: {e}"
+                    )
+                else:
+                    logger.warning(f"LLM provider '{profile['name']}' failed (attempt {attempt + 1}/{attempts}), retrying: {e}")
                 time.sleep(1)
 
     llm_provider_service.record_all_providers_failed(f"_chat_completion exhausted {len(profiles)} profile(s): {last_error}")
@@ -1305,10 +1344,22 @@ def _openai_compatible_chat_stream(profile: dict, prompt: str, max_tokens: int, 
     )
     resp.raise_for_status()
     usage = {}
+    content_seen = False
+    reasoning_chars = 0
+
+    def _warn_if_empty_but_reasoning() -> None:
+        if not content_seen and reasoning_chars:
+            reasoning_tokens = (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")
+            logger.warning(
+                f"'{profile['name']}' ({profile['model_name']}) streamed zero content but "
+                f"{reasoning_chars} chars of reasoning ({reasoning_tokens} reasoning_tokens of "
+                f"{usage.get('completion_tokens')} completion_tokens) -- same empty-budget shape "
+                f"as the non-streaming path, just discovered mid-stream."
+            )
 
     def _handle_line(line: str) -> Optional[Tuple[str, str]]:
         """Returns ("done", "") / ("delta", text) / None (nothing to yield)."""
-        nonlocal usage
+        nonlocal usage, content_seen, reasoning_chars
         if not line or not line.startswith("data:"):
             return None
         payload = line[len("data:"):].strip()
@@ -1320,8 +1371,13 @@ def _openai_compatible_chat_stream(profile: dict, prompt: str, max_tokens: int, 
             return None
         choices = chunk.get("choices") or []
         if choices:
-            delta = (choices[0].get("delta") or {}).get("content")
+            delta_obj = choices[0].get("delta") or {}
+            reasoning_piece = delta_obj.get("reasoning")
+            if reasoning_piece:
+                reasoning_chars += len(reasoning_piece)
+            delta = delta_obj.get("content")
             if delta:
+                content_seen = True
                 return ("delta", delta)
         if chunk.get("usage"):
             usage = chunk["usage"]
@@ -1355,6 +1411,7 @@ def _openai_compatible_chat_stream(profile: dict, prompt: str, max_tokens: int, 
                 continue
             kind, text_val = result
             if kind == "done":
+                _warn_if_empty_but_reasoning()
                 yield ("usage", usage)
                 return
             yield ("delta", text_val)
@@ -1363,6 +1420,7 @@ def _openai_compatible_chat_stream(profile: dict, prompt: str, max_tokens: int, 
         result = _handle_line(line)
         if result is not None and result[0] == "delta":
             yield ("delta", result[1])
+    _warn_if_empty_but_reasoning()
     yield ("usage", usage)
 
 
@@ -1377,46 +1435,69 @@ def _chat_completion_stream(db: Session, prompt: str, max_tokens: int, temperatu
     Yields ("delta", text) fragments, then exactly one
     ("meta", {"model", "usage", "cost_toman"}) event on success.
     """
-    profiles = llm_provider_service.get_active_profiles(db)
+    profiles = llm_provider_service.order_for_attempt(llm_provider_service.get_active_profiles(db))
     if not profiles:
         raise RuntimeError("No active LLM provider profiles configured")
 
     last_error = None
     for profile in profiles:
         started = False
-        try:
-            usage = {}
-            for kind, payload in _openai_compatible_chat_stream(profile, prompt, max_tokens, temperature):
-                if kind == "delta":
-                    started = True
-                    yield ("delta", payload)
-                elif kind == "usage":
-                    usage = payload
-            if not started:
-                # The stream ended clean (no transport error) but never
-                # yielded a single delta — same blank-200 failure mode as
-                # _chat_completion(), just discovered at the end instead of
-                # up front. Caught by the except below, which already knows
-                # not to re-raise when started is False.
-                raise EmptyCompletionError(
-                    f"{profile['name']} streamed zero content before ending (usage={usage})"
-                )
-            logger.info(f"LLM provider '{profile['name']}' succeeded ({usage.get('completion_tokens', '?')} completion tokens).")
-            llm_provider_service.record_outcome(db, profile['name'], success=True)
-            cost_toman = _compute_cost_toman(profile, usage)
-            yield ("meta", {
-                "model": f"{profile['provider']}/{profile['model_name']}",
-                "usage": usage,
-                "cost_toman": cost_toman,
-            })
+        attempt_max_tokens = max_tokens
+        succeeded = False
+        for attempt in range(2):
+            llm_provider_service.mark_attempted(profile['name'])
+            try:
+                usage = {}
+                for kind, payload in _openai_compatible_chat_stream(profile, prompt, attempt_max_tokens, temperature):
+                    if kind == "delta":
+                        started = True
+                        yield ("delta", payload)
+                    elif kind == "usage":
+                        usage = payload
+                if not started:
+                    # The stream ended clean (no transport error) but never
+                    # yielded a single delta — same blank-200 failure mode as
+                    # _chat_completion(), just discovered at the end instead
+                    # of up front. Caught by the except below.
+                    raise EmptyCompletionError(
+                        f"{profile['name']} streamed zero content before ending (usage={usage})"
+                    )
+                logger.info(f"LLM provider '{profile['name']}' succeeded ({usage.get('completion_tokens', '?')} completion tokens).")
+                llm_provider_service.record_outcome(db, profile['name'], success=True)
+                cost_toman = _compute_cost_toman(profile, usage)
+                yield ("meta", {
+                    "model": f"{profile['provider']}/{profile['model_name']}",
+                    "usage": usage,
+                    "cost_toman": cost_toman,
+                })
+                succeeded = True
+                break
+            except Exception as e:
+                last_error = e
+                if started:
+                    # Real content already reached the caller — never retry
+                    # or fail over mid-answer, same reasoning as always.
+                    raise
+                status = getattr(getattr(e, 'response', None), 'status_code', None)
+                if status == 429:
+                    llm_provider_service.mark_rate_limited(profile['name'])
+                    logger.warning(f"LLM provider '{profile['name']}' failed before streaming any content, trying next: {e}")
+                    break
+                if isinstance(e, EmptyCompletionError) and attempt == 0:
+                    # Nothing has reached the caller yet, so retrying this
+                    # same profile with more budget is still safe here too —
+                    # cheaper than failing over.
+                    attempt_max_tokens = int(attempt_max_tokens * 1.5)
+                    logger.warning(
+                        f"LLM provider '{profile['name']}' streamed empty content, retrying with "
+                        f"max_tokens={attempt_max_tokens} before failover: {e}"
+                    )
+                    continue
+                llm_provider_service.record_outcome(db, profile['name'], success=False)
+                logger.warning(f"LLM provider '{profile['name']}' failed before streaming any content, trying next: {e}")
+                break
+        if succeeded:
             return
-        except Exception as e:
-            last_error = e
-            llm_provider_service.record_outcome(db, profile['name'], success=False)
-            if started:
-                raise
-            logger.warning(f"LLM provider '{profile['name']}' failed before streaming any content, trying next: {e}")
-            continue
 
     llm_provider_service.record_all_providers_failed(f"_chat_completion_stream exhausted {len(profiles)} profile(s): {last_error}")
     raise last_error

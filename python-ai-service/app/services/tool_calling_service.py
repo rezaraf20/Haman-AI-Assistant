@@ -370,7 +370,21 @@ def _openai_tool_chat(profile: dict, messages: List[dict], tools_schema: Optiona
 
     resp.raise_for_status()
     response_body = resp.json()
-    return response_body["choices"][0]["message"], response_body.get("usage", {})
+    message = response_body["choices"][0]["message"]
+    usage = response_body.get("usage", {})
+    # Same check as rag_service._openai_compatible_chat(): a reasoning
+    # model can spend its whole completion-token budget on an internal
+    # reasoning channel and never reach a tool call or any text -- logged
+    # here, immediately, rather than left for whoever reads the empty
+    # result to guess at later.
+    if not message.get("tool_calls") and not (message.get("content") or "").strip() and (message.get("reasoning") or "").strip():
+        reasoning_tokens = (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")
+        logger.warning(
+            f"'{profile['name']}' ({profile['model_name']}) returned no tool call, empty content, but a "
+            f"populated reasoning field ({len(message['reasoning'])} chars, {reasoning_tokens} reasoning_tokens "
+            f"of {usage.get('completion_tokens')} completion_tokens) -- reasoning consumed the whole budget."
+        )
+    return message, usage
 
 
 def _is_tool_use_failure(resp) -> bool:
@@ -386,45 +400,65 @@ def _tool_calling_chat(db: Session, messages: List[dict], tools_schema: Optional
     # which point rag_service is already fully loaded).
     from app.services.rag_service import _compute_cost_toman, EmptyCompletionError
 
-    profiles = llm_provider_service.get_active_tool_calling_profiles(db)
+    profiles = llm_provider_service.order_for_attempt(llm_provider_service.get_active_tool_calling_profiles(db))
     if not profiles:
         raise RuntimeError("No active tool-calling-capable LLM provider profile is configured")
 
     last_error = None
     for profile in profiles:
-        try:
-            message, usage = _openai_tool_chat(profile, messages, tools_schema, max_tokens, temperature, forced_tool)
-            # Same blank-200 check as rag_service._chat_completion(): a tool
-            # call is a legitimate "no content" response, but a turn with
-            # neither a tool call nor any text is not a usable answer, even
-            # though the HTTP call itself succeeded.
-            if not message.get("tool_calls") and not (message.get("content") or "").strip():
-                raise EmptyCompletionError(
-                    f"{profile['name']} returned HTTP 200 with no tool call and empty content (usage={usage})"
-                )
-            cost_toman = _compute_cost_toman(profile, usage)
-            logger.info(f"Tool-calling provider '{profile['name']}' succeeded ({usage.get('completion_tokens', '?')} completion tokens).")
-            llm_provider_service.record_outcome(db, profile["name"], success=True)
-            return message, f"{profile['provider']}/{profile['model_name']}", usage, cost_toman
-        except ProviderRateLimitedError as e:
-            # Transient by definition. Fail over to the next profile, but do
-            # NOT count it against this one.
-            last_error = e
-            logger.warning(f"Tool-calling provider '{profile['name']}' is rate limited, trying next: {e}")
-            continue
-        except ToolCallRefusedError as e:
-            # Deliberately NOT recorded as a provider failure: the provider
-            # answered, correctly, that our request was malformed for this
-            # model. Marking it down here is what auto-disabled the only
-            # working profile after five customer messages.
-            last_error = e
-            logger.warning(f"Tool-calling provider '{profile['name']}' refused a tools-disabled turn: {e}")
-            continue
-        except Exception as e:
-            last_error = e
-            llm_provider_service.record_outcome(db, profile["name"], success=False)
-            logger.warning(f"Tool-calling provider '{profile['name']}' failed, trying next: {e}")
-            continue
+        attempt_max_tokens = max_tokens
+        succeeded = False
+        for attempt in range(2):
+            llm_provider_service.mark_attempted(profile["name"])
+            try:
+                message, usage = _openai_tool_chat(profile, messages, tools_schema, attempt_max_tokens, temperature, forced_tool)
+                # Same blank-200 check as rag_service._chat_completion(): a
+                # tool call is a legitimate "no content" response, but a
+                # turn with neither a tool call nor any text is not a usable
+                # answer, even though the HTTP call itself succeeded.
+                if not message.get("tool_calls") and not (message.get("content") or "").strip():
+                    raise EmptyCompletionError(
+                        f"{profile['name']} returned HTTP 200 with no tool call and empty content (usage={usage})"
+                    )
+                cost_toman = _compute_cost_toman(profile, usage)
+                logger.info(f"Tool-calling provider '{profile['name']}' succeeded ({usage.get('completion_tokens', '?')} completion tokens).")
+                llm_provider_service.record_outcome(db, profile["name"], success=True)
+                result = (message, f"{profile['provider']}/{profile['model_name']}", usage, cost_toman)
+                succeeded = True
+                break
+            except ProviderRateLimitedError as e:
+                # Transient by definition. Pulled out of its tier's rotation
+                # for a short cooldown instead of counted against it, same
+                # as a plain 429 in rag_service._chat_completion().
+                last_error = e
+                llm_provider_service.mark_rate_limited(profile["name"])
+                logger.warning(f"Tool-calling provider '{profile['name']}' is rate limited, trying next: {e}")
+                break
+            except ToolCallRefusedError as e:
+                # Deliberately NOT recorded as a provider failure: the
+                # provider answered, correctly, that our request was
+                # malformed for this model. Marking it down here is what
+                # auto-disabled the only working profile after five
+                # customer messages.
+                last_error = e
+                logger.warning(f"Tool-calling provider '{profile['name']}' refused a tools-disabled turn: {e}")
+                break
+            except Exception as e:
+                last_error = e
+                if isinstance(e, EmptyCompletionError) and attempt == 0:
+                    # Cheaper than failing over: retry this same profile
+                    # once with more budget before giving up on it.
+                    attempt_max_tokens = int(attempt_max_tokens * 1.5)
+                    logger.warning(
+                        f"Tool-calling provider '{profile['name']}' returned empty content, retrying with "
+                        f"max_tokens={attempt_max_tokens} before failover: {e}"
+                    )
+                    continue
+                llm_provider_service.record_outcome(db, profile["name"], success=False)
+                logger.warning(f"Tool-calling provider '{profile['name']}' failed, trying next: {e}")
+                break
+        if succeeded:
+            return result
     raise last_error
 
 
