@@ -1246,6 +1246,12 @@ def _chat_completion(db: Session, prompt: str, max_tokens: int, temperature: flo
     """
     profiles = llm_provider_service.order_for_attempt(llm_provider_service.get_active_profiles(db))
     if not profiles:
+        # Caught a real gap here: this early return skipped the alert
+        # entirely on a live test where every profile had been deactivated
+        # (not "all tried and failed", which the bottom of this function
+        # already covers — this is "there was nothing to even try", an
+        # equally real customer-facing outage with its own silent path).
+        llm_provider_service.record_all_providers_failed("No active LLM provider profiles configured")
         raise RuntimeError("No active LLM provider profiles configured")
 
     last_error = None
@@ -1437,6 +1443,12 @@ def _chat_completion_stream(db: Session, prompt: str, max_tokens: int, temperatu
     """
     profiles = llm_provider_service.order_for_attempt(llm_provider_service.get_active_profiles(db))
     if not profiles:
+        # Caught a real gap here: this early return skipped the alert
+        # entirely on a live test where every profile had been deactivated
+        # (not "all tried and failed", which the bottom of this function
+        # already covers — this is "there was nothing to even try", an
+        # equally real customer-facing outage with its own silent path).
+        llm_provider_service.record_all_providers_failed("No active LLM provider profiles configured")
         raise RuntimeError("No active LLM provider profiles configured")
 
     last_error = None
