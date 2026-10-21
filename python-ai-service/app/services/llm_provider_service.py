@@ -14,6 +14,17 @@ CACHE_KEY = "haman:llm_provider_profiles:active"
 TOOL_CALLING_CACHE_KEY = "haman:llm_provider_profiles:tool_calling"
 CACHE_TTL_SECONDS = 45
 
+# Set when every active provider in a chain failed for one single request —
+# a customer just got the fallback_response/_default_error_response text
+# instead of a real answer. This service has no email/Filament access of
+# its own (see NotifyProviderOutageCommand.php on the Laravel side, which
+# polls this key on a schedule and does the actual notifying) — a plain
+# Redis key with a TTL is the whole hand-off, and the TTL is generous
+# rather than tied to the notifier's own poll interval, so a late-running
+# scheduler still finds a real, recent signal instead of a stale one.
+ALL_PROVIDERS_FAILED_KEY = "haman:alerts:all_providers_failed_at"
+ALL_PROVIDERS_FAILED_TTL_SECONDS = 3600
+
 # A dead provider left active in the failover chain doesn't just do nothing —
 # every request routed to it (before falling through to the next one) pays
 # its full timeout/retry cost first. 5 consecutive *request-level* failures
@@ -162,3 +173,20 @@ def record_outcome(db: Session, profile_name: str, success: bool) -> None:
     except Exception as e:
         logger.warning(f"Failed to record provider outcome for {profile_name}: {e}")
         db.rollback()
+
+
+def record_all_providers_failed(reason: str) -> None:
+    """Call once a failover chain is exhausted — every active profile tried,
+    none gave a usable answer. Best-effort like record_outcome(): if Redis
+    itself is down, the customer still gets their fallback text either way,
+    this only loses the alert about it."""
+    try:
+        import json as _json
+        import time as _time
+        _redis.set(
+            ALL_PROVIDERS_FAILED_KEY,
+            _json.dumps({"at": _time.time(), "reason": reason}),
+            ex=ALL_PROVIDERS_FAILED_TTL_SECONDS,
+        )
+    except Exception as e:
+        logger.warning(f"Failed to record all-providers-failed alert: {e}")

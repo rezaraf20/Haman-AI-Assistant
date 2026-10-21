@@ -1276,6 +1276,7 @@ def _chat_completion(db: Session, prompt: str, max_tokens: int, temperature: flo
                 logger.warning(f"LLM provider '{profile['name']}' failed (attempt {attempt + 1}/{attempts}), retrying: {e}")
                 time.sleep(1)
 
+    llm_provider_service.record_all_providers_failed(f"_chat_completion exhausted {len(profiles)} profile(s): {last_error}")
     raise last_error
 
 
@@ -1417,6 +1418,7 @@ def _chat_completion_stream(db: Session, prompt: str, max_tokens: int, temperatu
             logger.warning(f"LLM provider '{profile['name']}' failed before streaming any content, trying next: {e}")
             continue
 
+    llm_provider_service.record_all_providers_failed(f"_chat_completion_stream exhausted {len(profiles)} profile(s): {last_error}")
     raise last_error
 
 

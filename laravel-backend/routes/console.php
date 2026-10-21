@@ -33,6 +33,13 @@ Schedule::command('haman:aggregate-analytics')->dailyAt('00:30');
 // wait for a daily job. everyMinute() is the finest granularity the
 // scheduler container's own 60s poll loop can actually deliver.
 Schedule::command('haman:notify-disabled-providers')->everyMinute();
+// A customer getting the fallback message because every provider failed
+// on their one request is a different signal than a profile being disabled
+// (that one might still be healthy failover others can use) — this is
+// "nobody answered that customer." Same everyMinute() granularity for the
+// same reason; the command's own cooldown key is what keeps a prolonged
+// outage from notifying more than once per half hour.
+Schedule::command('haman:notify-provider-outage')->everyMinute();
 // conversation_events retention — keeps the event rows (AggregateAnalyticsJob
 // and the eval-set builder need the history), only nulls out payload past 90
 // days. Runs after aggregate-analytics so a day's events are always rolled
