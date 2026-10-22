@@ -145,11 +145,21 @@ class Settings
      * limit takes effect there immediately rather than up to a minute later
      * — which matters when the value being changed is a rate limit someone
      * is raising in response to a problem happening right now.
+     *
+     * This call did nothing for as long as it existed: the key is named
+     * "shared:haman:platform_settings:values" specifically because it
+     * crosses languages, but the plain Redis:: facade applies the default
+     * connection's own key prefix (database.redis.options.prefix, Laravel's
+     * stock formula from APP_NAME) to every command — so this was deleting
+     * a key that never existed while the real one Python reads sat
+     * untouched. Self-healed by the 60s TTL either way, which is exactly
+     * why nobody noticed; Redis::connection('shared') (registered in
+     * AppServiceProvider) is the actual fix.
      */
     private static function invalidateSharedCache(): void
     {
         try {
-            \Illuminate\Support\Facades\Redis::del('haman:platform_settings:values');
+            \Illuminate\Support\Facades\Redis::connection('shared')->del('shared:haman:platform_settings:values');
         } catch (\Throwable $e) {
             Log::debug('Could not invalidate shared settings cache: ' . $e->getMessage());
         }

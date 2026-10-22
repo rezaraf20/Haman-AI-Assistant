@@ -36,6 +36,31 @@ class AppServiceProvider extends ServiceProvider {
             'visibility' => 'public',
         ]]);
 
+        // Not in config/database.php (this app tracks none in git — Laravel's
+        // own stock skeleton, generated fresh by composer create-project in
+        // the Dockerfile build): registered here, same reasoning as the disk
+        // above. This connection exists for exactly one purpose — keys the
+        // Python service also reads or writes directly via its own raw
+        // redis-py client. The 'default' connection's global key prefix
+        // (database.redis.options.prefix, Laravel's own stock formula from
+        // APP_NAME, nothing this project set on purpose) is invisible from
+        // the Redis:: facade's call sites, so a shared key read through it
+        // silently reads back null forever — a live outage drill caught
+        // this exact bug in NotifyProviderOutageCommand before this
+        // connection existed. 'prefix' => '' here is load-bearing, not
+        // decorative: every shared key must also be named with an explicit
+        // "shared:" string prefix of its own (see SharedRedisKeyConventionTest),
+        // so "no Laravel-side prefix" and "no ambient Python-side prefix either"
+        // both hold, and the key one side writes is byte-for-byte the key the
+        // other reads.
+        config(['database.redis.shared' => [
+            'host'     => env('REDIS_HOST', '127.0.0.1'),
+            'password' => env('REDIS_PASSWORD') ?: null,
+            'port'     => env('REDIS_PORT', '6379'),
+            'database' => env('REDIS_DB', '0'),
+            'options'  => ['prefix' => ''],
+        ]]);
+
         // Hard floor for the public (unauthenticated) chat widget endpoints —
         // independent of ChatController's per-chatbot widget_config throttle,
         // which is admin-opt-in and a no-op when unset. This applies

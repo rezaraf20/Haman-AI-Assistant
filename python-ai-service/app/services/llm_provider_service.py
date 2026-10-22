@@ -11,6 +11,9 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Python-only -- Laravel never reads or writes these, so they stay plain
+# "haman:" names, no "shared:" marker. See ALL_PROVIDERS_FAILED_KEY below
+# for the convention that applies once a key crosses languages.
 CACHE_KEY = "haman:llm_provider_profiles:active"
 TOOL_CALLING_CACHE_KEY = "haman:llm_provider_profiles:tool_calling"
 CACHE_TTL_SECONDS = 45
@@ -23,7 +26,15 @@ CACHE_TTL_SECONDS = 45
 # Redis key with a TTL is the whole hand-off, and the TTL is generous
 # rather than tied to the notifier's own poll interval, so a late-running
 # scheduler still finds a real, recent signal instead of a stale one.
-ALL_PROVIDERS_FAILED_KEY = "haman:alerts:all_providers_failed_at"
+#
+# "shared:" is load-bearing, not decorative: this key genuinely crosses
+# languages (written here, read by Laravel through its unprefixed 'shared'
+# Redis connection — App\Providers\AppServiceProvider), unlike every other
+# key in this file. A live outage drill found Laravel's default connection's
+# own key prefix made an earlier, unmarked version of this key silently
+# unreadable; the explicit marker plus a dedicated connection on the PHP
+# side is the actual fix, not just the rename.
+ALL_PROVIDERS_FAILED_KEY = "shared:haman:alerts:all_providers_failed_at"
 ALL_PROVIDERS_FAILED_TTL_SECONDS = 3600
 
 # Several profiles sharing the same priority (e.g. four Gemini keys from

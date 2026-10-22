@@ -23,7 +23,14 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-CACHE_KEY = "haman:platform_settings:values"
+# "shared:" is load-bearing, not decorative -- Laravel's Settings.php
+# invalidates this same key through App\Providers\AppServiceProvider's
+# unprefixed 'shared' Redis connection specifically because this literal
+# string starts with it. A key genuinely read or written by both languages
+# must carry this prefix; a key only one side ever touches (every other
+# constant in this file's sibling modules) must not, so the two classes
+# stay visually distinct at every call site, not just in a comment.
+CACHE_KEY = "shared:haman:platform_settings:values"
 CACHE_TTL_SECONDS = 60
 
 # Must match SettingsRegistry.php. Verified by a test on the PHP side that
