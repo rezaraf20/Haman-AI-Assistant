@@ -73,9 +73,12 @@ TOOL_RATE_LIMIT_KEY_PREFIX = "haman:tool_rate_limit:"
 # add_to_cart and create_payment_link are the exceptions: they log
 # NOTHING here. Both results are pure intent/preview (see their own
 # docstrings in product_tools.py) — nothing has actually happened yet.
-# add_to_cart's real Store API call only fires in the customer's own
-# browser after a click; create_payment_link's real order is only ever
-# created after a click on the widget's "Confirm & Pay" button, via
+# add_to_cart's real Store API call fires immediately in the customer's
+# own browser the instant this block renders — no further click, since
+# calling this tool at all already required the customer's explicit
+# consent (see intent_classifier.py's "purchase" intent).
+# create_payment_link's real order is only ever created after a click
+# on the widget's "Confirm & Pay" button, via
 # ChatController::createPaymentLink() — a completely separate code path
 # from this tool call, with its own from-scratch security checks. The
 # matching cart_add_succeeded/payment_link_created events are logged
@@ -526,7 +529,12 @@ _DECISION_SYSTEM = (
     "customer's last message and call it with arguments taken from the "
     "conversation. Never invent an argument you were not given -- no product "
     "ids, no SKUs, no phone numbers. If no tool fits, answer with a short "
-    "plain-text note and call nothing."
+    "plain-text note and call nothing. If one of the tools you were given "
+    "DOES fit what the customer is asking for (e.g. they told you to add "
+    "something to their cart, or to buy it, or build a payment link), "
+    "always call it -- never write a plain-text note claiming you can't do "
+    "that, don't have access, or that it isn't possible, when a tool for "
+    "exactly that is right there in front of you."
 )
 
 

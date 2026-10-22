@@ -99,7 +99,13 @@ GROUNDING_RULES = (
     "built one for the interface to render — your own text is never what "
     "puts a button on the screen. If you haven't called a tool that "
     "produces one, don't describe clicking anything; say what you can "
-    "offer in plain words instead."
+    "offer in plain words instead.\n\n"
+    "If a tool for doing something is available to you this turn (e.g. "
+    "adding something to the cart, checking live stock, building a payment "
+    "link), never tell the customer you don't have access to do it, can't "
+    "do that, or that it isn't possible — call the tool instead of "
+    "declining. Only say something isn't possible when no tool for it was "
+    "actually offered to you this turn at all."
 )
 DEFAULT_SYSTEM = GROUNDING_RULES
 
@@ -163,7 +169,11 @@ GROUNDING_RULES_FA = (
     "هرگز به مشتری نگو روی دکمه یا لینکی کلیک کند، یا به هر عنصر تعاملی دیگری ارجاع نده، مگر این‌که "
     "همین نوبت یک ابزار واقعاً آن را ساخته باشد — متن خودت هرگز چیزی روی صفحه قرار نمی‌دهد. اگر "
     "ابزاری که چنین چیزی می‌سازد را صدا نزده‌ای، از کلیک کردن روی چیزی صحبت نکن؛ به‌جایش همان چیزی "
-    "که می‌توانی ارائه کنی را با کلام ساده بگو."
+    "که می‌توانی ارائه کنی را با کلام ساده بگو.\n\n"
+    "اگر ابزاری برای انجام کاری همین الان در اختیار تو هست (مثل افزودن به سبد خرید، بررسی موجودی "
+    "زنده، یا ساخت لینک پرداخت)، هرگز به مشتری نگو دسترسی نداری، نمی‌توانی این کار را انجام دهی یا "
+    "این امکان وجود ندارد — به‌جای رد کردن، همان ابزار را صدا بزن. فقط وقتی بگو ممکن نیست که واقعاً "
+    "هیچ ابزاری برای آن در این نوبت به تو داده نشده باشد."
 )
 
 # Used only when: (a) the chatbot has no custom fallback_response configured

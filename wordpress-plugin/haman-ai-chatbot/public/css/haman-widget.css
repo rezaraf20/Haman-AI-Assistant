@@ -490,10 +490,11 @@
 }
 
 /* ── Inline add-to-cart (add_to_cart, Store API) ────────────────────── */
-/* Same-origin Store API calls happen only from inside .hm-atc-btn's own
- * click handler (see handleAddToCartClick() in haman-widget.js) — never
- * automatically. .hm-atc-status starts hidden and is only ever revealed
- * after a real response (success or error) to that click. */
+/* The Store API call fires the instant this renders (see autoAddToCart()
+ * in haman-widget.js) — the customer already gave explicit consent by
+ * asking for this, so there's no button, just .hm-atc-status moving from
+ * "adding..." to a real confirmed result (or an error plus a fallback
+ * link via .hm-atc-fallback-link). */
 .hm-atc-items {
     display: flex;
     flex-direction: column;
@@ -520,27 +521,9 @@
     min-width: 0;
 }
 
-.hm-atc-btn {
-    background: var(--hm-gradient);
-    color: var(--hm-primary-contrast);
-    border: none;
-    border-radius: 10px;
-    padding: 9px 16px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    min-height: 38px;
-    flex-shrink: 0;
-}
-
-.hm-atc-btn:disabled {
-    opacity: .6;
-    cursor: default;
-}
-
 .hm-atc-status {
     font-size: 12px;
-    color: #166534;
+    color: #4B5565;
 }
 
 .hm-atc-status a {
@@ -549,8 +532,16 @@
     margin-inline-start: 6px;
 }
 
+.hm-atc-status.hm-atc-success {
+    color: #166534;
+}
+
 .hm-atc-status.hm-atc-error {
     color: #991B1B;
+}
+
+.hm-atc-fallback-link {
+    margin-inline-start: 6px;
 }
 
 /* ── Payment link preview (create_payment_link) ─────────────────────── */

@@ -45,6 +45,19 @@ class GroundingRulesForbidFabricatedClaimsTest(unittest.TestCase):
     def test_reminder_repeats_the_platform_and_number_rule_persian(self):
         self.assertIn("نام پلتفرم/نرم‌افزار شخص ثالث", _grounding_reminder(is_fa=True))
 
+    # ── never claim a lack of access to an enabled capability ──────────
+    # Regression for a real incident: a chatbot with add_to_cart enabled
+    # told a customer "I don't have access to your cart" after being asked
+    # to add a product — the actual root cause was a missing intent
+    # category (fixed in intent_classifier.py's "purchase" intent), but
+    # this rule is the requested belt-and-suspenders guard against the
+    # model declining a tool it was actually offered.
+    def test_english_rules_forbid_claiming_no_access_to_an_available_tool(self):
+        self.assertIn("never tell the customer you don't have access to do it", GROUNDING_RULES)
+
+    def test_persian_rules_forbid_claiming_no_access_to_an_available_tool(self):
+        self.assertIn("هرگز به مشتری نگو دسترسی نداری", GROUNDING_RULES_FA)
+
 
 class PromptBuildsWithFabricationBanTest(unittest.IsolatedAsyncioTestCase):
     """End-to-end (within this process) check for the exact reported

@@ -53,7 +53,7 @@ UNROUTABLE_TOOLS = frozenset({"add_to_cart", "create_payment_link", "build_cart_
 # on a question it mislabels for no call on the majority that never needed
 # one. Measured on 30 real customer messages: see the deploy report.
 TOOL_CANDIDATE_INTENTS = frozenset({
-    "price", "availability", "comparison", "consultation", "order_status", "payment",
+    "price", "availability", "comparison", "consultation", "order_status", "payment", "purchase",
 })
 
 

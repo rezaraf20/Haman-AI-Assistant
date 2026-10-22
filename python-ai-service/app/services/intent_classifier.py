@@ -25,7 +25,7 @@ from typing import Optional
 
 INTENTS = (
     "price", "availability", "comparison", "consultation", "authenticity",
-    "shipping", "return", "payment", "order_status", "technical_support", "other",
+    "shipping", "return", "payment", "purchase", "order_status", "technical_support", "other",
 )
 
 # Checked in this fixed order — most specific/least-ambiguous vocabulary
@@ -62,6 +62,33 @@ _PATTERNS = [
     ("payment", _P(
         "درگاه پرداخت", "کارت به کارت", "پرداخت در محل", "قسطی", "اقساط", "روش پرداخت",
         "payment method", "pay by", "installment", "credit card", "checkout", "how do i pay",
+    )),
+    # Explicit purchase/add-to-cart commands — distinct from "availability"
+    # ("موجوده؟") and "price" ("چنده؟"), which only ASK about a product.
+    # This is the customer telling us to act, which is exactly the consent
+    # add_to_cart/create_payment_link/build_cart_url require before the
+    # model may call them (see tool_router.py's UNROUTABLE_TOOLS) — this
+    # intent only gets the turn as far as the model being OFFERED those
+    # tools (TOOL_CANDIDATE_INTENTS), never forces one.
+    #
+    # Added after a real incident: a customer wrote "فلاسک ۸۰۰ میل رو بذار
+    # تو سبد خرید" and the bot answered "I don't have access to your
+    # cart", despite add_to_cart being enabled for that chatbot. Measured
+    # cause, not guessed: this exact sentence matched none of the patterns
+    # above and fell through to "other", which is not in
+    # TOOL_CANDIDATE_INTENTS -- so run_tool_calling_pipeline() was never
+    # even called, and the plain retrieval answer has no idea any such
+    # tool exists.
+    ("purchase", _P(
+        "بذار تو سبد", "بذار توی سبد", "بذارش تو سبد", "بذارش توی سبد",
+        "بگذار در سبد", "بگذارش در سبد", "تو سبد بذار", "توی سبد بذار",
+        "داخل سبد بگذار", "اضافه کن به سبد", "به سبد اضافه کن",
+        "به سبد خرید اضافه کن", "اضافه کن به سبد خریدم", "اضافه‌اش کن به سبد",
+        "میخوام بخرم", "می‌خوام بخرم", "میخواهم بخرم", "می خوام بخرم",
+        "اینو میخرم", "این رو میخرم", "اینو بخرم", "این را میخرم", "بخرمش",
+        "add to cart", "add it to my cart", "add this to my cart", "add to my cart",
+        "put this in my cart", "put it in my cart", "put in my cart",
+        "i want to buy this", "i'll buy this", "buy this now", "add to my basket",
     )),
     ("shipping", _P(
         "هزینه ارسال", "ارسال رایگان", "چند روز میرسه", "چقدر طول میکشه", "زمان ارسال", "پست",

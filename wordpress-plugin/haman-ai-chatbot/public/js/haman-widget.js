@@ -480,12 +480,24 @@
     }
 
     // ── add_to_cart (Store API, same-origin) ───────────────────────────
-    // Unlike renderCartLinks() above, this button never navigates anywhere
-    // — clicking it calls WooCommerce's own Store API directly, same-origin,
-    // with the browser's own cookies + a nonce the plugin already embedded
-    // in CFG at page-render time (see class-haman-public.php). Nothing is
-    // added to the cart until this exact click handler runs; the tool
-    // result rendered here is pure intent (see product_tools.add_to_cart).
+    // The customer's explicit consent is the model calling this tool at
+    // all — add_to_cart is only ever called on an explicit "add this"/
+    // "buy this" instruction (see intent_classifier.py's "purchase"
+    // intent and product_tools.add_to_cart's own docstring), never from a
+    // plain availability/price question. Given that consent, this fires
+    // the real Store API call the instant the block renders — same-origin,
+    // with the browser's own cookies + a nonce the plugin already
+    // embedded in CFG at page-render time (see class-haman-public.php) —
+    // with no second click needed; asking the customer to click again
+    // when they already told us to add it would just be friction.
+    //
+    // The model's own text reply can never truthfully claim this
+    // succeeded (see claim_guard.py's cart_add rule): the Store API call
+    // only runs in THIS browser, after that reply was already generated
+    // and sent, so the model cannot know the outcome yet. Everything the
+    // customer sees confirmed here — item count, real total, cart/
+    // checkout links — comes only from actually reading the cart the
+    // Store API handed back, never from anything the model wrote.
     function storeApiAvailable() {
         return !!(CFG.storeApiUrl && CFG.storeApiNonce);
     }
@@ -509,43 +521,31 @@
             nameEl.textContent = (it.name || '') + qtyText;
             row.appendChild(nameEl);
 
+            var statusEl = document.createElement('span');
+            statusEl.className = 'hm-atc-status';
+            row.appendChild(statusEl);
+            wrap.appendChild(row);
+
             if (!storeApiAvailable()) {
                 // Store API not available at all (old WooCommerce / Store
-                // API disabled) — degrade straight to the classic link,
-                // the exact same fallback build_cart_url already uses,
-                // built client-side since the widget already knows its own
-                // origin (no server round trip needed for this).
-                var link = document.createElement('a');
-                link.className = 'hm-cart-link-btn';
-                link.href = classicCartUrl(it.product_id, it.quantity);
-                link.target = '_blank';
-                link.rel = 'noopener';
-                link.textContent = CFG.i18n.addToCartLabel;
-                row.appendChild(link);
-            } else {
-                var btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'hm-atc-btn';
-                btn.textContent = CFG.i18n.addToCartLabel;
-                var statusEl = document.createElement('span');
-                statusEl.className = 'hm-atc-status';
-                statusEl.hidden = true;
-                btn.addEventListener('click', function () {
-                    handleAddToCartClick(it, btn, statusEl);
-                });
-                row.appendChild(btn);
-                row.appendChild(statusEl);
+                // API disabled) — nothing to auto-run, so hand over the
+                // classic link immediately. Built client-side since the
+                // widget already knows its own origin (no server round
+                // trip needed for this).
+                appendClassicLinkFallback(row, it);
+                return;
             }
-            wrap.appendChild(row);
+
+            statusEl.textContent = CFG.i18n.addingToCartLabel;
+            autoAddToCart(it, statusEl, row);
         });
         msgs.appendChild(wrap);
     }
 
     // The one function in this whole file that actually mutates the
-    // customer's real cart — and it only ever runs from inside a real
-    // 'click' event listener (see renderAddToCartIntent() above), never
-    // automatically when a tool result arrives. isRetry guards the one
-    // nonce-refresh-and-retry (see handleAddToCartClick()) from looping.
+    // customer's real cart — fires the instant renderAddToCartIntent()
+    // builds the row above, no click involved. isRetry guards the one
+    // nonce-refresh-and-retry below from looping.
     function addToCartViaStoreApi(item, isRetry) {
         var targetId = item.variation_id || item.product_id;
         return fetch(CFG.storeApiUrl + 'cart/add-item', {
@@ -573,15 +573,21 @@
             .catch(function () { return false; });
     }
 
-    function handleAddToCartClick(item, btnEl, statusEl) {
-        btnEl.disabled = true;
-        var originalLabel = btnEl.textContent;
-        btnEl.textContent = CFG.i18n.addingToCartLabel;
+    // A 200 response is not proof by itself — read the cart it actually
+    // returned and confirm the item is really in there before telling the
+    // customer it worked. "We measured, we didn't just trust the status
+    // code" is the whole point of this feature, not an afterthought.
+    function cartReallyHasItem(cartData, item) {
+        var targetId = Number(item.variation_id || item.product_id);
+        var cartItems = (cartData && cartData.items) || [];
+        return cartItems.some(function (ci) { return Number(ci.id) === targetId; });
+    }
 
+    function autoAddToCart(item, statusEl, row) {
         function attempt(isRetry) {
             addToCartViaStoreApi(item, isRetry).then(function (res) {
-                if (res.ok) {
-                    onAddToCartSuccess(item, btnEl, statusEl, res.data);
+                if (res.ok && cartReallyHasItem(res.data, item)) {
+                    onAddToCartSuccess(item, statusEl, res.data);
                     return;
                 }
                 var code = String((res.data && (res.data.code || res.data.message)) || '').toLowerCase();
@@ -589,37 +595,52 @@
                 if (isNonceIssue) {
                     refreshStoreApiNonce().then(function (refreshed) {
                         if (refreshed) { attempt(true); return; }
-                        onAddToCartFailure(item, btnEl, statusEl, originalLabel, code);
+                        onAddToCartFailure(statusEl, row, item, code || 'not_confirmed');
                     });
                     return;
                 }
-                onAddToCartFailure(item, btnEl, statusEl, originalLabel, code);
+                onAddToCartFailure(statusEl, row, item, code || 'not_confirmed');
             }).catch(function () {
                 // Network-level failure (Store API route missing entirely —
                 // old WooCommerce or the API disabled — or genuinely
-                // offline): fall back to the classic link rather than
-                // just showing an error, same posture as build_cart_url's
-                // "zero risk" fallback the task deliberately kept around
-                // for exactly this case.
-                replaceWithClassicLink(item, btnEl);
+                // offline): no error code to classify, straight to the
+                // classic link, same fallback build_cart_url already uses.
+                statusEl.textContent = '';
+                appendClassicLinkFallback(row, item);
             });
         }
         attempt(false);
     }
 
-    function onAddToCartSuccess(item, btnEl, statusEl, cartData) {
+    function formatCartTotal(totals) {
+        if (!totals || totals.total_price == null) return '';
+        var minorUnit = Number(totals.currency_minor_unit);
+        if (!isFinite(minorUnit) || minorUnit < 0) minorUnit = 0;
+        var amount = Number(totals.total_price) / Math.pow(10, minorUnit);
+        if (!isFinite(amount)) return '';
+        // Store API's own currency fields, not a hardcoded symbol — this
+        // respects whatever currency/format the store owner configured
+        // instead of assuming Toman/Rial.
+        var prefix = totals.currency_prefix || '';
+        var suffix = totals.currency_suffix || (totals.currency_code ? ' ' + totals.currency_code : '');
+        return prefix + amount.toLocaleString() + suffix;
+    }
+
+    function onAddToCartSuccess(item, statusEl, cartData) {
         var count = (cartData && typeof cartData.items_count === 'number') ? cartData.items_count : null;
-        btnEl.hidden = true;
-        statusEl.hidden = false;
         var countText = count !== null ? CFG.i18n.itemsInCartLabel.replace(':count', count) : '';
+        var totalText = formatCartTotal(cartData && cartData.totals);
+        var totalHtml = totalText ? '، ' + esc(CFG.i18n.orderTotalLabel) + ': <strong>' + esc(totalText) + '</strong>' : '';
         var viewCartHtml = CFG.cartUrl ? ' <a href="' + esc(CFG.cartUrl) + '" target="_blank" rel="noopener">' + esc(CFG.i18n.viewCartLabel) + '</a>' : '';
         var checkoutHtml = CFG.checkoutUrl ? ' <a href="' + esc(CFG.checkoutUrl) + '" target="_blank" rel="noopener">' + esc(CFG.i18n.checkoutLabel) + '</a>' : '';
-        statusEl.innerHTML = '✓ ' + esc(countText) + viewCartHtml + checkoutHtml;
+        statusEl.className = 'hm-atc-status hm-atc-success';
+        statusEl.innerHTML = '✓ ' + esc(countText) + totalHtml + viewCartHtml + checkoutHtml;
 
         // Real, confirmed outcome — see ChatController::cartEvent() and
-        // tool_calling_service.py's docstring on why this is logged HERE,
-        // never at tool-call time. Fire-and-forget: this must never block
-        // or fail the UI the customer already sees succeed.
+        // claim_guard.py's cart_add rule on why this is only ever logged
+        // HERE, after cartReallyHasItem() confirmed it, never at tool-call
+        // time. Fire-and-forget: this must never block or fail the UI the
+        // customer already sees succeed.
         fetch(H.apiUrl + '/chat/cart-event', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -630,10 +651,7 @@
         }).catch(function () { /* best-effort — the real cart add already succeeded regardless */ });
     }
 
-    function onAddToCartFailure(item, btnEl, statusEl, originalLabel, code) {
-        btnEl.disabled = false;
-        btnEl.textContent = originalLabel;
-        statusEl.hidden = false;
+    function onAddToCartFailure(statusEl, row, item, code) {
         var msg;
         if (code.indexOf('stock') !== -1) {
             msg = CFG.i18n.outOfStockAddErrorLabel;
@@ -642,18 +660,25 @@
         } else {
             msg = CFG.i18n.genericAddErrorLabel;
         }
-        statusEl.textContent = msg;
         statusEl.className = 'hm-atc-status hm-atc-error';
+        statusEl.textContent = msg;
+        // Whatever actually went wrong (no cookie, a nonce that couldn't
+        // be refreshed, a stale stock check, a genuine network failure),
+        // the customer still gets a real way forward: WooCommerce's own
+        // nonce-free link, which needs no JavaScript at all and goes
+        // through WooCommerce's normal validation itself regardless — two
+        // paths, never just the one that already failed.
+        appendClassicLinkFallback(row, item);
     }
 
-    function replaceWithClassicLink(item, btnEl) {
+    function appendClassicLinkFallback(row, item) {
         var link = document.createElement('a');
-        link.className = 'hm-cart-link-btn';
+        link.className = 'hm-cart-link-btn hm-atc-fallback-link';
         link.href = classicCartUrl(item.product_id, item.quantity);
         link.target = '_blank';
         link.rel = 'noopener';
         link.textContent = CFG.i18n.addToCartLabel;
-        btnEl.replaceWith(link);
+        row.appendChild(link);
     }
 
     // ── create_payment_link (doc-04) ───────────────────────────────────

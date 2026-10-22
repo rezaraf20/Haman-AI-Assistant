@@ -90,7 +90,9 @@ class Haman_Public {
         // like this one never needs an extra round trip just to get one.
         // Nonces are tied to the current session and expire (haman-
         // widget.js refreshes and retries once if this one has gone stale
-        // by the time the customer actually clicks "add to cart").
+        // by the time the add actually fires — which happens immediately
+        // once the model calls the tool, not on a later click; see
+        // autoAddToCart() in haman-widget.js).
         $store_api_nonce = '';
         $cart_url = '';
         $checkout_url = '';
@@ -154,9 +156,11 @@ class Haman_Public {
             'viewProductLabel'     => 'مشاهده محصول',
             // build_cart_url tool — see renderCartLinks() in haman-widget.js.
             'addToCartLabel'       => 'افزودن به سبد خرید',
-            // add_to_cart tool (Store API, same-origin) — see
-            // renderAddToCartIntent()/handleAddToCartClick() in
-            // haman-widget.js.
+            // add_to_cart tool (Store API, same-origin) — fires
+            // immediately, no click. See renderAddToCartIntent()/
+            // autoAddToCart() in haman-widget.js. itemsInCartLabel and
+            // orderTotalLabel (below) are reused together for the real
+            // confirmed-outcome message once the add completes.
             'addingToCartLabel'    => 'در حال افزودن...',
             'itemsInCartLabel'     => ':count کالا در سبد شما',
             'viewCartLabel'        => 'مشاهده سبد خرید',

@@ -33,6 +33,16 @@ class CandidateSetTest(unittest.TestCase):
         self.assertTrue(is_tool_candidate("payment"))
         self.assertIsNone(route("payment", ["create_payment_link"], "لینک پرداخت بدید"))
 
+    def test_purchase_is_a_candidate_even_though_it_is_never_routed(self):
+        # Same shape as payment above: add_to_cart/build_cart_url need the
+        # customer's own explicit say-so (UNROUTABLE_TOOLS), so an explicit
+        # "add this to my cart" is never force-routed -- but it must still
+        # reach the gate so the model is actually OFFERED the tool, unlike
+        # before this intent existed (see intent_classifier.py's "purchase"
+        # entry for the real incident this fixes).
+        self.assertTrue(is_tool_candidate("purchase"))
+        self.assertIsNone(route("purchase", ["add_to_cart"], "بذار تو سبد خرید"))
+
     def test_the_intents_answered_from_indexed_content_are_not(self):
         for intent in ("shipping", "return", "authenticity", "technical_support", "other"):
             self.assertFalse(is_tool_candidate(intent), intent)
@@ -50,6 +60,7 @@ class RealQuestionsTest(unittest.TestCase):
             "برای هدیه تولد چی پیشنهاد می‌دید؟",
             "فرق قمقمه مربع با فنجون دسته اردک چیه؟",
             "سفارش من به کجا رسید؟",
+            "فلاسک ۸۰۰ میل رو بذار تو سبد خرید",
         ):
             self.assertTrue(is_tool_candidate(classify_intent(query)), query)
 

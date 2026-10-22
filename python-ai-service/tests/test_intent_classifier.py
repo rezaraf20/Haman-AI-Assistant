@@ -98,6 +98,21 @@ class ClassifyIntentTest(unittest.TestCase):
     def test_order_status_persian(self):
         self.assertEqual(classify_intent("سفارشم کجاست؟ کد سفارش رو دارم"), "order_status")
 
+    # ── purchase ───────────────────────────────────────────────────────
+    def test_purchase_english(self):
+        self.assertEqual(classify_intent("Add this to my cart"), "purchase")
+
+    def test_purchase_persian(self):
+        self.assertEqual(classify_intent("فلاسک ۸۰۰ میل رو بذار تو سبد خرید"), "purchase")
+
+    def test_purchase_persian_buy_phrasing(self):
+        self.assertEqual(classify_intent("این رو میخوام بخرم"), "purchase")
+
+    def test_availability_question_is_not_purchase(self):
+        # A mere stock question must never be mistaken for a purchase
+        # command — only an explicit "add"/"buy" instruction is.
+        self.assertEqual(classify_intent("فلاسک ۸۰۰ موجوده؟"), "availability")
+
     # ── technical_support ──────────────────────────────────────────────
     def test_technical_support_english(self):
         self.assertEqual(classify_intent("The app isn't working, I get an error message."), "technical_support")

@@ -1,18 +1,22 @@
 /**
  * add_to_cart (Store API, same-origin) — doc-04's "Add to cart" item, the
- * richer sibling of build_cart_url. The widget itself runs on the shop's
- * own domain, so it calls WooCommerce's Store API directly with the
- * browser's own cookies — no server round trip, no cart token. This file
- * is the strongest verification available without a real WooCommerce
- * store (see the task's own acceptance criteria, which need one for full
- * sign-off): a real Store API fetch/response cycle, simulated precisely,
- * with the real widget script driving it — not a reimplementation.
+ * richer sibling of build_cart_url. The customer's explicit consent is the
+ * model calling this tool at all (see intent_classifier.py's "purchase"
+ * intent) — given that, the widget runs the real add the instant the block
+ * renders, with no second click. This file is the strongest verification
+ * available without a real WooCommerce store (see the task's own
+ * acceptance criteria, which need one for full sign-off): a real Store API
+ * fetch/response cycle, simulated precisely, with the real widget script
+ * driving it — not a reimplementation.
  *
- * Covers, in order: nothing fires without a real click; a successful add;
- * the nonce-expired-refresh-and-retry-once path; an out-of-stock error; a
- * missing-variation error; and the two "Store API isn't usable" fallback
- * paths (not configured at all vs. a live network/route failure) to the
- * classic ?add-to-cart= link.
+ * Covers, in order: the add fires with no click at all; a successful add
+ * that reads the real cart back and shows a real count/total/links; a
+ * "200 OK but the item isn't actually in the returned cart" case, which
+ * must NOT be reported as success; the nonce-expired-refresh-and-retry-once
+ * path; an out-of-stock error with a fallback link; a missing-variation
+ * error; and the two "Store API isn't usable" fallback paths (not
+ * configured at all vs. a live network/route failure) to the classic
+ * ?add-to-cart= link.
  */
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -53,6 +57,7 @@ const BASE_CONFIG = {
     inStockLabel: 'In stock', outOfStockLabel: 'Out of stock', viewProductLabel: 'View product',
     addToCartLabel: 'Add to cart', addingToCartLabel: 'Adding...',
     itemsInCartLabel: ':count item(s) in your cart', viewCartLabel: 'View cart', checkoutLabel: 'Checkout',
+    orderTotalLabel: 'Total',
     chooseVariantLabel: 'Please choose a size/color first.',
     outOfStockAddErrorLabel: 'Sorry, this item is no longer in stock.',
     genericAddErrorLabel: "Couldn't add this to your cart. Please try again.",
@@ -133,36 +138,45 @@ async function openAndSend(root, text) {
 }
 
 const ADD_TO_CART_BLOCK = {
-  response: 'Click below to add it to your cart.',
+  response: "Adding it to your cart now.",
   widget_blocks: [{
     type: 'add_to_cart',
-    items: [{ product_id: 12, variation_id: null, quantity: 1, name: 'Widget' }],
+    items: [{ product_id: 12, variation_id: null, quantity: 1, name: 'Flask 800ml' }],
   }],
 };
 
-test('add_to_cart renders a real button and calls the Store API only after a real click', async () => {
+// A real Store API cart/add-item response shape: the item actually present
+// in `items`, plus `totals` in the API's own minor-unit convention.
+function fakeCartResponse(opts) {
+  opts = opts || {};
+  return Object.assign({
+    items_count: 1,
+    items: [{ id: opts.itemId !== undefined ? opts.itemId : 12 }],
+    totals: {
+      total_price: '36500000', currency_minor_unit: 2,
+      currency_code: 'IRT', currency_prefix: '', currency_suffix: ' تومان',
+    },
+  }, opts.override || {});
+}
+
+test('add_to_cart fires the real Store API call immediately, with no click at all', async () => {
   let storeApiCalled = false;
   const { root } = createWidget({
     messageResponseData: ADD_TO_CART_BLOCK,
     storeApiHandler: function (u, init) {
       storeApiCalled = true;
-      return jsonResponse({ items_count: 1 });
+      return jsonResponse(fakeCartResponse());
     },
   });
 
-  await openAndSend(root, 'add that to my cart');
-
-  const btn = root.querySelector('.hm-atc-btn');
-  assert.ok(btn, 'a real Add to Cart button should render');
-  assert.equal(btn.textContent, 'Add to cart');
-  assert.equal(storeApiCalled, false, 'the Store API must not be called just from rendering the block');
-
-  btn.click();
+  await openAndSend(root, 'put this in my cart');
   await flush();
-  assert.equal(storeApiCalled, true, 'clicking the button must trigger the real Store API call');
+
+  assert.equal(root.querySelector('.hm-atc-btn'), null, 'no button should ever render — this auto-fires');
+  assert.equal(storeApiCalled, true, 'the Store API must be called the instant the block renders');
 });
 
-test('a successful add hides the button, shows item count, and reports cart_add_succeeded', async () => {
+test('a successful add reads the real cart back and shows item count, real total, and reports cart_add_succeeded', async () => {
   const { root, cartEventCalls } = createWidget({
     messageResponseData: ADD_TO_CART_BLOCK,
     storeApiHandler: function (u, init) {
@@ -170,19 +184,16 @@ test('a successful add hides the button, shows item count, and reports cart_add_
       const body = JSON.parse(init.body);
       assert.equal(body.id, 12); // no variation_id -> falls back to product_id
       assert.equal(init.headers.Nonce, 'initial-nonce-abc');
-      return jsonResponse({ items_count: 3 });
+      return jsonResponse(fakeCartResponse({ override: { items_count: 3 } }));
     },
   });
 
-  await openAndSend(root, 'add that to my cart');
-  const btn = root.querySelector('.hm-atc-btn');
-  btn.click();
+  await openAndSend(root, 'put this in my cart');
   await flush();
 
-  assert.equal(btn.hidden, true);
   const status = root.querySelector('.hm-atc-status');
-  assert.equal(status.hidden, false);
   assert.match(status.textContent, /3 item\(s\) in your cart/);
+  assert.match(status.textContent, /365,000/, 'the real cart total must be shown, read back from the Store API response');
   assert.ok(status.querySelector('a[href="https://shop.example.test/cart/"]'), 'a real View Cart link should appear');
   assert.ok(status.querySelector('a[href="https://shop.example.test/checkout/"]'), 'a real Checkout link should appear');
 
@@ -192,10 +203,30 @@ test('a successful add hides the button, shows item count, and reports cart_add_
   assert.equal(cartEventCalls[0].product_id, 12);
 });
 
+test('a 200 OK whose cart does not actually contain the item is NOT reported as success', async () => {
+  // Defensive check against trusting the status code alone: the response
+  // is ok:true, but `items` doesn't actually contain product 12.
+  const { root, cartEventCalls } = createWidget({
+    messageResponseData: ADD_TO_CART_BLOCK,
+    storeApiHandler: function () {
+      return jsonResponse(fakeCartResponse({ itemId: 999 }));
+    },
+  });
+
+  await openAndSend(root, 'put this in my cart');
+  await flush();
+
+  const status = root.querySelector('.hm-atc-status');
+  assert.equal(status.className.indexOf('hm-atc-success') === -1, true);
+  assert.equal(cartEventCalls.length, 0, 'an unconfirmed add must never be reported as a real success');
+  const link = root.querySelector('.hm-cart-link-btn');
+  assert.ok(link, 'a fallback link must still be offered');
+});
+
 test('a variation_id is sent instead of product_id when the item has one', async () => {
   const withVariant = {
-    response: 'Click below.',
-    widget_blocks: [{ type: 'add_to_cart', items: [{ product_id: 12, variation_id: 99, quantity: 2, name: 'Widget (Blue)' }] }],
+    response: 'Adding it now.',
+    widget_blocks: [{ type: 'add_to_cart', items: [{ product_id: 12, variation_id: 99, quantity: 2, name: 'Flask (Blue)' }] }],
   };
   let sentId = null;
   const { root } = createWidget({
@@ -204,12 +235,11 @@ test('a variation_id is sent instead of product_id when the item has one', async
       const body = JSON.parse(init.body);
       sentId = body.id;
       assert.equal(body.quantity, 2);
-      return jsonResponse({ items_count: 1 });
+      return jsonResponse(fakeCartResponse({ itemId: 99 }));
     },
   });
 
-  await openAndSend(root, 'add the blue one');
-  root.querySelector('.hm-atc-btn').click();
+  await openAndSend(root, 'add the blue one to my cart');
   await flush();
 
   assert.equal(sentId, 99, 'the variation id must be used as the Store API item id, not the parent product id');
@@ -228,7 +258,7 @@ test('an expired nonce triggers exactly one refresh-and-retry, then succeeds', a
           return jsonResponse({ code: 'woocommerce_rest_invalid_nonce', message: 'Nonce expired' }, { ok: false, status: 403 });
         }
         assert.equal(init.headers.Nonce, 'fresh-nonce-xyz', 'the retry must use the refreshed nonce');
-        return jsonResponse({ items_count: 1 });
+        return jsonResponse(fakeCartResponse());
       }
       // GET cart — nonce refresh
       nonceFetches++;
@@ -236,16 +266,16 @@ test('an expired nonce triggers exactly one refresh-and-retry, then succeeds', a
     },
   });
 
-  await openAndSend(root, 'add that to my cart');
-  root.querySelector('.hm-atc-btn').click();
+  await openAndSend(root, 'put this in my cart');
   await flush(10);
 
   assert.equal(nonceFetches, 1, 'exactly one nonce refresh should happen');
   assert.equal(addAttempts, 2, 'exactly one retry should happen after the refresh (not a loop)');
-  assert.equal(root.querySelector('.hm-atc-btn').hidden, true, 'the retried add must have succeeded');
+  const status = root.querySelector('.hm-atc-status');
+  assert.ok(status.className.indexOf('hm-atc-success') !== -1, 'the retried add must have succeeded');
 });
 
-test('an out-of-stock error is shown clearly and the button is re-enabled', async () => {
+test('an out-of-stock error is shown clearly, with a fallback link', async () => {
   const { root } = createWidget({
     messageResponseData: ADD_TO_CART_BLOCK,
     storeApiHandler: function () {
@@ -253,19 +283,17 @@ test('an out-of-stock error is shown clearly and the button is re-enabled', asyn
     },
   });
 
-  await openAndSend(root, 'add that to my cart');
-  const btn = root.querySelector('.hm-atc-btn');
-  btn.click();
+  await openAndSend(root, 'put this in my cart');
   await flush();
 
-  assert.equal(btn.disabled, false, 'the button must be re-enabled after a failed add');
-  assert.equal(btn.hidden, false);
   const status = root.querySelector('.hm-atc-status');
-  assert.equal(status.hidden, false);
   assert.equal(status.textContent, 'Sorry, this item is no longer in stock.');
+  const link = root.querySelector('.hm-cart-link-btn');
+  assert.ok(link, 'a fallback link must still be offered even for an out-of-stock error');
+  assert.equal(link.getAttribute('href'), 'https://shop.example.test/?add-to-cart=12&quantity=1');
 });
 
-test('a missing-variation error asks the customer to choose one', async () => {
+test('a missing-variation error asks the customer to choose one, with a fallback link', async () => {
   const { root } = createWidget({
     messageResponseData: ADD_TO_CART_BLOCK,
     storeApiHandler: function () {
@@ -273,29 +301,32 @@ test('a missing-variation error asks the customer to choose one', async () => {
     },
   });
 
-  await openAndSend(root, 'add that to my cart');
-  root.querySelector('.hm-atc-btn').click();
+  await openAndSend(root, 'put this in my cart');
   await flush();
 
   const status = root.querySelector('.hm-atc-status');
   assert.equal(status.textContent, 'Please choose a size/color first.');
+  assert.ok(root.querySelector('.hm-cart-link-btn'), 'a fallback link must still be offered');
 });
 
-test('Store API not configured at all renders the classic link immediately, no button', async () => {
+test('Store API not configured at all renders the classic link immediately, no auto-call', async () => {
+  let called = false;
   const { root } = createWidget({
     messageResponseData: ADD_TO_CART_BLOCK,
     configOverrides: { storeApiUrl: '', storeApiNonce: '' },
+    storeApiHandler: function () { called = true; return jsonResponse(fakeCartResponse()); },
   });
 
-  await openAndSend(root, 'add that to my cart');
+  await openAndSend(root, 'put this in my cart');
+  await flush();
 
-  assert.equal(root.querySelector('.hm-atc-btn'), null, 'no Store API button when the API is not configured');
+  assert.equal(called, false, 'the Store API must never be called when it is not configured');
   const link = root.querySelector('.hm-cart-link-btn');
   assert.ok(link, 'the classic fallback link must render instead');
   assert.equal(link.getAttribute('href'), 'https://shop.example.test/?add-to-cart=12&quantity=1');
 });
 
-test('a live Store API failure (network/route missing) falls back to the classic link after a click', async () => {
+test('a live Store API failure (network/route missing) falls back to the classic link', async () => {
   const { root } = createWidget({
     messageResponseData: ADD_TO_CART_BLOCK,
     storeApiHandler: function () {
@@ -303,13 +334,10 @@ test('a live Store API failure (network/route missing) falls back to the classic
     },
   });
 
-  await openAndSend(root, 'add that to my cart');
-  const btn = root.querySelector('.hm-atc-btn');
-  btn.click();
+  await openAndSend(root, 'put this in my cart');
   await flush();
 
-  assert.equal(root.querySelector('.hm-atc-btn'), null, 'the button should be replaced, not left broken');
   const link = root.querySelector('.hm-cart-link-btn');
-  assert.ok(link, 'a real fallback link must replace the failed button');
+  assert.ok(link, 'a real fallback link must appear after the failed auto-add');
   assert.equal(link.getAttribute('href'), 'https://shop.example.test/?add-to-cart=12&quantity=1');
 });

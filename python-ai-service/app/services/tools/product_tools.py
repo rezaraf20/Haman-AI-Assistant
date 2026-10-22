@@ -25,7 +25,11 @@ from the last sync, not live).
                              intent for the widget to add to the cart via
                              WooCommerce's own Store API, same-origin,
                              also zero server-side HTTP calls (see its own
-                             docstring).
+                             docstring). Only ever called on an explicit
+                             "add this"/"buy this" instruction (see
+                             intent_classifier.py's "purchase" intent) --
+                             the widget then runs the real add immediately,
+                             with no second click.
   create_payment_link         preview-only order summary + live total for
                              a customer who wants to pay directly — the
                              actual order/payment link is only ever
@@ -688,10 +692,27 @@ def add_to_cart(db: Session, chatbot_id: str, items: List[dict]) -> dict:
     question, no nonce handling here at all: this tool makes ZERO HTTP
     calls to the store (unlike every live-query tool in this module) and
     returns pure INTENT — product_id, variation_id, quantity, and a
-    display name — for the widget to render as a real "Add to cart" button.
-    The actual add only happens in the customer's own browser, and only
-    after they click that button (see haman-widget.js's
-    handleAddToCartClick()); this function never adds anything itself.
+    display name — for the widget to run.
+
+    The customer's explicit consent is the model calling this tool at all:
+    it must only be called on an explicit "add this"/"put this in my
+    cart"/"I want to buy this" instruction, never from a plain availability
+    or price question (see intent_classifier.py's "purchase" intent, which
+    is what gets this tool offered to the model in the first place).
+    Given that consent, the widget runs the real Store API call the
+    instant this result renders — see renderAddToCartIntent()/
+    autoAddToCart() in haman-widget.js — with no second click, since
+    asking the customer to confirm an instruction they already gave would
+    be the opposite of helpful.
+
+    This function's own job still ends at "return validated intent": the
+    real add happens later, in the customer's browser, after this response
+    has already been sent — so the model can never know whether it
+    actually succeeded. Never claim in your reply that the item has been
+    added, or state a cart total/item count — the widget reports the real,
+    confirmed outcome (only after reading the cart back and verifying the
+    item is actually in it) once the add completes; claim_guard.py strips
+    any such claim from the model's own text as a backstop.
 
     name is required from the model rather than looked up here, since a
     live lookup would defeat the "zero HTTP calls" property this tool is
@@ -741,15 +762,22 @@ def add_to_cart(db: Session, chatbot_id: str, items: List[dict]) -> dict:
 register(Tool(
     name="add_to_cart",
     description=(
-        "Offer to add specific products directly to the customer's cart, inline in the chat — "
-        "the customer sees a real 'Add to cart' button and must click it themselves; nothing is "
-        "added until they do. Use this instead of build_cart_url whenever it's enabled, for "
-        "products already identified by numeric product ID (from an earlier search/recommendation "
-        "or the conversation). For a VARIABLE product (one with size/color/etc. options), you "
-        "must know the specific variation_id before calling this — if you don't have it yet, ask "
-        "the customer which option they want (or call get_product_variants) FIRST, never guess a "
-        "variation. Always include the product's real name for display, and never call this for a "
-        "product you haven't confirmed is in stock."
+        "Immediately add specific products to the customer's cart — call this ONLY when the "
+        "customer has explicitly told you to (e.g. 'add this to my cart', 'put it in my cart', "
+        "'I want to buy this'), never for a question that merely asks whether something is "
+        "available or what it costs ('is this in stock?', 'how much?') with no instruction to "
+        "add or buy. The widget runs the real add the instant you call this, with no further "
+        "click from the customer — so only call it once, and never describe this as something "
+        "the customer still needs to confirm or click. Use this instead of build_cart_url "
+        "whenever it's enabled, for products already identified by numeric product ID (from an "
+        "earlier search/recommendation or the conversation). For a VARIABLE product (one with "
+        "size/color/etc. options), you must know the specific variation_id before calling this — "
+        "if you don't have it yet, ask the customer which option they want (or call "
+        "get_product_variants) FIRST, never guess a variation. Always include the product's real "
+        "name for display, and never call this for a product you haven't confirmed is in stock. "
+        "This tool's result is not proof the add succeeded — never tell the customer it has been "
+        "added, and never state an item count or cart total; just acknowledge you're adding it "
+        "now, the interface will show the real confirmed result."
     ),
     parameters={
         "type": "object",

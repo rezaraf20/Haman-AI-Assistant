@@ -165,13 +165,19 @@ def proven_actions(widget_blocks: Iterable[dict], tool_results: Iterable[dict]) 
     cart_link is proven.
 
     add_to_cart, create_payment_link and get_order_status do not do the thing
-    they are named after. They prepare something the customer must then click:
-    the loop's own handling calls these "intent only" and "preview only", and
-    create_payment_link returns a price preview with no link in it at all. The
-    real outcomes arrive later, from the shop, as cart_add_succeeded,
-    payment_link_created and order_status_viewed. So inside this turn there is
-    nothing to prove, and "it has been added" is false even when the tool
-    succeeded -- which is exactly the sentence that started this.
+    they are named after -- the loop's own handling calls these "intent only"
+    and "preview only". create_payment_link returns a price preview with no
+    link in it at all, and get_order_status/create_payment_link's real
+    outcomes only happen after a later customer click. add_to_cart is
+    different in HOW it runs (haman-widget.js fires the real Store API call
+    immediately, no click needed, once the customer's own message already
+    gave explicit consent -- see intent_classifier.py's "purchase" intent)
+    but the same in WHEN its result is known: that call happens in the
+    customer's browser, strictly after this turn's response has already
+    been generated and sent, so there is no way for this turn to know
+    whether it actually succeeded. So inside this turn there is nothing to
+    prove for any of the three, and "it has been added" is false even when
+    the tool succeeded -- which is exactly the sentence that started this.
 
     A callback is registered by the customer answering an offer, never by the
     assistant, so it is never provable here either.
