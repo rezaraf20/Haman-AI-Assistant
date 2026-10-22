@@ -135,9 +135,20 @@ $authenticity_field_labels = [
         <p class="description">فقط تنظیمات وردپرس را پاک می‌کند؛ داده‌های سمت سرور هامان تحت تأثیر قرار نمی‌گیرند. / Only clears WordPress-side settings — data on the Haman server is unaffected.</p>
     </td></tr>
     </table>
-
-    <?php submit_button('ذخیره تنظیمات / Save Settings'); ?>
 </div>
+
+<?php
+// Deliberately OUTSIDE every .hm-tab-panel div, even though it's visually
+// last in the form: initTabs() (haman-admin.js) toggles each panel's
+// display by matching data-tab-panel to the active tab, so anything
+// rendered *inside* one panel is invisible on every other tab. This one
+// button saves fields from three different panels above (connection,
+// sync, advanced) -- it was previously nested inside the advanced panel's
+// closing </div>, which meant Save was only ever visible while the
+// Advanced tab happened to be active, and never on Connection or Sync,
+// despite both having real fields submitted by this exact form.
+submit_button('ذخیره تنظیمات / Save Settings');
+?>
 </form>
 
 <div class="hm-tab-panel" data-tab-panel="sync">
