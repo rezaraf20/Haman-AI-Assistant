@@ -100,15 +100,17 @@ class AddToCartNoLiveCallTest(unittest.TestCase):
         self.assertEqual(len(name), 200)
         self.assertFalse(name.startswith(" "))
 
-    def test_multiple_items_each_carry_their_own_intent(self):
+    def test_exactly_two_items_is_already_rejected(self):
+        """The structural single-item cap (see MAX_CART_ITEMS's own
+        comment): a real incident had the model call this with two
+        products in one turn from a plain comparison request. Two is
+        already one too many — this isn't about some large N."""
         db = MagicMock()
         result = product_tools.add_to_cart(db, "chatbot-1", items=[
             {"product_id": 12, "name": "A"},
             {"product_id": 34, "variation_id": 56, "quantity": 3, "name": "B (Large)"},
         ])
-        self.assertEqual(len(result["items"]), 2)
-        self.assertIsNone(result["items"][0]["variation_id"])
-        self.assertEqual(result["items"][1]["variation_id"], 56)
+        self.assertIn("error", result)
 
 
 if __name__ == "__main__":

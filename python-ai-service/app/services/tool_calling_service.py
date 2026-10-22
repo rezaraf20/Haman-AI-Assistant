@@ -592,12 +592,46 @@ def _phrasing_instruction(phrases: List[str], is_fa: bool) -> str:
     )
 
 
+# Tools that mutate or commit to the customer's order/money. A real
+# production incident (2026-10-22, khonehrangi.ir): asked only to compare
+# two products, the model also called add_to_cart for both of them --
+# nothing was wrong with that turn's arguments or the tool's own handler,
+# the model simply had the tool available and chose to use it when nothing
+# about the actual message warranted it.
+#
+# The fix is NOT "tell the model harder not to do that" -- the tool
+# description already said as much, and it happened anyway. It is
+# structural: these three tools are removed from the schema entirely
+# unless the CURRENT message's own deterministic intent (classify_intent()
+# on `query` alone, never history -- a "I want to buy this" three turns
+# ago says nothing about whether THIS message is a purchase command; see
+# intent_classifier.py) is the one intent that tool exists for. The model
+# is never shown the tool on a turn that doesn't call for it, so it is
+# never in a position to call it wrongly -- the same "prevent at the
+# decision layer, not the compliance layer" reasoning that
+# tool_router.route() already applies to which tool gets FORCED; this
+# applies it to which tools are even OFFERED.
+_WRITE_TOOL_REQUIRED_INTENT = {
+    "add_to_cart": "purchase",
+    "build_cart_url": "purchase",
+    "create_payment_link": "payment",
+}
+
+
 def run_tool_calling_pipeline(
     db: Session, chatbot_id: str, conversation_id: Optional[str], query: str,
     history: List[dict], system_prompt_text: str, max_tokens: int, temperature: float,
     enabled_tool_names: List[str], intent: Optional[str] = None,
 ) -> Optional[dict]:
     tools = get_enabled_tools(enabled_tool_names)
+    if not tools:
+        return None
+
+    # See _WRITE_TOOL_REQUIRED_INTENT above. A tool not in that mapping is
+    # always kept (the `intent` default makes the comparison trivially
+    # true); one that is in it is kept only when this exact message's
+    # intent matches what it's gated on.
+    tools = [t for t in tools if _WRITE_TOOL_REQUIRED_INTENT.get(t.name, intent) == intent]
     if not tools:
         return None
 

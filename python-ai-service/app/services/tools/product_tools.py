@@ -478,7 +478,20 @@ def compare_products(db: Session, chatbot_id: str, product_ids: List[int]) -> di
     return {"live": True, "currency": live.get("currency", "IRT"), "products": products_out, "attribute_rows": attribute_rows}
 
 
-MAX_CART_ITEMS = 5
+# Capped to exactly 1 after a real incident: asked only to compare two
+# products, the model also called add_to_cart for BOTH of them in the same
+# turn. A structural cap at the validation boundary makes "two products
+# added from one turn" impossible regardless of what the model attempts --
+# no reliance on it reading its own instructions correctly. See
+# tool_calling_service.py's _WRITE_TOOL_REQUIRED_INTENT for the matching
+# first-layer guard (these tools aren't even offered to the model unless
+# the CURRENT message's own intent calls for one). Multi-item carts are a
+# real thing a customer might want, but detecting "the customer explicitly
+# asked for several items in this exact message" reliably is exactly the
+# kind of judgment call this fix exists to stop making by guesswork --
+# so for now the safe default is 1, full stop, until that has its own
+# deterministic signal.
+MAX_CART_ITEMS = 1
 MAX_CART_QUANTITY = 20
 
 
@@ -650,13 +663,14 @@ register(Tool(
 register(Tool(
     name="build_cart_url",
     description=(
-        "Build one-click links that add specific products directly to the customer's "
+        "Build a one-click link that adds ONE specific product directly to the customer's "
         "WooCommerce cart — the customer clicks the link/button and WooCommerce itself adds "
         "the item, no login or checkout step from you. Use this when a customer wants to buy "
-        "or add products they (or you, from an earlier search/recommendation) already "
-        "identified by numeric product ID. This does NOT check stock or price — call "
-        "get_product_availability first if you need to confirm those, and don't offer a cart "
-        "link for a product you haven't confirmed is in stock."
+        "or add a product they (or you, from an earlier search/recommendation) already "
+        "identified by numeric product ID. Only ever one product per call — if the customer "
+        "wants more than one, call this again separately for each. This does NOT check stock "
+        "or price — call get_product_availability first if you need to confirm those, and "
+        "don't offer a cart link for a product you haven't confirmed is in stock."
     ),
     parameters={
         "type": "object",
@@ -672,8 +686,8 @@ register(Tool(
                     "required": ["product_id"],
                     "additionalProperties": False,
                 },
-                "minItems": 1, "maxItems": 5,
-                "description": "The products (and optional quantities) to build cart links for.",
+                "minItems": 1, "maxItems": 1,
+                "description": "Exactly one product (and optional quantity) to build a cart link for.",
             },
         },
         "required": ["items"],
@@ -762,17 +776,21 @@ def add_to_cart(db: Session, chatbot_id: str, items: List[dict]) -> dict:
 register(Tool(
     name="add_to_cart",
     description=(
-        "Immediately add specific products to the customer's cart — call this ONLY when the "
+        "Immediately add ONE specific product to the customer's cart — call this ONLY when the "
         "customer has explicitly told you to (e.g. 'add this to my cart', 'put it in my cart', "
         "'I want to buy this'), never for a question that merely asks whether something is "
         "available or what it costs ('is this in stock?', 'how much?') with no instruction to "
-        "add or buy. The widget runs the real add the instant you call this, with no further "
-        "click from the customer — so only call it once, and never describe this as something "
-        "the customer still needs to confirm or click. Use this instead of build_cart_url "
-        "whenever it's enabled, for products already identified by numeric product ID (from an "
-        "earlier search/recommendation or the conversation). For a VARIABLE product (one with "
-        "size/color/etc. options), you must know the specific variation_id before calling this — "
-        "if you don't have it yet, ask the customer which option they want (or call "
+        "add or buy, and never as a side effect of some other request (comparing, recommending, "
+        "or describing products is never itself a reason to add anything). The widget runs the "
+        "real add the instant you call this, with no further click from the customer — so only "
+        "call it once, for the one product the customer actually asked for, and never describe "
+        "this as something the customer still needs to confirm or click. If the customer wants "
+        "more than one product added, call this again separately for each — never pass more "
+        "than one item in a single call. Use this instead of build_cart_url whenever it's "
+        "enabled, for the product already identified by numeric product ID (from an earlier "
+        "search/recommendation or the conversation). For a VARIABLE product (one with size/"
+        "color/etc. options), you must know the specific variation_id before calling this — if "
+        "you don't have it yet, ask the customer which option they want (or call "
         "get_product_variants) FIRST, never guess a variation. Always include the product's real "
         "name for display, and never call this for a product you haven't confirmed is in stock. "
         "This tool's result is not proof the add succeeded — never tell the customer it has been "
@@ -795,8 +813,8 @@ register(Tool(
                     "required": ["product_id", "name"],
                     "additionalProperties": False,
                 },
-                "minItems": 1, "maxItems": 5,
-                "description": "The products (and optional quantities/variations) to offer adding to the cart.",
+                "minItems": 1, "maxItems": 1,
+                "description": "Exactly one product (and optional quantity/variation) to add to the cart.",
             },
         },
         "required": ["items"],
@@ -807,7 +825,11 @@ register(Tool(
 ))
 
 
-MAX_PAYMENT_LINK_ITEMS = 10  # matches Haman_Live_Query_Handler::MAX_ORDER_ITEMS on the plugin side
+# Same single-item structural cap as MAX_CART_ITEMS, for the same reason --
+# this is now independent of Haman_Live_Query_Handler::MAX_ORDER_ITEMS (10)
+# on the plugin side, which is the preview endpoint's own general ceiling,
+# not specific to this AI tool's one-write-action-one-product rule.
+MAX_PAYMENT_LINK_ITEMS = 1
 
 
 def _validate_customer(customer) -> Optional[dict]:
@@ -889,15 +911,18 @@ def create_payment_link(db: Session, chatbot_id: str, items: List[dict], custome
 register(Tool(
     name="create_payment_link",
     description=(
-        "Preview a proposed order — live price, name, and stock for each item, plus the real "
+        "Preview a proposed order for ONE product — live price, name, and stock, plus the real "
         "total — for a customer who wants to pay directly. Use this when a customer has said "
-        "what they want to buy and is ready to pay now. This ONLY shows a preview; it never "
-        "creates an order or a payment link itself. The customer must see the order summary and "
-        "total (rendered by the widget, not your own text) and explicitly click a real 'Confirm "
-        "& Pay' button before anything is actually created. Include any name/phone/email the "
-        "customer has already volunteered as 'customer', but never ask for it just to use this "
-        "tool — it's entirely optional. Never call this for a product you haven't confirmed is in "
-        "stock, and never state a total yourself — only this tool's own live total is ever correct."
+        "what they want to buy and is ready to pay now. Only one product per call; if the "
+        "customer wants to pay for more than one, that is a separate, larger decision — ask "
+        "them to confirm the full list before previewing, rather than guessing which ones they "
+        "meant. This ONLY shows a preview; it never creates an order or a payment link itself. "
+        "The customer must see the order summary and total (rendered by the widget, not your "
+        "own text) and explicitly click a real 'Confirm & Pay' button before anything is "
+        "actually created. Include any name/phone/email the customer has already volunteered as "
+        "'customer', but never ask for it just to use this tool — it's entirely optional. Never "
+        "call this for a product you haven't confirmed is in stock, and never state a total "
+        "yourself — only this tool's own live total is ever correct."
     ),
     parameters={
         "type": "object",
@@ -914,8 +939,8 @@ register(Tool(
                     "required": ["product_id"],
                     "additionalProperties": False,
                 },
-                "minItems": 1, "maxItems": 10,
-                "description": "The products (and optional quantities/variations) the customer wants to buy.",
+                "minItems": 1, "maxItems": 1,
+                "description": "Exactly one product (and optional quantity/variation) the customer wants to buy.",
             },
             "customer": {
                 "type": "object",

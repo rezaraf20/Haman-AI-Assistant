@@ -651,6 +651,7 @@ class WidgetBlockTest(unittest.TestCase):
                 db=MagicMock(), chatbot_id="chatbot-1", conversation_id="conv-1",
                 query="add that to my cart", history=[], system_prompt_text="system prompt",
                 max_tokens=800, temperature=0.3, enabled_tool_names=["build_cart_url"],
+                intent="purchase",
             )
 
         self.assertIsNotNone(result)
@@ -700,6 +701,7 @@ class WidgetBlockTest(unittest.TestCase):
                 db=MagicMock(), chatbot_id="chatbot-1", conversation_id="conv-1",
                 query="add that to my cart", history=[], system_prompt_text="system prompt",
                 max_tokens=800, temperature=0.3, enabled_tool_names=["add_to_cart"],
+                intent="purchase",
             )
 
         self.assertIsNotNone(result)
@@ -748,6 +750,7 @@ class WidgetBlockTest(unittest.TestCase):
                 db=MagicMock(), chatbot_id="chatbot-1", conversation_id="conv-1",
                 query="I want to pay for this now", history=[], system_prompt_text="system prompt",
                 max_tokens=800, temperature=0.3, enabled_tool_names=["create_payment_link"],
+                intent="payment",
             )
 
         self.assertIsNotNone(result)
@@ -758,6 +761,103 @@ class WidgetBlockTest(unittest.TestCase):
         }])
         event_types = [c[0][3] for c in mock_log.call_args_list]
         self.assertEqual(event_types, ["tool_called"], "create_payment_link must log nothing beyond tool_called — no payment_link_created until a real confirmed click creates the order.")
+
+    def test_write_tools_are_removed_from_the_schema_without_the_matching_intent(self):
+        """The structural fix for the real khonehrangi.ir incident: asked
+        only to compare two products, the model also called add_to_cart for
+        both. The guard is not "hope the model declines" — add_to_cart must
+        never even appear in what the model is offered unless THIS exact
+        message's own intent is 'purchase'. A read-only tool in the same
+        enabled set is unaffected."""
+        compare_tool = Tool(
+            name="compare_products", description="test", access_level="read",
+            parameters={"type": "object", "properties": {}}, handler=lambda **kw: {},
+        )
+        atc_tool = Tool(
+            name="add_to_cart", description="test", access_level="read",
+            parameters={"type": "object", "properties": {}}, handler=lambda **kw: {},
+        )
+        offered_names = []
+
+        def fake_to_openai_schema(tools):
+            offered_names.append(sorted(t.name for t in tools))
+            return [{"type": "function", "function": {"name": t.name}} for t in tools]
+
+        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature, forced_tool=None):
+            return {"content": "No tool applies.", "tool_calls": None}, "groq/test-tool-model", {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}, 0.0
+
+        with patch.object(tool_calling_service, "get_enabled_tools", return_value=[compare_tool, atc_tool]), \
+             patch.object(tool_calling_service, "to_openai_schema", side_effect=fake_to_openai_schema), \
+             patch.object(tool_calling_service, "_tool_calling_chat", side_effect=fake_tool_calling_chat), \
+             patch("app.services.rag_service._log_event"):
+            tool_calling_service.run_tool_calling_pipeline(
+                db=MagicMock(), chatbot_id="chatbot-1", conversation_id="conv-1",
+                query="compare these two", history=[], system_prompt_text="system prompt",
+                max_tokens=800, temperature=0.3,
+                enabled_tool_names=["compare_products", "add_to_cart"], intent="comparison",
+            )
+
+        self.assertEqual(offered_names, [["compare_products"]],
+                          "add_to_cart must never be offered to the model on a comparison turn")
+
+    def test_write_tools_are_offered_once_the_matching_intent_is_present(self):
+        compare_tool = Tool(
+            name="compare_products", description="test", access_level="read",
+            parameters={"type": "object", "properties": {}}, handler=lambda **kw: {},
+        )
+        atc_tool = Tool(
+            name="add_to_cart", description="test", access_level="read",
+            parameters={"type": "object", "properties": {}}, handler=lambda **kw: {},
+        )
+        offered_names = []
+
+        def fake_to_openai_schema(tools):
+            offered_names.append(sorted(t.name for t in tools))
+            return [{"type": "function", "function": {"name": t.name}} for t in tools]
+
+        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature, forced_tool=None):
+            return {"content": "No tool applies.", "tool_calls": None}, "groq/test-tool-model", {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}, 0.0
+
+        with patch.object(tool_calling_service, "get_enabled_tools", return_value=[compare_tool, atc_tool]), \
+             patch.object(tool_calling_service, "to_openai_schema", side_effect=fake_to_openai_schema), \
+             patch.object(tool_calling_service, "_tool_calling_chat", side_effect=fake_tool_calling_chat), \
+             patch("app.services.rag_service._log_event"):
+            tool_calling_service.run_tool_calling_pipeline(
+                db=MagicMock(), chatbot_id="chatbot-1", conversation_id="conv-1",
+                query="add that to my cart", history=[], system_prompt_text="system prompt",
+                max_tokens=800, temperature=0.3,
+                enabled_tool_names=["compare_products", "add_to_cart"], intent="purchase",
+            )
+
+        self.assertEqual(offered_names, [["add_to_cart", "compare_products"]],
+                          "add_to_cart must be offered once the current message's own intent is a purchase command")
+
+    def test_a_stale_history_intent_never_leaks_into_the_current_turns_gate(self):
+        """'I want to buy this' three turns ago must not keep add_to_cart
+        available on a later, unrelated turn — only the classification of
+        THIS message (the `intent` argument, which callers derive from
+        `query` alone — see intent_classifier.classify_intent, which never
+        reads history) decides."""
+        atc_tool = Tool(
+            name="add_to_cart", description="test", access_level="read",
+            parameters={"type": "object", "properties": {}}, handler=lambda **kw: {},
+        )
+
+        with patch.object(tool_calling_service, "get_enabled_tools", return_value=[atc_tool]), \
+             patch("app.services.rag_service._log_event"):
+            result = tool_calling_service.run_tool_calling_pipeline(
+                db=MagicMock(), chatbot_id="chatbot-1", conversation_id="conv-1",
+                query="do you have another color?",
+                history=[
+                    {"role": "user", "content": "I want to buy this"},
+                    {"role": "assistant", "content": "Sure, adding it now."},
+                ],
+                system_prompt_text="system prompt",
+                max_tokens=800, temperature=0.3,
+                enabled_tool_names=["add_to_cart"], intent="other",
+            )
+
+        self.assertIsNone(result, "a purchase intent from an earlier turn must not keep add_to_cart offered now")
 
     def test_run_tool_calling_pipeline_returns_order_status_intent_and_sends_nothing(self):
         """get_order_status is the case where "intent only" protects the

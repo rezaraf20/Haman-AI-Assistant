@@ -106,19 +106,14 @@ class BuildCartUrlNoLiveCallTest(unittest.TestCase):
         result = product_tools.build_cart_url(db, "chatbot-1", items=[{"product_id": 12, "quantity": -5}])
         self.assertEqual(result["items"][0]["quantity"], 1)
 
-    def test_multiple_items_each_get_their_own_link(self):
-        """WooCommerce core only ever reads a single product id from
-        ?add-to-cart= (absint() silently truncates a comma-separated value
-        to its first id) — a single combined multi-product URL would
-        silently drop every item after the first, so this must always
-        return one full URL per item, never one merged URL."""
+    def test_exactly_two_items_is_already_rejected(self):
+        """Structural single-item cap (see MAX_CART_ITEMS's own comment) —
+        two is already one too many, not just some large N."""
         db = MagicMock()
         site_row = MagicMock(primary_domain="example.test")
         db.execute.return_value.fetchone.return_value = site_row
         result = product_tools.build_cart_url(db, "chatbot-1", items=[{"product_id": 12}, {"product_id": 34, "quantity": 2}])
-        self.assertEqual(len(result["items"]), 2)
-        self.assertEqual(result["items"][0]["url"], "https://example.test/?add-to-cart=12&quantity=1")
-        self.assertEqual(result["items"][1]["url"], "https://example.test/?add-to-cart=34&quantity=2")
+        self.assertIn("error", result)
 
 
 if __name__ == "__main__":
