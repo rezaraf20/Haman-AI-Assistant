@@ -354,47 +354,81 @@ _CART_LINK_TOOL_NAMES = {"build_cart_url", "add_to_cart"}
 
 
 def _cart_link_rule(enabled_tools: Optional[List[str]], is_fa: bool) -> str:
-    """build_cart_url/add_to_cart both build something the CUSTOMER must
-    click for anything to actually happen — this server never adds
-    anything to a cart itself (see product_tools.add_to_cart's docstring:
-    the real Store API call only fires in the customer's own browser,
-    after a real click). The one failure mode that matters here isn't a
-    wrong price or a stale fact, it's the model describing the add as
-    already done ("I've added it to your cart") when nothing has happened
-    yet — that's simply false until the customer clicks, so this gets its
-    own explicit rule rather than folding into _product_display_rule's
-    more general "don't re-describe" guidance. add_to_cart also needs its
-    own variant-selection clause: unlike build_cart_url (a plain link
-    WooCommerce resolves itself), add_to_cart requires a real variation_id
-    up front for a variable product, so the model must ask rather than
-    guess one."""
+    """build_cart_url and add_to_cart now have GENUINELY DIFFERENT
+    behavior, so they need genuinely different instructions here, not one
+    shared paragraph — that's exactly what went wrong in a real incident
+    (2026-10-23): this rule used to tell the model to say "click the
+    button below" for add_to_cart too, which was true the day it was
+    written but stopped being true the moment add_to_cart became an
+    auto-firing action (see haman-widget.js's autoAddToCart() /
+    product_tools.add_to_cart's own docstring) — the model dutifully
+    followed this rule and told a real customer to click a button that no
+    longer existed.
+
+    build_cart_url still genuinely requires a real customer click (a
+    plain nonce-free link WooCommerce itself resolves) — that guidance is
+    unchanged. add_to_cart fires immediately, with no click, the instant
+    this response is sent; describing a button or a click for it is
+    simply false on every site now, regardless of which widget version
+    that site happens to be running (an old click-required widget's own
+    actual complaint from a real customer — "there's no button, you add
+    it yourself" — shows that framing was already fragile even when a
+    button did technically exist; the fix is for the model to never
+    describe the UI mechanic at all, just the action, and let whatever
+    the widget actually renders speak for itself).
+
+    Neither tool call is proof the add succeeded (see claim_guard.py) —
+    the model must never state an item count or total itself either way;
+    only the widget's own confirmed read-back may ever show those.
+    """
     enabled = set(enabled_tools or [])
     if not (_CART_LINK_TOOL_NAMES & enabled):
         return ""
+    has_build_cart_url = "build_cart_url" in enabled
     has_add_to_cart = "add_to_cart" in enabled
     if is_fa:
-        rule = (
-            "\n\nوقتی از ابزار build_cart_url یا add_to_cart استفاده می‌کنی، دکمه‌های واقعی «افزودن به سبد "
-            "خرید» به‌طور مستقیم در ویجت نمایش داده می‌شود — لینک یا دکمه را در متن خودت دوباره توصیف نکن. "
-            "مهم‌تر از آن: تا وقتی کاربر خودش روی آن دکمه کلیک نکند، هیچ‌چیز واقعاً به سبد خرید اضافه نشده — "
-            "هرگز نگو «اضافه کردم» یا «به سبد شما اضافه شد»؛ به‌جایش بگو چیزی مثل «برای افزودن به سبد خرید "
-            "روی دکمه‌ی زیر کلیک کنید»."
-        )
+        rule = ""
+        if has_build_cart_url:
+            rule += (
+                "\n\nوقتی از ابزار build_cart_url استفاده می‌کنی، لینک واقعی «افزودن به سبد خرید» به‌طور "
+                "مستقیم در ویجت نمایش داده می‌شود — آن را در متن خودت دوباره توصیف نکن. تا وقتی کاربر خودش "
+                "روی آن کلیک نکند، هیچ‌چیز واقعاً به سبد اضافه نشده — هرگز نگو «اضافه کردم»؛ به‌جایش بگو "
+                "چیزی مثل «برای افزودن به سبد خرید روی لینک زیر کلیک کنید»."
+            )
         if has_add_to_cart:
+            rule += (
+                "\n\nوقتی از ابزار add_to_cart استفاده می‌کنی، این کار بلافاصله و بدون نیاز به کلیک کاربر "
+                "در پس‌زمینه انجام می‌شود — هرگز از «دکمه» یا «کلیک کنید» صحبت نکن، چون دکمه‌ای وجود ندارد و "
+                "کاربر کاری برای انجام ندارد. و تو هنوز نمی‌دانی نتیجه‌ی واقعی چه بود (موفق بود یا نه، الان "
+                "چند قلم در سبد است، مبلغ کل چقدر است) چون آن فقط در مرورگر خود مشتری، بعد از همین پاسخ، "
+                "معلوم می‌شود — فقط یک جمله‌ی کوتاه بگو، چیزی مثل «الان دارم [نام محصول] را به سبد خریدتان "
+                "اضافه می‌کنم»، و نه بیشتر؛ هرگز تعداد یا مبلغی را خودت حدس نزن یا تکرار نکن."
+            )
             rule += (
                 "\n\nبرای add_to_cart، اگر محصول متغیر است (سایز/رنگ/...) و هنوز نمی‌دانی کاربر کدام گزینه "
                 "را می‌خواهد، هرگز variation_id را حدس نزن — اول از کاربر بپرس کدام سایز/رنگ را می‌خواهد "
                 "(یا از ابزار get_product_variants استفاده کن)، و فقط بعد از آن add_to_cart را صدا بزن."
             )
         return rule
-    rule = (
-        "\n\nWhen you use build_cart_url or add_to_cart, real 'Add to cart' buttons are rendered "
-        "directly in the chat widget — do not re-describe the link/button in your own text. More "
-        "importantly: nothing is actually added to the customer's cart until they click that "
-        "button themselves — never say you've already added it or that it's now in their cart; say "
-        "something like 'click below to add it to your cart' instead."
-    )
+    rule = ""
+    if has_build_cart_url:
+        rule += (
+            "\n\nWhen you use build_cart_url, a real 'Add to cart' link is rendered directly in the "
+            "chat widget — do not re-describe it in your own text. Nothing is actually added to the "
+            "customer's cart until they click it themselves — never say you've already added it or "
+            "that it's now in their cart; say something like 'click below to add it to your cart' "
+            "instead."
+        )
     if has_add_to_cart:
+        rule += (
+            "\n\nWhen you use add_to_cart, it fires immediately in the background, with no click "
+            "needed from the customer — never mention a 'button' or ask them to click anything, "
+            "because there is nothing to click and nothing for them to do. You also don't yet know "
+            "the real outcome (whether it actually succeeded, how many items are now in the cart, or "
+            "the real total) — that is only known in the customer's own browser, after this reply is "
+            "sent. Say only a short acknowledgement, something like 'Adding [product name] to your "
+            "cart now', and nothing more — never guess or restate a count or an amount yourself."
+        )
         rule += (
             "\n\nFor add_to_cart specifically: if the product is variable (size/color/etc.) and you "
             "don't yet know which option the customer wants, never guess a variation_id — ask the "

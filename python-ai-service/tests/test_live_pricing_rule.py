@@ -152,6 +152,49 @@ class CartLinkRuleTest(unittest.TestCase):
         self.assertIn("never say you've already added it", rule)
         self.assertIn("never guess a variation_id", rule)
 
+    # ── add_to_cart's own text must match its OWN (auto-execute) behavior,
+    # never build_cart_url's (still click-required) phrasing — a real
+    # incident (2026-10-23) had the model tell a live customer "click the
+    # button below" for add_to_cart after it had already auto-fired, since
+    # this rule used to share one paragraph for both tools. ─────────────
+    def test_add_to_cart_alone_never_uses_build_cart_urls_click_phrasing_english(self):
+        rule = _cart_link_rule(["add_to_cart"], is_fa=False)
+        self.assertNotIn("click below to add it to your cart", rule)
+
+    def test_add_to_cart_alone_never_uses_build_cart_urls_click_phrasing_persian(self):
+        rule = _cart_link_rule(["add_to_cart"], is_fa=True)
+        self.assertNotIn("روی دکمه‌ی زیر کلیک کنید", rule)
+
+    def test_add_to_cart_explicitly_says_there_is_nothing_to_click_english(self):
+        rule = _cart_link_rule(["add_to_cart"], is_fa=False)
+        self.assertIn("no click needed", rule)
+        self.assertIn("nothing to click", rule)
+
+    def test_add_to_cart_explicitly_says_there_is_nothing_to_click_persian(self):
+        rule = _cart_link_rule(["add_to_cart"], is_fa=True)
+        self.assertIn("بدون نیاز به کلیک کاربر", rule)
+        self.assertIn("دکمه‌ای وجود ندارد", rule)
+
+    def test_add_to_cart_forbids_stating_a_count_or_total_english(self):
+        rule = _cart_link_rule(["add_to_cart"], is_fa=False)
+        self.assertIn("never guess or restate a count or an amount yourself", rule)
+
+    def test_add_to_cart_forbids_stating_a_count_or_total_persian(self):
+        rule = _cart_link_rule(["add_to_cart"], is_fa=True)
+        self.assertIn("هرگز تعداد یا مبلغی را خودت حدس نزن", rule)
+
+    def test_build_cart_url_alone_is_unaffected_and_still_uses_click_phrasing(self):
+        # build_cart_url's own behavior never changed — it still genuinely
+        # requires a real customer click, so its guidance must stay intact.
+        rule = _cart_link_rule(["build_cart_url"], is_fa=False)
+        self.assertIn("click below to add it to your cart", rule)
+        self.assertNotIn("no click needed", rule)
+
+    def test_both_tools_enabled_keeps_each_tools_phrasing_separate(self):
+        rule = _cart_link_rule(["build_cart_url", "add_to_cart"], is_fa=False)
+        self.assertIn("click below to add it to your cart", rule)  # build_cart_url's own
+        self.assertIn("no click needed", rule)  # add_to_cart's own
+
 
 class PaymentLinkRuleTest(unittest.TestCase):
     """create_payment_link creates real money-adjacent state, so this rule
