@@ -96,7 +96,28 @@ class AiGatewayService {
         try {
             $r = Http::withToken($this->secret)
                      ->timeout(config('haman.ai_service.timeout', 30))
-                     ->retry(config('haman.ai_service.retry', 2), 500)
+                     ->retry(config('haman.ai_service.retry', 2), 500, function (\Throwable $e) {
+                         // A real incident (2026-10-22): the default retry()
+                         // fires on ANY exception, including the request's
+                         // own timeout -- so a genuinely slow (but still
+                         // working) python_ai call got retried mid-flight,
+                         // running the whole pipeline (including a
+                         // write-tool call) a second time while the first
+                         // attempt was still executing server-side. A
+                         // dropped/refused connection is transient and worth
+                         // one retry; a timeout means the other side was
+                         // still genuinely working on it, and resending is
+                         // exactly the wrong response. Guzzle reports a cURL
+                         // timeout as "cURL error 28" in the exception
+                         // message -- the one reliable way to tell the two
+                         // apart, since both surface as the same
+                         // ConnectionException class. See
+                         // routers/chat.py::_dedupe_chat_request() for the
+                         // real backstop this is the first layer of, not the
+                         // only one.
+                         return !str_contains($e->getMessage(), 'cURL error 28')
+                             && !str_contains($e->getMessage(), 'Operation timed out');
+                     })
                      ->post("{$this->url}{$path}", $data);
             if ($r->failed()) throw new AiServiceException("AI error {$r->status()}: {$r->body()}", $r->status());
             return $r->json() ?? [];

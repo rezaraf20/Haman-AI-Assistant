@@ -676,8 +676,71 @@ def run_tool_calling_pipeline(
         if time.time() - start > MAX_TOTAL_SECONDS:
             logger.warning(f"Tool-calling time budget exceeded for chatbot {chatbot_id}")
             from app.services.rag_service import _log_event
-            _log_event(db, conversation_id, chatbot_id, "tool_budget_exceeded", {"reason": "time"})
-            return None
+            _log_event(db, conversation_id, chatbot_id, "tool_budget_exceeded", {
+                "reason": "time", "had_results": bool(widget_blocks or tool_results),
+            })
+            if not (widget_blocks or tool_results):
+                return None
+            # A real incident (2026-10-22): this branch used to `return
+            # None` unconditionally, discarding an already-successful
+            # add_to_cart call (and its widget_block) along with
+            # everything else — the caller then fell through to the
+            # normal retrieval pipeline, which has no idea any tool ever
+            # ran, paying for a second full LLM call to say so. What
+            # actually happened this turn is proven (it's sitting right
+            # here in widget_blocks/tool_results); throwing it away was
+            # the bug. One more call, tools disabled, writes the text
+            # answer from what's already here — the same guaranteed
+            # final call the count-based budget already gets via the
+            # `+1` in `range(max_tool_calls + 1)` above, just reached
+            # from the time budget instead.
+            if required_phrases:
+                messages[0] = {
+                    "role": "system",
+                    "content": system_prompt_text + _phrasing_instruction(required_phrases, _query_is_fa),
+                }
+            try:
+                message, model_used, usage, cost = _tool_calling_chat(
+                    db, messages, None, max_tokens, temperature,
+                )
+            except Exception as e:
+                logger.error(f"Final answer call failed after time budget exceeded: {e}")
+                return None
+            total_usage["prompt_tokens"] += usage.get("prompt_tokens", 0) or 0
+            total_usage["completion_tokens"] += usage.get("completion_tokens", 0) or 0
+            total_usage["total_tokens"] += usage.get("total_tokens", 0) or 0
+            total_cost += cost
+            latency_ms = int((time.time() - start) * 1000)
+            from app.services.rag_service import _looks_persian
+            answer, labels = strip_source_labels(message.get("content") or "")
+            if labels:
+                logger.info(f"Removed {labels} internal source label(s) for chatbot {chatbot_id}")
+            answer, cut = verify_claims(
+                answer, proven_actions(widget_blocks, tool_results), is_fa=_looks_persian(query),
+            )
+            if cut:
+                logger.warning(f"Unproven claim(s) removed for chatbot {chatbot_id}: {sorted(set(cut))}")
+                _log_event(db, conversation_id, chatbot_id, "unproven_claim_removed", {
+                    "actions": sorted(set(cut)),
+                })
+            answer, dropped_refs = strip_unbacked_widget_references(answer, has_widget_blocks=bool(widget_blocks))
+            if dropped_refs:
+                logger.warning(f"Unbacked UI reference(s) removed for chatbot {chatbot_id}: {dropped_refs}")
+                _log_event(db, conversation_id, chatbot_id, "unbacked_widget_reference_removed", {
+                    "sentences": dropped_refs,
+                })
+            return {
+                "response": answer,
+                "chunk_ids": [], "scores": [], "sources": [],
+                "prompt_tokens": total_usage["prompt_tokens"],
+                "completion_tokens": total_usage["completion_tokens"],
+                "total_tokens": total_usage["total_tokens"],
+                "cost_toman": round(total_cost, 4),
+                "model": model_used, "latency_ms": latency_ms,
+                "is_fallback": False, "is_unanswered": False, "finish_reason": "tool_stop_time_budget",
+                "widget_blocks": widget_blocks,
+                "lead_signal": lead_signal,
+            }
 
         if required_phrases:
             # Restated every turn, immediately before the model writes, since

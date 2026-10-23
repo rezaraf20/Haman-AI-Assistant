@@ -3,7 +3,17 @@ return [
     'ai_service' => [
         'url'    => env('AI_SERVICE_URL', 'http://python_ai:8001'),
         'secret' => env('AI_SERVICE_SECRET'),
-        'timeout'=> 30,
+        // Must stay above python_ai's own worst-case pipeline duration, not
+        // below it — a real incident (2026-10-22) had this at 30s while the
+        // tool-calling budget (20s) plus its own fallback LLM call (measured
+        // ~27-28s in the field) could together take ~45-50s, so Laravel gave
+        // up and retried mid-flight, re-running the whole pipeline —
+        // including a write-tool call — a second time while the first was
+        // still genuinely executing. 60s gives real headroom above that
+        // measured worst case without being as generous as stream_timeout
+        // below (a non-streaming reply shows the customer nothing at all
+        // until it's fully done, unlike a stream).
+        'timeout'=> 60,
         'retry'  => 2,
         // A streamed reply's total wall time (not just time-to-first-byte)
         // can genuinely exceed the normal 30s request timeout even though

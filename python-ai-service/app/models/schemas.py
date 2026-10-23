@@ -36,6 +36,15 @@ class ChatRequest(BaseModel):
     # rag_service._authenticity_rule(). None uses that function's own
     # hardcoded bilingual default.
     authenticity_unknown_message: Optional[str] = None
+    # One ID per logical customer message, generated once by ChatService::
+    # gatewayPayload() and reused unchanged across any Laravel-level HTTP
+    # retry of that same message (see AiGatewayService::post()) -- never
+    # regenerated for a retry, since the whole point is recognizing "this
+    # is the same request arriving again", not a new one. Optional for
+    # backward compatibility with an in-flight request from before this
+    # field existed; without it the idempotency check in routers/chat.py
+    # is simply skipped, same posture as conversation_id above.
+    request_id: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str

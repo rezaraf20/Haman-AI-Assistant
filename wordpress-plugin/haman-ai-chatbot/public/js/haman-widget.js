@@ -449,12 +449,26 @@
         if (!blocks || !blocks.length) return;
         var wasNearBottom = isNearBottom();
         blocks.forEach(function (block) {
-            if (block.type === 'product_cards') renderProductCards(block.products);
-            else if (block.type === 'product_compare') renderCompareTable(block.products, block.attribute_rows);
-            else if (block.type === 'cart_links') renderCartLinks(block.items);
-            else if (block.type === 'add_to_cart') renderAddToCartIntent(block.items);
-            else if (block.type === 'payment_link_preview') renderPaymentLinkPreview(block);
-            else if (block.type === 'order_status_otp') renderOrderStatusOtp(block);
+            // Fault-isolated: one block's own rendering bug must never take
+            // every block after it in this same turn down too. A plain
+            // forEach with no try/catch meant a single throw partway
+            // through would silently abort the whole loop, and multiple
+            // blocks in one turn (e.g. a product_compare alongside an
+            // add_to_cart, both real, same response) is an entirely normal
+            // shape — investigated 2026-10-22 as a candidate (unconfirmed)
+            // explanation for a comparison table that didn't render.
+            try {
+                if (block.type === 'product_cards') renderProductCards(block.products);
+                else if (block.type === 'product_compare') renderCompareTable(block.products, block.attribute_rows);
+                else if (block.type === 'cart_links') renderCartLinks(block.items);
+                else if (block.type === 'add_to_cart') renderAddToCartIntent(block.items);
+                else if (block.type === 'payment_link_preview') renderPaymentLinkPreview(block);
+                else if (block.type === 'order_status_otp') renderOrderStatusOtp(block);
+            } catch (e) {
+                if (window.console && console.error) {
+                    console.error('Haman widget: failed to render a "' + block.type + '" block', e);
+                }
+            }
         });
         if (wasNearBottom) scrollToBottom(false);
     }

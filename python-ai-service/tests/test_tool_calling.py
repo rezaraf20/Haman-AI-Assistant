@@ -859,6 +859,90 @@ class WidgetBlockTest(unittest.TestCase):
 
         self.assertIsNone(result, "a purchase intent from an earlier turn must not keep add_to_cart offered now")
 
+    def test_time_budget_exceeded_after_a_real_tool_call_returns_what_was_proven_not_none(self):
+        """The actual 2026-10-22 incident: a customer's explicit purchase
+        command made add_to_cart succeed, genuinely, inside this turn —
+        then the time budget tripped on the NEXT loop iteration and the
+        whole result, add_to_cart's widget_block included, used to be
+        thrown away (`return None`), sending the caller to a second, full,
+        context-free retrieval pipeline call that had no idea anything had
+        already happened. Fixed: build the final answer from what already
+        ran, and return THAT instead of None."""
+        import time as time_module
+
+        atc_tool = Tool(
+            name="add_to_cart", description="test", access_level="read",
+            parameters={"type": "object", "properties": {"items": {"type": "array"}}, "required": ["items"]},
+            handler=lambda db, chatbot_id, **kw: (
+                time_module.sleep(0.08),
+                {"items": [{"product_id": 12, "variation_id": None, "quantity": 1, "name": "Widget"}]},
+            )[1],
+        )
+
+        tool_call_message = {
+            "content": None,
+            "tool_calls": [{"id": "call_1", "function": {"name": "add_to_cart", "arguments": '{"items": [{"product_id": 12, "name": "Widget"}]}'}}],
+        }
+        final_answer_message = {"content": "در حال افزودن به سبد خرید شما.", "tool_calls": None}
+        call_sequence = [
+            (tool_call_message, {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}),
+            (final_answer_message, {"prompt_tokens": 20, "completion_tokens": 8, "total_tokens": 28}),
+        ]
+
+        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature, forced_tool=None):
+            message, usage = call_sequence.pop(0)
+            return message, "groq/test-tool-model", usage, 0.0
+
+        logged_events = []
+
+        def fake_log_event(db, conversation_id, chatbot_id, event_type, payload, latency_ms=None):
+            logged_events.append(event_type)
+
+        with patch.object(tool_calling_service, "get_enabled_tools", return_value=[atc_tool]), \
+             patch.object(tool_calling_service, "to_openai_schema", return_value=[{"type": "function", "function": {"name": "add_to_cart"}}]), \
+             patch.object(tool_calling_service, "_tool_calling_chat", side_effect=fake_tool_calling_chat), \
+             patch.object(tool_calling_service, "MAX_TOTAL_SECONDS", 0.05), \
+             patch("app.services.rag_service._log_event", side_effect=fake_log_event):
+            result = tool_calling_service.run_tool_calling_pipeline(
+                db=MagicMock(), chatbot_id="chatbot-1", conversation_id="conv-1",
+                query="add that to my cart", history=[], system_prompt_text="system prompt",
+                max_tokens=800, temperature=0.3, enabled_tool_names=["add_to_cart"],
+                intent="purchase",
+            )
+
+        self.assertIsNotNone(result, "a genuinely successful tool call must never be discarded")
+        self.assertEqual(result["widget_blocks"], [{
+            "type": "add_to_cart",
+            "items": [{"product_id": 12, "variation_id": None, "quantity": 1, "name": "Widget"}],
+        }])
+        self.assertEqual(result["response"], "در حال افزودن به سبد خرید شما.")
+        self.assertIn("tool_budget_exceeded", logged_events)
+        self.assertIn("tool_called", logged_events)
+
+    def test_time_budget_exceeded_with_nothing_proven_yet_still_returns_none(self):
+        """The other half of the same fix: if the budget trips before ANY
+        tool call ever succeeded, there is genuinely nothing to build an
+        answer from — this must still fall through to the normal
+        retrieval pipeline exactly as before, not fabricate a result."""
+        def fake_tool_calling_chat(db, messages, tools_schema, max_tokens, temperature, forced_tool=None):
+            self.fail("no LLM call should happen before the very first budget check")
+
+        with patch.object(tool_calling_service, "get_enabled_tools", return_value=[Tool(
+                name="add_to_cart", description="test", access_level="read",
+                parameters={"type": "object", "properties": {}}, handler=lambda **kw: {},
+            )]), \
+             patch.object(tool_calling_service, "_tool_calling_chat", side_effect=fake_tool_calling_chat), \
+             patch.object(tool_calling_service, "MAX_TOTAL_SECONDS", -1.0), \
+             patch("app.services.rag_service._log_event"):
+            result = tool_calling_service.run_tool_calling_pipeline(
+                db=MagicMock(), chatbot_id="chatbot-1", conversation_id="conv-1",
+                query="add that to my cart", history=[], system_prompt_text="system prompt",
+                max_tokens=800, temperature=0.3, enabled_tool_names=["add_to_cart"],
+                intent="purchase",
+            )
+
+        self.assertIsNone(result)
+
     def test_run_tool_calling_pipeline_returns_order_status_intent_and_sends_nothing(self):
         """get_order_status is the case where "intent only" protects the
         merchant's wallet rather than their stock or their orders: a model
