@@ -162,6 +162,7 @@ return [
     'field_limits_payment_links_per_conversation' => 'Payment links per conversation',
     'field_limits_payment_links_per_ip_per_day' => 'Payment links per IP per day',
     'field_limits_max_tool_calls_per_message' => 'Tool calls per message',
+    'field_limits_llm_provider_attempt_timeout_seconds' => 'LLM provider attempt timeout (seconds)',
     'field_limits_otp_codes_per_contact_per_hour' => 'Codes per phone number per hour',
     'field_limits_otp_codes_per_chatbot_per_day' => 'Codes per chatbot per day',
     'field_limits_otp_requests_per_ip_per_day' => 'Code requests per IP per day',

@@ -162,6 +162,7 @@ return [
     'field_limits_payment_links_per_conversation' => 'لینک پرداخت در هر گفتگو',
     'field_limits_payment_links_per_ip_per_day' => 'لینک پرداخت روزانه (هر IP)',
     'field_limits_max_tool_calls_per_message' => 'سقف فراخوانی ابزار در هر پیام',
+    'field_limits_llm_provider_attempt_timeout_seconds' => 'تایم‌اوت هر تلاش به provider (ثانیه)',
     'field_limits_otp_codes_per_contact_per_hour' => 'کد برای هر شماره در ساعت',
     'field_limits_otp_codes_per_chatbot_per_day' => 'کد روزانه‌ی هر چت‌بات',
     'field_limits_otp_requests_per_ip_per_day' => 'درخواست کد روزانه (هر IP)',

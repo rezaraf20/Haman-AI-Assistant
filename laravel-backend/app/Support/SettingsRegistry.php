@@ -189,6 +189,19 @@ class SettingsRegistry
             'limits.max_tool_calls_per_message' => [
                 'tab' => 'limits', 'group' => 'tools', 'type' => 'int', 'default' => 3,
             ],
+            // Per-attempt request timeout for an LLM provider call, failing
+            // over to the next same-priority key the moment it's hit rather
+            // than waiting out a much longer per-profile timeout_seconds —
+            // see the 2026-10-23 investigation: Google's own latency for this
+            // exact model varies from under a second to 30+ seconds for an
+            // otherwise-identical request, so a slow response says nothing
+            // about whether the next key would also be slow. A timeout here
+            // is deliberately NOT counted toward a profile's auto-disable
+            // threshold (see llm_provider_service.record_outcome() on the
+            // Python side) -- the same reasoning already applied to a 429.
+            'limits.llm_provider_attempt_timeout_seconds' => [
+                'tab' => 'limits', 'group' => 'tools', 'type' => 'int', 'default' => 8,
+            ],
             'limits.otp_codes_per_contact_per_hour' => [
                 'tab' => 'limits', 'group' => 'otp', 'type' => 'int', 'default' => 3,
             ],

@@ -7,7 +7,7 @@ from typing import List, Optional, AsyncGenerator, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.core.config import settings
-from app.services import llm_provider_service
+from app.services import llm_provider_service, platform_settings_service
 from app.services.intent_classifier import classify_intent
 from app.services.answer_format import strip_source_labels
 from app.services.claim_guard import verify_claims
@@ -21,6 +21,25 @@ class EmptyCompletionError(Exception):
     """Raised when a provider returns HTTP 200 with a well-formed body but a
     blank answer — not a transport/HTTP failure, so nothing else would ever
     catch it, but just as unusable to a customer as one."""
+
+
+class ProviderTimeoutError(RuntimeError):
+    """The provider didn't answer within the per-attempt timeout budget
+    (limits.llm_provider_attempt_timeout_seconds).
+
+    Kept apart from a real failure, same reasoning as a 429: a real,
+    measured investigation (2026-10-23) showed the exact same request, to
+    the exact same key, taking anywhere from under a second to 30+ seconds
+    — direct, repeated calls outside this whole pipeline confirmed the
+    variance is Google's, not ours. A slow response right now says
+    nothing about whether the SAME key would also be slow on the very
+    next request, so counting it toward auto-disable would eventually
+    disable providers that are actually healthy, purely because they got
+    unlucky once. Failing over to the next key immediately is still
+    correct — the customer is waiting — just not at that key's expense,
+    and with no same-profile retry either (a slow moment doesn't call for
+    burning a second attempt-timeout window on the same key).
+    """
 
 
 GEMINI_V1_EMBED_URL = "https://generativelanguage.googleapis.com/v1/models/gemini-embedding-001:embedContent"
@@ -201,6 +220,14 @@ DEFAULT_ERROR_RESPONSE_FA = (
 
 def _default_error_response(query: str) -> str:
     return DEFAULT_ERROR_RESPONSE_FA if _looks_persian(query) else DEFAULT_ERROR_RESPONSE_EN
+
+
+_INTERIM_CHECKING_MESSAGE_FA = "در حال بررسی محصولات..."
+_INTERIM_CHECKING_MESSAGE_EN = "Checking products..."
+
+
+def _interim_checking_message(is_fa: bool) -> str:
+    return _INTERIM_CHECKING_MESSAGE_FA if is_fa else _INTERIM_CHECKING_MESSAGE_EN
 
 
 def _looks_persian(text_val: str) -> bool:
@@ -1225,24 +1252,30 @@ def _embed_query(query: str) -> List[float]:
     return resp.json()["embedding"]["values"]
 
 
-def _openai_compatible_chat(profile: dict, prompt: str, max_tokens: int, temperature: float) -> tuple[str, dict]:
+def _openai_compatible_chat(profile: dict, prompt: str, max_tokens: int, temperature: float, timeout_seconds: Optional[float] = None) -> tuple[str, dict]:
     """groq / xai / openai_compatible all share this same request/response shape
     (choices[0].message.content, usage{prompt_tokens,completion_tokens,total_tokens})
     — one function serves all three provider types, parameterized by the DB row."""
-    resp = _requests.post(
-        f"{profile['base_url'].rstrip('/')}/chat/completions",
-        headers={
-            "Authorization": f"Bearer {profile['api_key']}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": profile['model_name'],
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": profile.get('max_tokens_response') or max_tokens,
-            "temperature": temperature,
-        },
-        timeout=profile.get('timeout_seconds') or 30,
-    )
+    try:
+        resp = _requests.post(
+            f"{profile['base_url'].rstrip('/')}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {profile['api_key']}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": profile['model_name'],
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": profile.get('max_tokens_response') or max_tokens,
+                "temperature": temperature,
+            },
+            timeout=timeout_seconds or profile.get('timeout_seconds') or 30,
+        )
+    except _requests.exceptions.Timeout as e:
+        # Not counted toward auto-disable -- see ProviderTimeoutError's own
+        # docstring for why a timeout at one moment says nothing about this
+        # same key's health going forward.
+        raise ProviderTimeoutError(f"{profile['name']} did not respond within the attempt timeout: {e}") from e
     resp.raise_for_status()
     body = resp.json()
     message = body["choices"][0]["message"]
@@ -1298,6 +1331,12 @@ def _chat_completion(db: Session, prompt: str, max_tokens: int, temperature: flo
         llm_provider_service.record_all_providers_failed("No active LLM provider profiles configured")
         raise RuntimeError("No active LLM provider profiles configured")
 
+    # Deliberately shorter than any profile's own timeout_seconds (see the
+    # 2026-10-23 investigation): failing over to the next same-priority key
+    # the moment this is hit beats waiting out a much longer per-profile
+    # budget for a key that might just be having a slow moment.
+    attempt_timeout = platform_settings_service.get_int(db, "limits.llm_provider_attempt_timeout_seconds")
+
     last_error = None
     for profile in profiles:
         # One retry per provider before moving on — Groq in particular has
@@ -1307,12 +1346,16 @@ def _chat_completion(db: Session, prompt: str, max_tokens: int, temperature: flo
         # retry. Skipped for 429s specifically: the quota that just got
         # rejected won't have refilled a second later, so retrying just
         # burns time before falling through to the next provider anyway.
+        # Also skipped for a timeout: a slow moment on this key says nothing
+        # about whether it would still be slow one second later, so retrying
+        # here just burns a second attempt-timeout window for no benefit.
         attempts = 2
         attempt_max_tokens = max_tokens
+        profile_timeout = min(attempt_timeout, profile.get('timeout_seconds') or attempt_timeout)
         for attempt in range(attempts):
             llm_provider_service.mark_attempted(profile['name'])
             try:
-                answer, usage = _openai_compatible_chat(profile, prompt, attempt_max_tokens, temperature)
+                answer, usage = _openai_compatible_chat(profile, prompt, attempt_max_tokens, temperature, timeout_seconds=profile_timeout)
                 # A 200 with a well-formed body and an empty/blank answer is
                 # not success — a real incident showed gpt-oss-20b return
                 # exactly this (completion_tokens burned to the max_tokens
@@ -1326,7 +1369,13 @@ def _chat_completion(db: Session, prompt: str, max_tokens: int, temperature: flo
                         f"{profile['name']} returned HTTP 200 with empty content "
                         f"(usage={usage})"
                     )
-                logger.info(f"LLM provider '{profile['name']}' succeeded ({usage.get('completion_tokens', '?')} completion tokens).")
+                cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens")
+                logger.info(
+                    f"LLM provider '{profile['name']}' succeeded "
+                    f"(prompt_tokens={usage.get('prompt_tokens', '?')}"
+                    + (f", cached={cached}" if cached else "")
+                    + f", completion_tokens={usage.get('completion_tokens', '?')})."
+                )
                 llm_provider_service.record_outcome(db, profile['name'], success=True)
                 cost_toman = _compute_cost_toman(profile, usage)
                 return answer, f"{profile['provider']}/{profile['model_name']}", usage, cost_toman
@@ -1334,6 +1383,14 @@ def _chat_completion(db: Session, prompt: str, max_tokens: int, temperature: flo
                 last_error = e
                 status = getattr(getattr(e, 'response', None), 'status_code', None)
                 is_last_attempt = attempt == attempts - 1
+                if isinstance(e, ProviderTimeoutError):
+                    # Not a real failure -- see ProviderTimeoutError's own
+                    # docstring. No record_outcome(success=False) (would
+                    # eventually auto-disable a perfectly healthy provider
+                    # for timing variance that isn't its fault) and no
+                    # same-profile retry, straight to the next key.
+                    logger.warning(f"LLM provider '{profile['name']}' timed out after {profile_timeout}s, trying next: {e}")
+                    break
                 if status == 429:
                     logger.warning(f"LLM provider '{profile['name']}' failed, trying next: {e}")
                     # A 429 is transient and expected under load. Counting it
@@ -1369,29 +1426,40 @@ def _chat_completion(db: Session, prompt: str, max_tokens: int, temperature: flo
     raise last_error
 
 
-def _openai_compatible_chat_stream(profile: dict, prompt: str, max_tokens: int, temperature: float):
+def _openai_compatible_chat_stream(profile: dict, prompt: str, max_tokens: int, temperature: float, timeout_seconds: Optional[float] = None):
     """Same request as _openai_compatible_chat() but with stream:true — yields
     ("delta", text) for each token fragment the provider sends, and exactly
     one trailing ("usage", dict) once the stream ends (empty dict if the
     provider never included one; Groq/xAI only attach it to the final chunk
     when stream_options.include_usage is set, which this always requests)."""
-    resp = _requests.post(
-        f"{profile['base_url'].rstrip('/')}/chat/completions",
-        headers={
-            "Authorization": f"Bearer {profile['api_key']}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": profile['model_name'],
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": profile.get('max_tokens_response') or max_tokens,
-            "temperature": temperature,
-            "stream": True,
-            "stream_options": {"include_usage": True},
-        },
-        timeout=profile.get('timeout_seconds') or 30,
-        stream=True,
-    )
+    try:
+        resp = _requests.post(
+            f"{profile['base_url'].rstrip('/')}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {profile['api_key']}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": profile['model_name'],
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": profile.get('max_tokens_response') or max_tokens,
+                "temperature": temperature,
+                "stream": True,
+                "stream_options": {"include_usage": True},
+            },
+            timeout=timeout_seconds or profile.get('timeout_seconds') or 30,
+            stream=True,
+        )
+    except _requests.exceptions.Timeout as e:
+        # Not counted toward auto-disable -- see ProviderTimeoutError's own
+        # docstring. Only covers connecting and waiting for the first byte;
+        # a raw timeout during iter_content() below (mid-stream, after real
+        # content already reached the caller) is intentionally left
+        # unwrapped -- _chat_completion_stream()'s own `started` flag means
+        # failover never silently retries past that point anyway (splicing
+        # a second provider's text into an already-started reply is never
+        # safe), so there is no auto-disable decision left to protect there.
+        raise ProviderTimeoutError(f"{profile['name']} did not respond within the attempt timeout: {e}") from e
     resp.raise_for_status()
     usage = {}
     content_seen = False
@@ -1495,16 +1563,23 @@ def _chat_completion_stream(db: Session, prompt: str, max_tokens: int, temperatu
         llm_provider_service.record_all_providers_failed("No active LLM provider profiles configured")
         raise RuntimeError("No active LLM provider profiles configured")
 
+    # Deliberately shorter than any profile's own timeout_seconds (see the
+    # 2026-10-23 investigation) -- failing over to the next same-priority
+    # key the moment this is hit beats waiting out a much longer per-profile
+    # budget for a key that might just be having a slow moment.
+    attempt_timeout = platform_settings_service.get_int(db, "limits.llm_provider_attempt_timeout_seconds")
+
     last_error = None
     for profile in profiles:
         started = False
         attempt_max_tokens = max_tokens
         succeeded = False
+        profile_timeout = min(attempt_timeout, profile.get('timeout_seconds') or attempt_timeout)
         for attempt in range(2):
             llm_provider_service.mark_attempted(profile['name'])
             try:
                 usage = {}
-                for kind, payload in _openai_compatible_chat_stream(profile, prompt, attempt_max_tokens, temperature):
+                for kind, payload in _openai_compatible_chat_stream(profile, prompt, attempt_max_tokens, temperature, timeout_seconds=profile_timeout):
                     if kind == "delta":
                         started = True
                         yield ("delta", payload)
@@ -1518,7 +1593,13 @@ def _chat_completion_stream(db: Session, prompt: str, max_tokens: int, temperatu
                     raise EmptyCompletionError(
                         f"{profile['name']} streamed zero content before ending (usage={usage})"
                     )
-                logger.info(f"LLM provider '{profile['name']}' succeeded ({usage.get('completion_tokens', '?')} completion tokens).")
+                cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens")
+                logger.info(
+                    f"LLM provider '{profile['name']}' succeeded "
+                    f"(prompt_tokens={usage.get('prompt_tokens', '?')}"
+                    + (f", cached={cached}" if cached else "")
+                    + f", completion_tokens={usage.get('completion_tokens', '?')})."
+                )
                 llm_provider_service.record_outcome(db, profile['name'], success=True)
                 cost_toman = _compute_cost_toman(profile, usage)
                 yield ("meta", {
@@ -1534,6 +1615,12 @@ def _chat_completion_stream(db: Session, prompt: str, max_tokens: int, temperatu
                     # Real content already reached the caller — never retry
                     # or fail over mid-answer, same reasoning as always.
                     raise
+                if isinstance(e, ProviderTimeoutError):
+                    # Not a real failure -- see ProviderTimeoutError's own
+                    # docstring. No record_outcome(success=False) and no
+                    # same-profile retry, straight to the next key.
+                    logger.warning(f"LLM provider '{profile['name']}' timed out after {profile_timeout}s before streaming any content, trying next: {e}")
+                    break
                 status = getattr(getattr(e, 'response', None), 'status_code', None)
                 if status == 429:
                     llm_provider_service.mark_rate_limited(profile['name'])
@@ -1585,6 +1672,22 @@ async def run_rag_pipeline_stream(
     # customer asked, not of how well the pipeline could answer it.
     intent = classify_intent(query)
     _log_event(db, conversation_id, chatbot_id, "intent_classified", {"intent": intent})
+
+    # A one-line change in the experience, not a correctness fix: the one
+    # thing that makes a tool-calling turn slow (live store round trips,
+    # multiple LLM decision calls, and -- per the 2026-10-23 investigation
+    # -- real variance in the provider itself) is also the one thing that
+    # already has its own classified intent before any of that slowness
+    # starts. Sending a real interim message THIS early turns a silent
+    # 20-40s wait into a visibly busy bot instead of what looks like a dead
+    # one -- see haman-widget.js's handleStreamResponse(), which replaces
+    # this placeholder outright the moment real content starts arriving,
+    # never appends to it. Gated on the same condition that decides
+    # whether the slow tool-calling path even runs at all (see
+    # run_tool_calling_pipeline's own call site below) -- a fast, tool-free
+    # reply never shows this at all, since there is nothing slow to explain.
+    if enabled_tools and is_tool_candidate(intent):
+        yield ("interim", _interim_checking_message(_looks_persian(query)))
 
     sku_result = _try_sku_shortcut(db, chatbot_id, conversation_id, query, start)
     if sku_result is not None:

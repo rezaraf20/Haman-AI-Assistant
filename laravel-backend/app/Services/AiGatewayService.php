@@ -24,8 +24,16 @@ class AiGatewayService {
      * (haman.ai_service.stream_timeout, not the regular request timeout) —
      * a streamed answer's total wall time can genuinely exceed a normal
      * request's timeout even though bytes are arriving the whole time.
+     *
+     * $onInterim(string $text), if given, is called for python_ai's "interim"
+     * event — a real, server-decided "I'm checking products now"-type
+     * placeholder sent right after intent classification (fast) and before
+     * the genuinely slow part of a tool-calling turn even starts (see
+     * rag_service.run_rag_pipeline_stream()). The widget replaces this text
+     * outright the instant real content starts arriving, never appends to
+     * it — turning a silent 20-40s wait into a visibly busy bot.
      */
-    public function chatStream(array $payload, callable $onDelta): array {
+    public function chatStream(array $payload, callable $onDelta, ?callable $onInterim = null): array {
         try {
             $response = Http::withToken($this->secret)
                 ->withOptions(['stream' => true])
@@ -56,6 +64,8 @@ class AiGatewayService {
                 if (!is_array($decoded)) continue;
                 if ($event === 'done') {
                     $done = $decoded;
+                } elseif ($event === 'interim') {
+                    if ($onInterim) $onInterim($decoded['text'] ?? '');
                 } elseif (isset($decoded['delta'])) {
                     $onDelta($decoded['delta']);
                 }

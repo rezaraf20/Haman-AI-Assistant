@@ -1284,6 +1284,7 @@
         var buffer = '';
         var bubble = null;
         var fullText = '';
+        var realContentArrived = false;
 
         function processFrame(frame) {
             var eventName = 'message';
@@ -1302,24 +1303,47 @@
                 if (!bubble) addMsg(CFG.genericErrorMessage, 'bot');
                 return;
             }
+            if (eventName === 'interim') {
+                // A real, server-decided placeholder (see rag_service.
+                // run_rag_pipeline_stream()) sent right after intent
+                // classification, before the genuinely slow part of a
+                // tool-calling turn even starts. `fullText` deliberately
+                // stays '' here — the first REAL delta's own fullText+=/
+                // updateBotBubble() call below then overwrites this
+                // placeholder outright, never appends after it.
+                if (!bubble) { hideTyping(); bubble = addMsg(data.text || '', 'bot'); }
+                return;
+            }
             if (eventName === 'done') {
                 sendBtn.disabled = false;
                 var hadBlocks = data.widget_blocks && data.widget_blocks.length;
                 // Same gap the non-streaming handleJsonResponse() had: a
-                // well-formed 'done' event carrying zero deltas the whole
-                // stream (fullText === '') and no widget_blocks is a
-                // legitimate "server said 200/done" outcome, not the
-                // dead-connection case pump()'s own guard below already
-                // covers — so it needs the identical fallback here.
-                // Sets bubble (not just calls addMsg) so pump()'s own
-                // !bubble fallback below doesn't fire a second time once
-                // the underlying stream reader itself finishes right after.
-                if (!bubble && !hadBlocks) { hideTyping(); bubble = addMsg(CFG.genericErrorMessage, 'bot'); }
+                // well-formed 'done' event carrying zero real deltas the
+                // whole stream and no widget_blocks is a legitimate "server
+                // said 200/done" outcome, not the dead-connection case
+                // pump()'s own guard below already covers — so it needs the
+                // identical fallback here. Covers the bubble-already-exists
+                // case too (an interim placeholder that nothing ever
+                // replaced, because the turn ended up with zero real
+                // content) — a stuck placeholder would otherwise look like
+                // a real, final answer.
+                if (!realContentArrived && !hadBlocks) {
+                    hideTyping();
+                    if (bubble) updateBotBubble(bubble, CFG.genericErrorMessage);
+                    else bubble = addMsg(CFG.genericErrorMessage, 'bot');
+                    realContentArrived = true; // settled — pump()'s own closing check must not re-fire this.
+                }
                 renderWidgetBlocks(data.widget_blocks);
                 return;
             }
             if (data.delta) {
                 if (!bubble) { hideTyping(); bubble = addMsg('', 'bot'); }
+                realContentArrived = true;
+                // fullText is still '' the first time this runs, whether or
+                // not an interim placeholder was shown first (that path
+                // never touches it) — so this always correctly starts the
+                // real answer fresh, replacing any placeholder text that
+                // was showing rather than appending after it.
                 fullText += data.delta;
                 updateBotBubble(bubble, fullText);
             }
@@ -1330,7 +1354,14 @@
                 if (result.done) {
                     sendBtn.disabled = false;
                     hideTyping();
-                    if (!bubble) addMsg(CFG.genericErrorMessage, 'bot');
+                    // Covers an interim-only bubble too (connection dropped
+                    // right after the placeholder, before any real content
+                    // or a 'done' event) — same reasoning as the 'done'
+                    // handler above.
+                    if (!realContentArrived) {
+                        if (bubble) updateBotBubble(bubble, CFG.genericErrorMessage);
+                        else addMsg(CFG.genericErrorMessage, 'bot');
+                    }
                     return;
                 }
                 buffer += decoder.decode(result.value, { stream: true });

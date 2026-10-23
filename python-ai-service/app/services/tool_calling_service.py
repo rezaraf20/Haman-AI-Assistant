@@ -311,7 +311,9 @@ _ANSWER_NOW = {
 }
 
 
-def _openai_tool_chat(profile: dict, messages: List[dict], tools_schema: Optional[List[dict]], max_tokens: int, temperature: float, forced_tool: Optional[str] = None) -> tuple[dict, dict]:
+def _openai_tool_chat(profile: dict, messages: List[dict], tools_schema: Optional[List[dict]], max_tokens: int, temperature: float, forced_tool: Optional[str] = None, timeout_seconds: Optional[float] = None) -> tuple[dict, dict]:
+    from app.services.rag_service import ProviderTimeoutError
+
     def post(payload_messages: List[dict]) -> "_requests.Response":
         body = {
             "model": profile["model_name"],
@@ -328,15 +330,21 @@ def _openai_tool_chat(profile: dict, messages: List[dict], tools_schema: Optiona
                 {"type": "function", "function": {"name": forced_tool}}
                 if forced_tool else "auto"
             )
-        return _requests.post(
-            f"{profile['base_url'].rstrip('/')}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {profile['api_key']}",
-                "Content-Type": "application/json",
-            },
-            json=body,
-            timeout=profile.get("timeout_seconds") or 30,
-        )
+        try:
+            return _requests.post(
+                f"{profile['base_url'].rstrip('/')}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {profile['api_key']}",
+                    "Content-Type": "application/json",
+                },
+                json=body,
+                timeout=timeout_seconds or profile.get("timeout_seconds") or 30,
+            )
+        except _requests.exceptions.Timeout as e:
+            # Not counted toward auto-disable -- see ProviderTimeoutError's
+            # own docstring for why a timeout at one moment says nothing
+            # about this same key's health going forward.
+            raise ProviderTimeoutError(f"{profile['name']} did not respond within the attempt timeout: {e}") from e
 
     resp = post(messages)
 
@@ -401,11 +409,17 @@ def _tool_calling_chat(db: Session, messages: List[dict], tools_schema: Optional
     # Local import — avoids a circular import at module load time (rag_service
     # imports this module too, from inside a function, at call time, by
     # which point rag_service is already fully loaded).
-    from app.services.rag_service import _compute_cost_toman, EmptyCompletionError
+    from app.services.rag_service import _compute_cost_toman, EmptyCompletionError, ProviderTimeoutError
 
     profiles = llm_provider_service.order_for_attempt(llm_provider_service.get_active_tool_calling_profiles(db))
     if not profiles:
         raise RuntimeError("No active tool-calling-capable LLM provider profile is configured")
+
+    # Deliberately shorter than any profile's own timeout_seconds (see the
+    # 2026-10-23 investigation): failing over to the next same-priority key
+    # the moment this is hit beats waiting out a much longer per-profile
+    # budget for a key that might just be having a slow moment.
+    attempt_timeout = platform_settings_service.get_int(db, "limits.llm_provider_attempt_timeout_seconds")
 
     last_error = None
     for profile in profiles:
@@ -414,7 +428,10 @@ def _tool_calling_chat(db: Session, messages: List[dict], tools_schema: Optional
         for attempt in range(2):
             llm_provider_service.mark_attempted(profile["name"])
             try:
-                message, usage = _openai_tool_chat(profile, messages, tools_schema, attempt_max_tokens, temperature, forced_tool)
+                message, usage = _openai_tool_chat(
+                    profile, messages, tools_schema, attempt_max_tokens, temperature, forced_tool,
+                    timeout_seconds=min(attempt_timeout, profile.get("timeout_seconds") or attempt_timeout),
+                )
                 # Same blank-200 check as rag_service._chat_completion(): a
                 # tool call is a legitimate "no content" response, but a
                 # turn with neither a tool call nor any text is not a usable
@@ -424,7 +441,13 @@ def _tool_calling_chat(db: Session, messages: List[dict], tools_schema: Optional
                         f"{profile['name']} returned HTTP 200 with no tool call and empty content (usage={usage})"
                     )
                 cost_toman = _compute_cost_toman(profile, usage)
-                logger.info(f"Tool-calling provider '{profile['name']}' succeeded ({usage.get('completion_tokens', '?')} completion tokens).")
+                cached = (usage.get("prompt_tokens_details") or {}).get("cached_tokens")
+                logger.info(
+                    f"Tool-calling provider '{profile['name']}' succeeded "
+                    f"(prompt_tokens={usage.get('prompt_tokens', '?')}"
+                    + (f", cached={cached}" if cached else "")
+                    + f", completion_tokens={usage.get('completion_tokens', '?')})."
+                )
                 llm_provider_service.record_outcome(db, profile["name"], success=True)
                 result = (message, f"{profile['provider']}/{profile['model_name']}", usage, cost_toman)
                 succeeded = True
@@ -436,6 +459,17 @@ def _tool_calling_chat(db: Session, messages: List[dict], tools_schema: Optional
                 last_error = e
                 llm_provider_service.mark_rate_limited(profile["name"])
                 logger.warning(f"Tool-calling provider '{profile['name']}' is rate limited, trying next: {e}")
+                break
+            except ProviderTimeoutError as e:
+                # Not a real failure -- see ProviderTimeoutError's own
+                # docstring. Straight to the next key, no same-profile
+                # retry (a slow moment doesn't call for burning a second
+                # attempt-timeout window on the same key) and no
+                # record_outcome(success=False) (would eventually
+                # auto-disable a perfectly healthy provider for timing
+                # variance that isn't its fault).
+                last_error = e
+                logger.warning(f"Tool-calling provider '{profile['name']}' timed out after {attempt_timeout}s, trying next: {e}")
                 break
             except ToolCallRefusedError as e:
                 # Deliberately NOT recorded as a provider failure: the

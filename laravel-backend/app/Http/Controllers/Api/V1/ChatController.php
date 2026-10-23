@@ -252,9 +252,15 @@ class ChatController extends BaseApiController
             };
 
             try {
-                $r = $this->svc->sendMessageStream($conv, $message, function (string $delta) use ($write) {
-                    $write('data: ' . json_encode(['delta' => $delta], JSON_UNESCAPED_UNICODE) . "\n\n");
-                });
+                $r = $this->svc->sendMessageStream(
+                    $conv, $message,
+                    function (string $delta) use ($write) {
+                        $write('data: ' . json_encode(['delta' => $delta], JSON_UNESCAPED_UNICODE) . "\n\n");
+                    },
+                    function (string $text) use ($write) {
+                        $write('event: interim' . "\n" . 'data: ' . json_encode(['text' => $text], JSON_UNESCAPED_UNICODE) . "\n\n");
+                    },
+                );
                 $msg = $r['message'];
                 $write('event: done' . "\n" . 'data: ' . json_encode([
                     'message_id'    => $msg->id,

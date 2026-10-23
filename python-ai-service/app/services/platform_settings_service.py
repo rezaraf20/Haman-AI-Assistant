@@ -39,6 +39,7 @@ DEFAULTS: dict[str, Any] = {
     "limits.pdf_max_mb": 10,
     "limits.pdf_max_pages": 100,
     "limits.max_tool_calls_per_message": 3,
+    "limits.llm_provider_attempt_timeout_seconds": 8,
 }
 # The retrieval and rerank thresholds are deliberately absent: they are
 # per-chatbot columns, and Laravel already resolves the platform default

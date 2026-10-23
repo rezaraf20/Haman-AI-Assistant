@@ -159,6 +159,8 @@ async def chat_stream(req: ChatRequest, db: Session = Depends(get_db)):
         ):
             if kind == "delta":
                 yield f"data: {json.dumps({'delta': payload})}\n\n"
+            elif kind == "interim":
+                yield f"event: interim\ndata: {json.dumps({'text': payload})}\n\n"
             else:  # "done"
                 yield f"event: done\ndata: {json.dumps(payload)}\n\n"
 

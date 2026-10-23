@@ -106,7 +106,7 @@ class ChatService {
      * stream (or the quota-exceeded fallback) has fully resolved — same as
      * the non-streaming path, so both write exactly one row per reply.
      */
-    public function sendMessageStream(Conversation $conv, string $msg, callable $onDelta): array {
+    public function sendMessageStream(Conversation $conv, string $msg, callable $onDelta, ?callable $onInterim = null): array {
         [$chatbot, $tenant, $history] = $this->prepare($conv, $msg);
 
         if ($this->leadCapture->isAwaitingContact($conv)) {
@@ -138,7 +138,7 @@ class ChatService {
             try {
                 $payload = $this->gatewayPayload($conv, $msg, $chatbot, $tenant, $history);
                 if ($quota['degrade']) $payload['llm_model'] = Settings::get('quota.degrade_model_name');
-                $result = $this->ai->chatStream($payload, $onDelta);
+                $result = $this->ai->chatStream($payload, $onDelta, $onInterim);
                 if (empty($result)) {
                     // Stream ended without ever sending a "done" event — the
                     // upstream connection dropped mid-stream rather than
