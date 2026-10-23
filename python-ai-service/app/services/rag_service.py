@@ -762,7 +762,7 @@ def _strip_unproven_claims(
     # any sentence pointing at a button/link the response isn't rendering
     # is necessarily false. See widget_reference_guard.py's module docstring
     # for the reported incident this covers.
-    cleaned, dropped_refs = strip_unbacked_widget_references(cleaned, has_widget_blocks=False)
+    cleaned, dropped_refs = strip_unbacked_widget_references(cleaned, widget_block_types=())
     if dropped_refs:
         logger.warning(f"Unbacked UI reference(s) removed for chatbot {chatbot_id}: {dropped_refs}")
         _log_event(db, conversation_id, chatbot_id, "unbacked_widget_reference_removed", {

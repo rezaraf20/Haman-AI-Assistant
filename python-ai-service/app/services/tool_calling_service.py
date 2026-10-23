@@ -757,7 +757,7 @@ def run_tool_calling_pipeline(
                 _log_event(db, conversation_id, chatbot_id, "unproven_claim_removed", {
                     "actions": sorted(set(cut)),
                 })
-            answer, dropped_refs = strip_unbacked_widget_references(answer, has_widget_blocks=bool(widget_blocks))
+            answer, dropped_refs = strip_unbacked_widget_references(answer, widget_block_types={b.get("type") for b in widget_blocks})
             if dropped_refs:
                 logger.warning(f"Unbacked UI reference(s) removed for chatbot {chatbot_id}: {dropped_refs}")
                 _log_event(db, conversation_id, chatbot_id, "unbacked_widget_reference_removed", {
@@ -837,7 +837,7 @@ def run_tool_calling_pipeline(
             # something here actually built one. See widget_reference_guard.py
             # for the reported incident (offered a cart button no tool call
             # that turn had produced).
-            answer, dropped_refs = strip_unbacked_widget_references(answer, has_widget_blocks=bool(widget_blocks))
+            answer, dropped_refs = strip_unbacked_widget_references(answer, widget_block_types={b.get("type") for b in widget_blocks})
             if dropped_refs:
                 logger.warning(f"Unbacked UI reference(s) removed for chatbot {chatbot_id}: {dropped_refs}")
                 _log_event(db, conversation_id, chatbot_id, "unbacked_widget_reference_removed", {
