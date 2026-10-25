@@ -626,6 +626,199 @@ def _phrasing_instruction(phrases: List[str], is_fa: bool) -> str:
     )
 
 
+def _comparison_resolution_fact(resolved: List[dict], is_fa: bool) -> str:
+    """What comparison_resolver.resolve_comparison_entities() actually found
+    for each of the two things the customer named, so the answering turn
+    can be honest about an ambiguous or missing match instead of inventing
+    either a comparison or a flat "we don't have it" -- see
+    comparison_resolver.py's own module docstring for the incident
+    ("فلاسک ۸۰۰" vs "فلاسم ۶۰۰") this exists to fix."""
+    lines = []
+    for r in resolved:
+        text = r["text"]
+        if r["status"] == "resolved":
+            price = (r.get("candidates") or [{}])[0].get("price")
+            lines.append(
+                f"- «{text}»: پیدا شد -- {r['name']} ({price})" if is_fa
+                else f"- \"{text}\": found -- {r['name']} ({price})"
+            )
+        elif r["status"] == "ambiguous":
+            names = [c.get("name") for c in r["candidates"][:5] if c.get("name")]
+            joined = "، ".join(names) if is_fa else ", ".join(names)
+            lines.append(
+                f"- «{text}»: چند مورد نزدیک پیدا شد، نه یک مورد قطعی: {joined}" if is_fa
+                else f"- \"{text}\": several close matches, none clearly the one meant: {joined}"
+            )
+        else:  # not_found
+            lines.append(
+                f"- «{text}»: هیچ موردی در جستجوی زنده پیدا نشد" if is_fa
+                else f"- \"{text}\": no live match found"
+            )
+    body = "\n".join(lines)
+
+    if is_fa:
+        return (
+            "\n\nنتیجه‌ی جستجوی زنده برای هر یک از دو موردی که مشتری خواست مقایسه "
+            "کند:\n" + body +
+            "\n\nهرگز از «چند مورد نزدیک پیدا شد» نتیجه نگیر که محصول وجود ندارد -- "
+            "اگر موردی چند کاندید نزدیک دارد، آن‌ها را نام ببر و بپرس منظور مشتری "
+            "کدام است. فقط وقتی هیچ موردی پیدا نشد صراحتاً بگو که این مورد را نداری. "
+            "جدول مقایسه نساز؛ بدون هر دو شناسه‌ی واقعی مقایسه‌ای وجود ندارد."
+        )
+    return (
+        "\n\nLive search result for each of the two things the customer asked to "
+        "compare:\n" + body +
+        "\n\nNever conclude that several close matches means the product doesn't "
+        "exist -- if something has several close candidates, name them and ask "
+        "which one was meant. Only say outright that you don't carry something "
+        "when no match was found at all. Do not build a comparison here; there is "
+        "no comparison without both real ids."
+    )
+
+
+def _try_resolve_comparison(
+    db: Session, chatbot_id: str, conversation_id: Optional[str], query: str,
+    history: List[dict], system_prompt_text: str, max_tokens: int, temperature: float,
+    enabled_tool_names: List[str], start: float, is_fa: bool,
+) -> Optional[dict]:
+    """Pre-resolve a comparison request's two products deterministically
+    (comparison_resolver.py) instead of letting the model's own single
+    forced search_products call stand in for finding BOTH of them -- see
+    that module's docstring for the real incident (one generic search
+    matched two listings of the SAME product, and the customer's actual
+    second product was never looked up).
+
+    Returns the finished pipeline result, or None to fall through to the
+    unchanged model-driven flow -- a message this can't confidently split,
+    or a live check that itself failed, is no worse off than before this
+    existed."""
+    enabled = set(enabled_tool_names or ())
+    if "search_products" not in enabled or "compare_products" not in enabled:
+        return None
+
+    from app.services.comparison_resolver import split_comparison_entities, resolve_comparison_entities
+    entities = split_comparison_entities(query)
+    if not entities:
+        return None
+
+    resolved = resolve_comparison_entities(db, chatbot_id, entities)
+    if any(r["status"] == "unavailable" for r in resolved):
+        # The live check itself failed -- no better informed than the
+        # model's own attempt would be, so let that run as normal.
+        return None
+
+    from app.services.rag_service import _log_event, _looks_persian
+    _log_event(db, conversation_id, chatbot_id, "comparison_entities_resolved", {
+        "entities": [{"text": r["text"], "status": r["status"], "product_id": r.get("product_id"),
+                      "candidate_count": len(r.get("candidates") or [])} for r in resolved],
+    })
+
+    if time.time() - start > MAX_TOTAL_SECONDS:
+        return None
+
+    widget_blocks: List[dict] = []
+    tool_results: List[dict] = []
+    required_phrases: List[str] = []
+    lead_signal: Optional[dict] = None
+    messages = [{"role": "system", "content": system_prompt_text}]
+    for h in history[-6:]:
+        if h.get("role") in ("user", "assistant") and h.get("content"):
+            messages.append({"role": h["role"], "content": h["content"]})
+    messages.append({"role": "user", "content": query})
+
+    distinct_ids = list(dict.fromkeys(r["product_id"] for r in resolved if r.get("product_id")))
+    all_resolved = all(r["status"] == "resolved" for r in resolved)
+
+    from app.services.tools.product_tools import compare_products, MIN_COMPARE_PRODUCTS, MAX_COMPARE_PRODUCTS
+
+    if all_resolved and len(distinct_ids) >= MIN_COMPARE_PRODUCTS:
+        call_start = time.time()
+        result = compare_products(db=db, chatbot_id=chatbot_id, product_ids=distinct_ids[:MAX_COMPARE_PRODUCTS])
+        latency_ms = int((time.time() - call_start) * 1000)
+        args = {"product_ids": distinct_ids[:MAX_COMPARE_PRODUCTS]}
+        _log_event(db, conversation_id, chatbot_id, "tool_called", {
+            "tool": "compare_products", "arguments": args,
+            "result_summary": {k: v for k, v in result.items() if k in ("live", "error")},
+            "success": "error" not in result, "resolved_via": "comparison_entity_split",
+        }, latency_ms=latency_ms)
+        tool_results.append(result)
+
+        if "error" in result or not result.get("live"):
+            return None  # compare itself failed/unavailable -- let the model's own flow try
+
+        block = _build_widget_block("compare_products", result)
+        if block:
+            widget_blocks.append(block)
+            _log_product_mentions(db, conversation_id, chatbot_id, "compare_products", block["products"])
+            _log_compared_pairs(db, conversation_id, chatbot_id, block["products"], "compared_pair")
+        if "compare_products" in PHRASED_TOOLS:
+            phrase = tool_result_phrase("compare_products", is_fa=is_fa)
+            if phrase:
+                required_phrases.append(phrase)
+
+        synthetic_call_id = "comparison_resolver_call"
+        messages.append({
+            "role": "assistant", "content": None,
+            "tool_calls": [{
+                "id": synthetic_call_id, "type": "function",
+                "function": {"name": "compare_products", "arguments": json.dumps(args)},
+            }],
+        })
+        messages.append({"role": "tool", "tool_call_id": synthetic_call_id,
+                          "content": json.dumps(result, ensure_ascii=False)})
+    else:
+        # At least one entity is ambiguous or genuinely not found -- never
+        # guess which two to compare; tell the model exactly what the live
+        # search established and let it ask or say so honestly (the
+        # "خوب"/"good" example in the incident report this fixes).
+        messages.append({"role": "system", "content": _comparison_resolution_fact(resolved, is_fa)})
+        not_found = [r for r in resolved if r["status"] == "not_found"]
+        if len(not_found) == 1:
+            # A cleanly split entity with a genuine zero-result live search
+            # IS a real demand-gap signal -- unlike an entity that was
+            # merely ambiguous or never searched at all (see this
+            # function's own docstring and comparison_resolver.py's).
+            lead_signal = _detect_lead_signal(
+                "search_products", {"query": not_found[0]["text"]}, not_found[0]["search_result"],
+            )
+
+    if required_phrases:
+        messages[0] = {"role": "system",
+                        "content": system_prompt_text + _phrasing_instruction(required_phrases, is_fa)}
+
+    try:
+        message, model_used, usage, cost = _tool_calling_chat(db, messages, None, max_tokens, temperature)
+    except Exception as e:
+        logger.error(f"Comparison resolution answer call failed for chatbot {chatbot_id}: {e}")
+        return None
+
+    latency_ms = int((time.time() - start) * 1000)
+    answer, labels = strip_source_labels(message.get("content") or "")
+    if labels:
+        logger.info(f"Removed {labels} internal source label(s) for chatbot {chatbot_id}")
+    answer, cut = verify_claims(answer, proven_actions(widget_blocks, tool_results), is_fa=_looks_persian(query))
+    if cut:
+        logger.warning(f"Unproven claim(s) removed for chatbot {chatbot_id}: {sorted(set(cut))}")
+        _log_event(db, conversation_id, chatbot_id, "unproven_claim_removed", {"actions": sorted(set(cut))})
+    answer, dropped_refs = strip_unbacked_widget_references(answer, widget_block_types={b.get("type") for b in widget_blocks})
+    if dropped_refs:
+        logger.warning(f"Unbacked UI reference(s) removed for chatbot {chatbot_id}: {dropped_refs}")
+        _log_event(db, conversation_id, chatbot_id, "unbacked_widget_reference_removed", {"sentences": dropped_refs})
+
+    return {
+        "response": answer,
+        "chunk_ids": [], "scores": [], "sources": [],
+        "prompt_tokens": usage.get("prompt_tokens", 0) or 0,
+        "completion_tokens": usage.get("completion_tokens", 0) or 0,
+        "total_tokens": usage.get("total_tokens", 0) or 0,
+        "cost_toman": round(cost, 4),
+        "model": model_used, "latency_ms": latency_ms,
+        "is_fallback": False, "is_unanswered": False, "finish_reason": "tool_stop_comparison_resolved",
+        "widget_blocks": widget_blocks,
+        "lead_signal": lead_signal,
+    }
+
+
 # Tools that mutate or commit to the customer's order/money. A real
 # production incident (2026-10-22, khonehrangi.ir): asked only to compare
 # two products, the model also called add_to_cart for both of them --
@@ -679,6 +872,25 @@ def run_tool_calling_pipeline(
 
     tools_schema = to_openai_schema(tools)
 
+    from app.services.rag_service import _looks_persian as _is_fa
+    _query_is_fa = _is_fa(query)
+    start = time.time()
+
+    if intent == "comparison":
+        # The entity resolver, not the model, decides WHICH TWO products a
+        # comparison is about -- see _try_resolve_comparison's own
+        # docstring for the incident (one generic search "resolved" to two
+        # listings of the same product) this exists to fix. None means it
+        # couldn't confidently split this message, or the live check
+        # itself failed; either way, the model-driven flow below runs
+        # exactly as it would have before this existed.
+        resolved_early = _try_resolve_comparison(
+            db, chatbot_id, conversation_id, query, history, system_prompt_text,
+            max_tokens, temperature, enabled_tool_names, start, _query_is_fa,
+        )
+        if resolved_early is not None:
+            return resolved_early
+
     # The intent classifier, not the model, decides which tool runs. None
     # means it had no confident opinion, and the model chooses as before.
     plan = route(intent or "", enabled_tool_names, query, history)
@@ -686,10 +898,6 @@ def run_tool_calling_pipeline(
     required_phrases: List[str] = []
     messages = _decision_messages(query, history, plan.forced_tool([]) if plan else None)
 
-    from app.services.rag_service import _looks_persian as _is_fa
-    _query_is_fa = _is_fa(query)
-
-    start = time.time()
     total_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
     total_cost = 0.0
     model_used = "n/a"
