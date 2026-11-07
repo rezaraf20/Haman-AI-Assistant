@@ -78,8 +78,21 @@ class SyncController extends BaseApiController {
             'pages.*.title'         => 'required|string',
             'pages.*.content'       => 'nullable|string',
             'pages.*.url'           => 'nullable|string',
-            'pages.*.post_type'     => 'nullable|string',
+            'pages.*.post_type'     => 'nullable|string|max:20',
             'pages.*.excerpt'       => 'nullable|string',
+            // Custom post types (plugin 2.6.0+). Every field SyncService::
+            // postContentText() reads must have a rule here, or validate()
+            // drops it before it gets there — see syncProducts() above.
+            'pages.*.post_type_label'      => 'nullable|string|max:100',
+            'pages.*.date'                 => 'nullable|string|max:40',
+            'pages.*.author'               => 'nullable|string|max:255',
+            'pages.*.taxonomies'           => 'nullable|array|max:20',
+            'pages.*.taxonomies.*.taxonomy'=> 'nullable|string|max:64',
+            'pages.*.taxonomies.*.label'   => 'nullable|string|max:100',
+            'pages.*.taxonomies.*.terms'   => 'nullable|array|max:50',
+            'pages.*.taxonomies.*.terms.*' => 'nullable|string|max:200',
+            'pages.*.custom_fields'        => 'nullable|array|max:100',
+            'pages.*.custom_fields.*'      => 'nullable',
         ]);
         $t = app('current_tenant');
         return $this->accepted($this->jobArr($this->svc->syncPages($d['chatbot_id'], $d['pages'], $t->schema_name)));

@@ -885,8 +885,10 @@ class TenantService
                 -- mid-conversation). Read/written from both the WordPress
                 -- plugin's own settings page and this chatbot's customer-
                 -- portal SyncSettings page — see that page's docblock for
-                -- which side is authoritative.
-                sync_settings JSONB NOT NULL DEFAULT '{\"sync_products\":true,\"sync_pages\":true,\"sync_posts\":false,\"excluded_category_ids\":[],\"excluded_page_ids\":[]}',
+                -- which side is authoritative. Version 2 shape (a post_types
+                -- list, not two flags) — App\Support\SyncSettings::DEFAULTS,
+                -- which SyncSettingsTest keeps this literal equal to.
+                sync_settings JSONB NOT NULL DEFAULT '{\"version\":2,\"sync_products\":true,\"post_types\":[\"page\"],\"custom_fields\":{},\"available_post_types\":{},\"excluded_category_ids\":[],\"excluded_page_ids\":[]}',
                 -- Store-level fallback for is-this-genuine questions when a
                 -- product has none of the 5 authenticity fields synced.
                 -- Nullable -- when unset, rag_service._authenticity_rule()

@@ -114,7 +114,7 @@ class ChatbotController extends BaseApiController {
      */
     public function syncSettings(string $id): JsonResponse {
         $chatbot = Chatbot::findOrFail($id);
-        return $this->ok(\App\Support\SyncSettings::merge($chatbot));
+        return $this->ok(\App\Support\SyncSettings::forApi(\App\Support\SyncSettings::merge($chatbot)));
     }
 
     /**
@@ -126,21 +126,31 @@ class ChatbotController extends BaseApiController {
     public function updateSyncSettings(Request $req, string $id): JsonResponse {
         $chatbot = Chatbot::findOrFail($id);
         $d = $req->validate([
-            'sync_products'         => 'sometimes|boolean',
-            'sync_pages'            => 'sometimes|boolean',
-            'sync_posts'            => 'sometimes|boolean',
-            'excluded_category_ids' => 'sometimes|array',
+            'sync_products'           => 'sometimes|boolean',
+            // Version 1 (plugin < 2.6.0) — see SyncService::applySyncSettings()
+            // for how these are folded into post_types without disturbing
+            // custom types the portal enabled.
+            'sync_pages'              => 'sometimes|boolean',
+            'sync_posts'              => 'sometimes|boolean',
+            'post_types'              => 'sometimes|array|max:50',
+            'post_types.*'            => 'string|max:20',
+            'custom_fields'           => 'sometimes|array|max:50',
+            'custom_fields.*'         => 'array|max:100',
+            'custom_fields.*.*'       => 'string|max:191',
+            'available_post_types'    => 'sometimes|array|max:100',
+            'available_post_types.*.label' => 'nullable|string|max:100',
+            'available_post_types.*.count' => 'nullable|integer|min:0',
+            'excluded_category_ids'   => 'sometimes|array',
             'excluded_category_ids.*' => 'integer',
-            'excluded_page_ids'     => 'sometimes|array',
-            'excluded_page_ids.*'   => 'integer',
+            'excluded_page_ids'       => 'sometimes|array',
+            'excluded_page_ids.*'     => 'integer',
         ]);
 
-        $chatbot->update(['sync_settings' => array_merge(
-            \App\Support\SyncSettings::merge($chatbot),
-            $d,
-        )]);
+        $result = app(\App\Services\SyncService::class)->applySyncSettings($chatbot, $d);
 
-        return $this->ok(\App\Support\SyncSettings::merge($chatbot->fresh()));
+        return $this->ok(\App\Support\SyncSettings::forApi($result['settings']) + [
+            'archived_documents' => $result['archived_documents'],
+        ]);
     }
 
     public function destroy(string $id): JsonResponse {

@@ -24,7 +24,9 @@ class AddSyncSettingsColumnCommand extends Command
 
     protected $description = 'Add the chatbots.sync_settings column to every existing tenant schema';
 
-    private const DEFAULT_JSON = '{"sync_products":true,"sync_pages":true,"sync_posts":false,"excluded_category_ids":[],"excluded_page_ids":[]}';
+    // Version 2 (see App\Support\SyncSettings) — the same default the
+    // 2026_11_07 migration sets on existing columns.
+    private const DEFAULT_JSON = '{"version":2,"sync_products":true,"post_types":["page"],"custom_fields":{},"available_post_types":{},"excluded_category_ids":[],"excluded_page_ids":[]}';
 
     public function handle(): int
     {

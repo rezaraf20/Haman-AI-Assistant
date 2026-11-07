@@ -63,7 +63,8 @@ class SyncService {
 
     public function syncProducts(string $chatbotId, array $products, string $schema): SyncJob {
         $job = SyncJob::create(['chatbot_id'=>$chatbotId,'job_type'=>'products','triggered_by'=>'plugin','status'=>'running','items_total'=>count($products),'started_at'=>now()]);
-        $counts = ['new'=>0,'updated'=>0,'skipped'=>0,'deleted'=>0,'failed'=>0];
+        $counts = self::emptyCounts();
+        $this->loadDocumentBudget($chatbotId);
         $errors = [];
         foreach ($products as $p) {
             try {
@@ -110,6 +111,10 @@ class SyncService {
                         'type'         => 'product',
                     ],
                 ]);
+                if ($outcome === 'over_limit') {
+                    $counts['over_limit']++;
+                    continue;
+                }
                 // Read the stock status we last knew BEFORE overwriting it —
                 // the restock waitlist keys off the transition, not the
                 // current value, so this has to happen ahead of the upsert.
@@ -125,7 +130,7 @@ class SyncService {
                     EmbedDocumentJob::dispatch($doc->id, $chatbotId, $schema, $job->id);
                 }
                 $this->notifyRestockWaitlist($chatbotId, (int)$p['id'], $p['name'], $previousStock, $p['stock_status'] ?? 'instock');
-                $this->syncAttachments($chatbotId, (int)$p['id'], $p['name'], $p['attachments']??[], $schema, $job->id);
+                $counts['over_limit'] += $this->syncAttachments($chatbotId, (int)$p['id'], $p['name'], $p['attachments']??[], $schema, $job->id);
                 $counts[$outcome]++;
             } catch (\Throwable $e) {
                 $counts['failed']++;
@@ -152,7 +157,9 @@ class SyncService {
      * is never re-embedded — re-syncing only picks up a genuinely new URL.
      * Not solved here; out of scope for what was asked.
      */
-    private function syncAttachments(string $chatbotId, int $productId, string $productName, array $attachments, string $schema, ?string $syncJobId = null): void {
+    /** @return int how many attachments the plan's document limit refused */
+    private function syncAttachments(string $chatbotId, int $productId, string $productName, array $attachments, string $schema, ?string $syncJobId = null): int {
+        $overLimit = 0;
         foreach ($attachments as $att) {
             $url = $att['url'] ?? null;
             if (!$url) continue;
@@ -172,6 +179,7 @@ class SyncService {
                         'type'         => 'attachment',
                     ],
                 ]);
+                if ($outcome === 'over_limit') $overLimit++;
                 if (in_array($outcome, ['new','updated'], true)) {
                     $this->markJobIndexing($syncJobId);
                     EmbedDocumentJob::dispatch($doc->id, $chatbotId, $schema, $syncJobId);
@@ -181,11 +189,28 @@ class SyncService {
                 // the product sync it's attached to.
             }
         }
+        return $overLimit;
     }
 
+    /**
+     * Pages, blog posts and any custom post type ("portfolio", "service",
+     * …) — one ingest path, one extractor on the plugin side (Haman_Page_
+     * Sync::extract_content(), the Elementor-aware one). Pages and posts
+     * keep their historical source types so nothing already indexed has to
+     * be re-embedded; every other type is 'wordpress_cpt' with its slug in
+     * metadata.post_type (one source type, filterable, instead of an open-
+     * ended enum of per-site slugs).
+     *
+     * Taxonomy terms, date, author and the owner-approved custom fields are
+     * written into the indexed text itself, not only into metadata, because
+     * that text is what both the embedding and the keyword (tsvector) half
+     * of retrieval search: "do you have a web-design portfolio?" has to be
+     * able to land on an item whose only mention of "web design" is its
+     * category.
+     */
     public function syncPages(string $chatbotId, array $pages, string $schema): SyncJob {
         $job = SyncJob::create(['chatbot_id'=>$chatbotId,'job_type'=>'pages','triggered_by'=>'plugin','status'=>'running','items_total'=>count($pages),'started_at'=>now()]);
-        $counts = ['new'=>0,'updated'=>0,'skipped'=>0,'deleted'=>0,'failed'=>0];
+        $counts = self::emptyCounts();
 
         // Defense in depth, not the primary mechanism -- the WordPress
         // plugin already decides what to QUERY based on this same setting
@@ -194,27 +219,26 @@ class SyncService {
         // guards a plugin that sends something anyway (stale settings, an
         // older plugin version, a direct API call).
         $syncSettings = \App\Support\SyncSettings::merge(Chatbot::findOrFail($chatbotId));
+        $this->loadDocumentBudget($chatbotId);
 
         foreach ($pages as $page) {
             try {
-                $sourceType = ($page['post_type']??'page') === 'post' ? 'wordpress_post' : 'wordpress_page';
-                if (!\App\Support\SyncSettings::allows($syncSettings, $sourceType)) {
+                $postType   = $this->postTypeOf($page);
+                $sourceType = \App\Support\SyncSettings::sourceTypeFor($postType);
+                if (!\App\Support\SyncSettings::allows($syncSettings, $sourceType, null, null, $postType)) {
                     $counts['skipped']++;
                     continue;
                 }
 
-                $content = strip_tags($page['content'] ?? '');
-                if (empty(trim($content))) $content = $page['excerpt'] ?? '';
-                if (empty(trim($content))) $content = $page['title'];
-
+                $allowedFields = \App\Support\SyncSettings::allowedCustomFields($syncSettings, $postType);
                 ['document'=>$doc, 'outcome'=>$outcome] = $this->upsertDoc([
                     'chatbot_id'  => $chatbotId,
                     'source_type' => $sourceType,
                     'external_id' => (string)$page['id'],
                     'title'       => $page['title'],
-                    'raw_content' => $page['title']."\n\n".$content,
+                    'raw_content' => $this->postContentText($page, $allowedFields),
                     'sync_job_id' => $job->id,
-                    'metadata'    => ['url'=>$page['url']??null,'type'=>'page'],
+                    'metadata'    => $this->postMetadata($page, $postType),
                 ]);
                 if (in_array($outcome, ['new','updated'], true)) {
                     $this->markJobIndexing($job->id);
@@ -227,9 +251,155 @@ class SyncService {
         return $job;
     }
 
+    private function postTypeOf(array $page): string {
+        $type = strtolower((string) ($page['post_type'] ?? 'page'));
+        return preg_match('/^[a-z0-9_-]{1,20}$/', $type) ? $type : 'page';
+    }
+
+    /**
+     * The text that gets chunked and embedded. Only fields the plugin
+     * actually sent appear — an absent excerpt, author or taxonomy leaves
+     * no line at all rather than an empty label. Custom fields are filtered
+     * against the owner's saved selection HERE as well as in the plugin, so
+     * an older plugin or a hand-made request can't push private meta in.
+     */
+    private function postContentText(array $page, array $allowedFields): string {
+        $content = strip_tags($page['content'] ?? '');
+        if (empty(trim($content))) $content = $page['excerpt'] ?? '';
+        if (empty(trim($content))) $content = $page['title'];
+
+        $lines = [$page['title']];
+        if (!empty($page['post_type_label']) && !in_array($page['post_type'] ?? 'page', ['page', 'post'], true)) {
+            $lines[] = 'Type: ' . $page['post_type_label'];
+        }
+        foreach (($page['taxonomies'] ?? []) as $tax) {
+            $terms = array_values(array_filter(array_map(fn ($t) => trim(strip_tags((string) $t)), (array) ($tax['terms'] ?? []))));
+            if ($terms) $lines[] = trim(strip_tags((string) ($tax['label'] ?? $tax['taxonomy'] ?? 'Category'))) . ': ' . implode(', ', $terms);
+        }
+        if (!empty($page['date'])) $lines[] = 'Date: ' . substr((string) $page['date'], 0, 10);
+        if (!empty($page['author'])) $lines[] = 'Author: ' . strip_tags((string) $page['author']);
+        foreach (($page['custom_fields'] ?? []) as $key => $value) {
+            if (!in_array((string) $key, $allowedFields, true)) continue;
+            if (!is_scalar($value) || trim((string) $value) === '') continue;
+            $lines[] = $key . ': ' . mb_substr(trim(strip_tags((string) $value)), 0, 500);
+        }
+        $excerpt = trim(strip_tags((string) ($page['excerpt'] ?? '')));
+        if ($excerpt !== '' && $excerpt !== trim($content)) $lines[] = 'Summary: ' . $excerpt;
+        if (!empty($page['url'])) $lines[] = 'Link: ' . $page['url'];
+
+        return implode("\n", $lines) . "\n\n" . $content;
+    }
+
+    /** Carried into every chunk's metadata by embed.py — what retrieval uses to cite and link. */
+    private function postMetadata(array $page, string $postType): array {
+        $meta = ['url' => $page['url'] ?? null, 'type' => in_array($postType, ['page', 'post'], true) ? 'page' : 'cpt', 'post_type' => $postType];
+        if (!empty($page['post_type_label'])) $meta['post_type_label'] = mb_substr((string) $page['post_type_label'], 0, 100);
+        $terms = [];
+        foreach (($page['taxonomies'] ?? []) as $tax) {
+            foreach ((array) ($tax['terms'] ?? []) as $t) $terms[] = (string) $t;
+        }
+        if ($terms) $meta['terms'] = array_values(array_unique($terms));
+        return $meta;
+    }
+
+    /**
+     * Saves a sync-settings change from either side (plugin PUT, portal
+     * form) and archives what it just switched off, so content of a post
+     * type that is no longer selected stops being cited the moment the
+     * owner turns it off — not left behind as orphaned, still-searchable
+     * chunks until somebody remembers "clear and reindex".
+     *
+     * A request carrying only the version-1 flags (sync_pages/sync_posts —
+     * every plugin before 2.6.0) toggles page/post membership in the
+     * existing list and leaves custom types alone: an old plugin cannot
+     * know about types enabled from the portal, so it must not wipe them.
+     *
+     * @return array{settings: array, archived_documents: int}
+     */
+    public function applySyncSettings(Chatbot $chatbot, array $changes): array {
+        $before = \App\Support\SyncSettings::merge($chatbot);
+        $merged = $before;
+
+        foreach (['sync_products', 'excluded_category_ids', 'excluded_page_ids', 'available_post_types'] as $key) {
+            if (array_key_exists($key, $changes)) $merged[$key] = $changes[$key];
+        }
+        if (array_key_exists('custom_fields', $changes)) {
+            $merged['custom_fields'] = array_merge($before['custom_fields'], $changes['custom_fields']);
+        }
+        if (array_key_exists('post_types', $changes)) {
+            $merged['post_types'] = $changes['post_types'];
+        } else {
+            foreach (['sync_pages' => 'page', 'sync_posts' => 'post'] as $flag => $type) {
+                if (!array_key_exists($flag, $changes)) continue;
+                $merged['post_types'] = array_values(array_diff($merged['post_types'], [$type]));
+                if ($changes[$flag]) $merged['post_types'][] = $type;
+            }
+        }
+
+        $after = \App\Support\SyncSettings::normalize($merged);
+        $chatbot->update(['sync_settings' => $after]);
+
+        $archived = 0;
+        foreach (\App\Support\SyncSettings::removedPostTypes($before, $after) as $type) {
+            $archived += $this->archivePostType($chatbot->id, $type);
+        }
+        if ($before['sync_products'] && !$after['sync_products']) {
+            $archived += $this->archiveSourceTypes($chatbot->id, ['woocommerce_product', 'product_attachment']);
+        }
+
+        return ['settings' => $after, 'archived_documents' => $archived];
+    }
+
+    /** Archives every live document of one post type and drops its chunks. Returns how many. */
+    public function archivePostType(string $chatbotId, string $postType): int {
+        $sourceType = \App\Support\SyncSettings::sourceTypeFor($postType);
+        $query = Document::where('chatbot_id', $chatbotId)->where('source_type', $sourceType)->where('status', '!=', 'archived');
+        if ($sourceType === 'wordpress_cpt') $query->whereRaw("metadata->>'post_type' = ?", [$postType]);
+        return $this->archiveDocuments($query->pluck('id'));
+    }
+
+    private function archiveSourceTypes(string $chatbotId, array $sourceTypes): int {
+        return $this->archiveDocuments(
+            Document::where('chatbot_id', $chatbotId)->whereIn('source_type', $sourceTypes)->where('status', '!=', 'archived')->pluck('id')
+        );
+    }
+
+    private function archiveDocuments($ids): int {
+        if ($ids->isEmpty()) return 0;
+        Chunk::whereIn('document_id', $ids)->delete();
+        return Document::whereIn('id', $ids)->update(['status' => 'archived', 'chunk_count' => 0]);
+    }
+
+    private static function emptyCounts(): array {
+        return ['new'=>0,'updated'=>0,'skipped'=>0,'deleted'=>0,'failed'=>0,'over_limit'=>0];
+    }
+
+    /** null = no limit in force for this request. */
+    private ?int $documentBudget = null;
+
+    /**
+     * The plan's max_documents, counted per chatbot (QuotaService::
+     * canAddDocument()'s framing, matching the pricing page) across EVERY
+     * kind of document — products, their PDFs, pages, posts, custom post
+     * types and FAQs together. Archived documents don't count: they hold no
+     * chunks and are not searchable. Only a document that would become
+     * newly live spends budget; updating one already indexed never does,
+     * so a shop at its limit can still keep what it has current.
+     */
+    private function loadDocumentBudget(string $chatbotId): void {
+        $this->documentBudget = null;
+        if (!app()->bound('current_tenant')) return;
+        $tenant = app('current_tenant');
+        $limit = \App\Models\Plan::whereKey($tenant->plan_id)->value('max_documents');
+        if ($limit === null) return;
+        $live = Document::where('chatbot_id', $chatbotId)->where('status', '!=', 'archived')->count();
+        $this->documentBudget = max(0, (int) $limit - $live);
+    }
+
     public function syncFaqs(string $chatbotId, array $faqs, string $schema): SyncJob {
         $job = SyncJob::create(['chatbot_id'=>$chatbotId,'job_type'=>'faqs','triggered_by'=>'plugin','status'=>'running','items_total'=>count($faqs),'started_at'=>now()]);
-        $counts = ['new'=>0,'updated'=>0,'skipped'=>0,'deleted'=>0,'failed'=>0];
+        $counts = self::emptyCounts();
+        $this->loadDocumentBudget($chatbotId);
         foreach ($faqs as $faq) {
             try {
                 Faq::updateOrCreate(
@@ -353,7 +523,8 @@ class SyncService {
      * conservative posture as chatbot deletion elsewhere in this app) and
      * removes its chunks so the bot stops citing content that's gone.
      * $sourceType is null for pages, since the external_id alone doesn't
-     * say whether it was a 'wordpress_page' or 'wordpress_post' — matched on
+     * say whether it was a 'wordpress_page', 'wordpress_post' or
+     * 'wordpress_cpt' (WordPress post IDs are unique across types) — matched on
      * external_id (+ optionally woo_product_id for the product-row cleanup)
      * across both instead.
      */
@@ -370,7 +541,7 @@ class SyncService {
      * real number back instead of having to infer one.
      */
     public function clearSyncedIndex(string $chatbotId): array {
-        $sourceTypes = ['woocommerce_product', 'wordpress_page', 'wordpress_post', 'product_attachment'];
+        $sourceTypes = ['woocommerce_product', 'wordpress_page', 'wordpress_post', 'wordpress_cpt', 'product_attachment'];
 
         $documentIds = Document::where('chatbot_id', $chatbotId)
             ->whereIn('source_type', $sourceTypes)
@@ -384,12 +555,12 @@ class SyncService {
 
     private function deleteDocument(string $chatbotId, ?string $sourceType, string $externalId, ?int $wooProductId): SyncJob {
         $job = SyncJob::create(['chatbot_id'=>$chatbotId,'job_type'=>'deletion','triggered_by'=>'webhook','status'=>'running','items_total'=>1,'started_at'=>now()]);
-        $counts = ['new'=>0,'updated'=>0,'skipped'=>0,'deleted'=>0,'failed'=>0];
+        $counts = self::emptyCounts();
 
         try {
             $query = Document::where('chatbot_id', $chatbotId)->where('external_id', $externalId)->where('status', '!=', 'archived');
             if ($sourceType) $query->where('source_type', $sourceType);
-            else $query->whereIn('source_type', ['wordpress_page', 'wordpress_post']);
+            else $query->whereIn('source_type', ['wordpress_page', 'wordpress_post', 'wordpress_cpt']);
 
             $doc = $query->first();
             if ($doc) {
@@ -453,6 +624,9 @@ class SyncService {
      */
     private function finalizeSyncJob(SyncJob $job, array $counts, array $errors = []): void {
         $processed = $counts['new'] + $counts['updated'] + $counts['skipped'];
+        // A run where some items were refused by the plan's document limit
+        // is still a completed run — those items are reported under
+        // over_limit, not as failures.
         $status = ($counts['failed'] > 0 && $processed === 0) ? 'failed' : 'completed';
 
         DB::table('sync_jobs')->where('id', $job->id)->where('status', 'running')
@@ -479,7 +653,7 @@ class SyncService {
     }
 
     /**
-     * @return array{document: Document, outcome: 'new'|'updated'|'skipped'}
+     * @return array{document: ?Document, outcome: 'new'|'updated'|'skipped'|'over_limit'}
      */
     private function upsertDoc(array $d): array {
         $hash = hash('sha256', $d['raw_content']);
@@ -500,6 +674,18 @@ class SyncService {
         if ($existing && $existing->content_hash === $hash && $existing->status !== 'archived') {
             $existing->update(['last_synced_at' => now()]);
             return ['document' => $existing, 'outcome' => 'skipped'];
+        }
+
+        // Spends the plan's document budget (see loadDocumentBudget()) only
+        // when this document is about to become newly live: brand new, or
+        // coming back from archived. Refused documents are not written at
+        // all and are reported per run as over_limit, never dropped silently.
+        $becomesLive = !$existing || $existing->status === 'archived';
+        if ($becomesLive && $this->documentBudget !== null) {
+            if ($this->documentBudget <= 0) {
+                return ['document' => $existing, 'outcome' => 'over_limit'];
+            }
+            $this->documentBudget--;
         }
 
         $outcome = $existing ? 'updated' : 'new';
