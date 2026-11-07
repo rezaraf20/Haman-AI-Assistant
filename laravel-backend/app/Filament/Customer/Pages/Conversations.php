@@ -25,6 +25,7 @@ class Conversations extends Page
 
     public static function getNavigationLabel(): string { return __('suggestions.conversation_nav'); }
     public function getTitle(): string { return __('suggestions.conversation_nav'); }
+    public function getSubheading(): ?string { return __('portal.page_conversation'); }
 
     public function mount(): void
     {

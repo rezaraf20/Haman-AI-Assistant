@@ -1,0 +1,1038 @@
+/*
+ * Customer portal (/portal) theme. Loaded by CustomerPanelProvider only —
+ * the admin panel never sees this file.
+ *
+ * No literal colours in here, by rule: every value is a var() reading the
+ * :root block CustomerPanelProvider emits from App\Support\PortalTheme, or
+ * one of Filament's own --{color}-{shade} variables that PortalTheme also
+ * feeds (->colors()). PortalThemeTest fails the build on a hex value here.
+ *
+ * Two layers:
+ *  1. Filament's documented fi-* hook classes — sidebar, header, sections,
+ *     tables. Selectors are written one class more specific than the
+ *     utility they replace instead of reaching for !important.
+ *  2. hp-* components for our own Blade views. They exist because there is
+ *     no Tailwind build in this project: a utility class Filament's own
+ *     compiled CSS happens not to use (bg-success-100, sm:grid-cols-2, …)
+ *     silently does nothing, which is how the old status badges ended up
+ *     with no colour at all.
+ *
+ * Direction: logical properties (inline-start/end) throughout, so RTL and
+ * LTR need no separate rules except for icons that point somewhere.
+ */
+
+/* ── Base ─────────────────────────────────────────────────────────── */
+
+.fi-body {
+    background-color: var(--bg);
+    color: var(--text);
+}
+
+/* ── Topbar + sidebar header: one white band across the top ─────── */
+
+.fi-body .fi-topbar > nav,
+.fi-body .fi-sidebar-header {
+    background-color: var(--surface);
+    box-shadow: 0 1px 0 0 var(--border);
+}
+
+/* ── Sidebar: navy structure, interactive colour for the active item ─ */
+
+.fi-body .fi-sidebar {
+    background-color: var(--brand-primary);
+}
+
+/* The sidebar itself is viewport-height and sticky, so on a page longer
+ * than the screen the column below it would show the page background. The
+ * layout row behind it carries the navy instead, and the content column
+ * paints its own background over the rest. */
+@media (min-width: 1024px) {
+    .fi-body .fi-layout {
+        background-color: var(--brand-primary);
+    }
+
+    .fi-body .fi-main-ctn {
+        background-color: var(--bg);
+    }
+}
+
+.fi-body .fi-sidebar-nav {
+    padding-inline: 1rem;
+}
+
+.fi-body .fi-sidebar-group-label,
+.fi-body .fi-sidebar-group-icon,
+.fi-body .fi-sidebar-group-collapse-button {
+    color: var(--on-brand-muted);
+}
+
+.fi-body .fi-sidebar-group-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
+}
+
+.fi-body .fi-sidebar-item-label,
+.fi-body .fi-sidebar-item-icon {
+    color: var(--on-brand-muted);
+}
+
+.fi-body .fi-sidebar-item-button:hover,
+.fi-body .fi-sidebar-item-button:focus-visible {
+    background-color: color-mix(in srgb, var(--on-brand) 8%, transparent);
+}
+
+.fi-body .fi-sidebar-item-button:hover .fi-sidebar-item-label,
+.fi-body .fi-sidebar-item-button:hover .fi-sidebar-item-icon {
+    color: var(--on-brand);
+}
+
+.fi-body .fi-sidebar-item.fi-active > .fi-sidebar-item-button {
+    background-color: var(--interactive);
+}
+
+.fi-body .fi-sidebar-item.fi-active .fi-sidebar-item-label,
+.fi-body .fi-sidebar-item.fi-active .fi-sidebar-item-icon {
+    color: var(--on-interactive);
+}
+
+.fi-body .fi-sidebar-item-button:focus-visible {
+    outline: 2px solid var(--on-brand);
+    outline-offset: -2px;
+}
+
+/* ── Page header: title, one-line description, primary action ───── */
+
+.fi-body .fi-header-heading {
+    color: var(--brand-primary);
+    font-family: var(--font-heading);
+    font-size: 1.5rem;
+    line-height: 2rem;
+}
+
+.fi-body .fi-header-subheading {
+    color: var(--text-muted);
+    font-size: 0.9375rem;
+    line-height: 1.5rem;
+    margin-top: 0.25rem;
+}
+
+.fi-body .fi-header > div:last-child {
+    flex-wrap: wrap;
+}
+
+/* ── Sections and tables: one hairline border, no stacked shadow ─── */
+
+.fi-body .fi-section:not(.fi-section-not-contained),
+.fi-body .fi-ta-ctn,
+.fi-body .fi-wi-chart > .fi-section {
+    box-shadow: 0 0 0 1px var(--border);
+}
+
+.fi-body .fi-section-header-heading {
+    color: var(--text);
+}
+
+.fi-body .fi-section-header-description {
+    color: var(--text-muted);
+}
+
+.fi-body .fi-ta-table > thead > tr {
+    background-color: var(--surface-subtle);
+}
+
+.fi-body .fi-ta-header-cell-label {
+    color: var(--text);
+}
+
+.fi-body .fi-ta-empty-state-heading {
+    color: var(--text);
+}
+
+/* ── Buttons: hover goes one shade darker, never lighter ──────────
+ * Filament's stock hover is shade 500, which for primary is the AI
+ * accent — white text there is 4.47:1. Shade 700 keeps hover at AA. */
+
+.fi-body .fi-btn.fi-color-primary:not(.fi-btn-outlined):hover {
+    background-color: var(--interactive-hover);
+}
+
+.fi-body .fi-btn.fi-color-success:not(.fi-btn-outlined):hover {
+    background-color: rgb(var(--success-700));
+}
+
+.fi-body .fi-btn.fi-color-warning:not(.fi-btn-outlined):hover {
+    background-color: rgb(var(--warning-700));
+}
+
+.fi-body .fi-btn.fi-color-danger:not(.fi-btn-outlined):hover {
+    background-color: rgb(var(--danger-700));
+}
+
+.fi-body .fi-btn.fi-color-info:not(.fi-btn-outlined):hover {
+    background-color: rgb(var(--info-700));
+}
+
+/* Danger keeps stock Tailwind red so destructive buttons are exactly
+ * --danger; only its badge text needs the strong shade (red-600 on its own
+ * tint is 4.41:1). */
+.fi-body .fi-badge.fi-color-danger {
+    color: var(--danger-strong);
+}
+
+/* ── Layout helpers ───────────────────────────────────────────────── */
+
+.hp-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.hp-stack--tight {
+    gap: 0.75rem;
+}
+
+.hp-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+}
+
+.hp-grid--wide {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+}
+
+.hp-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.hp-row--between {
+    justify-content: space-between;
+}
+
+/* ── Card ─────────────────────────────────────────────────────────── */
+
+.hp-card {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    min-width: 0;
+}
+
+.hp-card__title {
+    color: var(--text);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1.5rem;
+    margin: 0;
+}
+
+.hp-card__desc {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    line-height: 1.375rem;
+    margin: 0.25rem 0 0;
+}
+
+.hp-card__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+/* Emphasis panel — the one place a surface is navy. */
+.hp-card--brand {
+    background-color: var(--brand-primary);
+    border-color: var(--brand-primary);
+    color: var(--on-brand);
+}
+
+.hp-card--brand .hp-card__title {
+    color: var(--on-brand);
+}
+
+.hp-card--brand .hp-card__desc,
+.hp-card--brand .hp-muted {
+    color: var(--on-brand-muted);
+}
+
+/* ── Text ─────────────────────────────────────────────────────────── */
+
+.hp-muted {
+    color: var(--text-muted);
+}
+
+.hp-m0 {
+    margin: 0;
+}
+
+.hp-mt {
+    margin: 1rem 0 0;
+}
+
+.hp-grow {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.hp-nowrap {
+    white-space: nowrap;
+}
+
+.hp-text-danger {
+    color: var(--danger-strong);
+}
+
+.hp-plain-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+/* Badges, trends and links inside a column stack keep their own width. */
+.hp-stat > .hp-trend,
+.hp-meter > .hp-badge,
+.hp-meter > .hp-link,
+.hp-stack > .hp-link {
+    align-self: flex-start;
+}
+
+.hp-small {
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+}
+
+.hp-strong {
+    color: var(--text);
+    font-weight: 600;
+}
+
+.hp-mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.hp-ltr {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+.hp-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.hp-prewrap {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.hp-link {
+    color: var(--interactive);
+    font-weight: 500;
+    text-decoration: none;
+}
+
+.hp-link:hover {
+    color: var(--interactive-hover);
+    text-decoration: underline;
+}
+
+.hp-link:focus-visible,
+.hp-focusable:focus-visible {
+    outline: 2px solid var(--interactive);
+    outline-offset: 2px;
+    border-radius: 0.25rem;
+}
+
+.hp-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    flex-shrink: 0;
+}
+
+.hp-icon--sm {
+    width: 1rem;
+    height: 1rem;
+}
+
+/* Arrows and chevrons point the reading direction. */
+[dir="rtl"] .hp-flip-rtl {
+    transform: scaleX(-1);
+}
+
+/* ── Stat card ────────────────────────────────────────────────────── */
+
+.hp-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.hp-stat__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.hp-stat__label {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+}
+
+.hp-stat__icon {
+    width: 2rem;
+    height: 2rem;
+    padding: 0.375rem;
+    border-radius: 0.5rem;
+    background-color: var(--surface-subtle);
+    color: var(--brand-primary);
+    flex-shrink: 0;
+}
+
+.hp-stat__icon--ai {
+    background-color: var(--ai-accent-soft);
+    color: var(--ai-accent);
+}
+
+.hp-stat__value {
+    color: var(--text);
+    font-family: var(--font-heading);
+    font-size: 1.75rem;
+    font-weight: 600;
+    line-height: 2.25rem;
+    overflow-wrap: anywhere;
+}
+
+.hp-stat__value--danger {
+    color: var(--danger);
+}
+
+.hp-stat__foot {
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+}
+
+/* ── Trend indicator: arrow + words, never colour alone ───────────── */
+
+.hp-trend {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+}
+
+.hp-trend--good {
+    color: var(--success-strong);
+}
+
+.hp-trend--bad {
+    color: var(--danger-strong);
+}
+
+.hp-trend--flat {
+    color: var(--text-muted);
+}
+
+/* ── Usage meter ──────────────────────────────────────────────────── */
+
+.hp-meter {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.hp-meter__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.25rem 1rem;
+}
+
+.hp-meter__track {
+    height: 0.5rem;
+    border-radius: 999px;
+    background-color: var(--surface-subtle);
+    box-shadow: inset 0 0 0 1px var(--border);
+    overflow: hidden;
+}
+
+.hp-meter__fill {
+    height: 100%;
+    border-radius: 999px;
+    background-color: var(--ai-accent);
+}
+
+.hp-meter__fill--warning {
+    background-color: var(--warning);
+}
+
+.hp-meter__fill--danger {
+    background-color: var(--danger);
+}
+
+/* ── Status badge: semantic tint + strong text + a shape cue ──────── */
+
+.hp-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: 0.375rem;
+    border: 1px solid transparent;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+    white-space: nowrap;
+    background-color: var(--surface-subtle);
+    color: var(--text);
+}
+
+.hp-badge::before {
+    content: "";
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: 999px;
+    background-color: currentColor;
+    flex-shrink: 0;
+}
+
+.hp-badge--success {
+    background-color: var(--success-soft);
+    border-color: var(--success);
+    color: var(--success-strong);
+}
+
+.hp-badge--warning {
+    background-color: var(--warning-soft);
+    border-color: var(--warning);
+    color: var(--warning-strong);
+}
+
+.hp-badge--danger {
+    background-color: var(--danger-soft);
+    border-color: var(--danger);
+    color: var(--danger-strong);
+}
+
+.hp-badge--info {
+    background-color: var(--info-soft);
+    border-color: var(--info);
+    color: var(--info-strong);
+}
+
+.hp-badge--ai {
+    background-color: var(--ai-accent-soft);
+    border-color: var(--ai-accent);
+    color: var(--ai-accent-strong);
+}
+
+.hp-badge--neutral {
+    background-color: var(--surface-subtle);
+    border-color: var(--border-strong);
+    color: var(--text);
+}
+
+/* ── Table for our own Blade views ────────────────────────────────── */
+
+.hp-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background-color: var(--surface);
+}
+
+.hp-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+}
+
+.hp-table th {
+    background-color: var(--surface-subtle);
+    color: var(--text);
+    font-weight: 600;
+    text-align: start;
+    white-space: nowrap;
+    padding: 0.625rem 1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.hp-table td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    color: var(--text);
+}
+
+.hp-table tbody tr:nth-child(even) td {
+    background-color: var(--bg);
+}
+
+.hp-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.hp-table td.hp-num,
+.hp-table th.hp-num {
+    text-align: end;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.hp-table .hp-cell-clip {
+    max-width: 20rem;
+}
+
+/* ── Empty state ──────────────────────────────────────────────────── */
+
+.hp-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 2rem 1rem;
+    text-align: center;
+}
+
+.hp-empty__icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0.5rem;
+    border-radius: 999px;
+    background-color: var(--surface-subtle);
+    color: var(--text-muted);
+}
+
+.hp-empty__title {
+    color: var(--text);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.hp-empty__desc {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    line-height: 1.375rem;
+    max-width: 32rem;
+    margin: 0;
+}
+
+.hp-empty--compact {
+    padding: 1rem 0.5rem;
+}
+
+/* ── Notice ───────────────────────────────────────────────────────── */
+
+.hp-notice {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+    padding: 0.875rem 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--border);
+    background-color: var(--surface);
+    font-size: 0.875rem;
+    line-height: 1.375rem;
+    color: var(--text);
+}
+
+.hp-notice--warning {
+    border-color: var(--warning);
+    background-color: var(--warning-soft);
+}
+
+.hp-notice--warning .hp-notice__icon {
+    color: var(--warning-strong);
+}
+
+.hp-notice--info {
+    border-color: var(--info);
+    background-color: var(--info-soft);
+}
+
+.hp-notice--info .hp-notice__icon {
+    color: var(--info-strong);
+}
+
+.hp-notice__title {
+    font-weight: 600;
+    margin: 0;
+}
+
+/* ── Onboarding checklist ─────────────────────────────────────────── */
+
+.hp-progress {
+    height: 0.375rem;
+    border-radius: 999px;
+    background-color: var(--surface-subtle);
+    overflow: hidden;
+}
+
+.hp-progress__fill {
+    height: 100%;
+    background-color: var(--success);
+}
+
+.hp-checklist {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.hp-checklist__item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.875rem 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.hp-checklist__item:last-child {
+    border-bottom: 0;
+}
+
+.hp-checklist__mark {
+    width: 1.5rem;
+    height: 1.5rem;
+    flex-shrink: 0;
+    color: var(--border-strong);
+}
+
+.hp-checklist__item--done .hp-checklist__mark {
+    color: var(--success);
+}
+
+.hp-checklist__body {
+    flex: 1 1 12rem;
+    min-width: 0;
+}
+
+.hp-checklist__label {
+    color: var(--text);
+    font-weight: 500;
+}
+
+.hp-checklist__item--done .hp-checklist__label {
+    color: var(--text-muted);
+}
+
+.hp-checklist__hint {
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+    margin-top: 0.125rem;
+}
+
+.hp-checklist__detail {
+    flex-basis: 100%;
+    margin-inline-start: 2.25rem;
+}
+
+/* ── Simple list rows (chatbot status, unanswered questions) ──────── */
+
+.hp-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.hp-list__item {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.hp-list__item:first-child {
+    padding-top: 0;
+}
+
+.hp-list__item:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+}
+
+.hp-list__main {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+/* ── Quick actions ────────────────────────────────────────────────── */
+
+.hp-actions {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.hp-action {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    color: var(--text);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-decoration: none;
+    background-color: var(--surface);
+}
+
+.hp-action:hover {
+    border-color: var(--interactive);
+    color: var(--interactive);
+}
+
+.hp-action:focus-visible {
+    outline: 2px solid var(--interactive);
+    outline-offset: 2px;
+}
+
+.hp-action .hp-icon {
+    color: var(--interactive);
+}
+
+.hp-action__label {
+    flex: 1 1 auto;
+}
+
+/* ── Filter chips (pressed state carried by aria-pressed) ─────────── */
+
+.hp-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border-strong);
+    background-color: var(--surface);
+    color: var(--text);
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    cursor: pointer;
+}
+
+.hp-chip:hover {
+    border-color: var(--interactive);
+}
+
+.hp-chip[aria-pressed="true"] {
+    background-color: var(--interactive);
+    border-color: var(--interactive);
+    color: var(--on-interactive);
+}
+
+.hp-chip:focus-visible {
+    outline: 2px solid var(--interactive);
+    outline-offset: 2px;
+}
+
+/* ── Inline action buttons inside our own tables ──────────────────── */
+
+.hp-text-btn {
+    background: none;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--interactive);
+    cursor: pointer;
+}
+
+.hp-text-btn:hover {
+    color: var(--interactive-hover);
+    text-decoration: underline;
+}
+
+.hp-text-btn--muted {
+    color: var(--text-muted);
+}
+
+.hp-text-btn:focus-visible {
+    outline: 2px solid var(--interactive);
+    outline-offset: 2px;
+}
+
+/* ── Read-only copy field ─────────────────────────────────────────── */
+
+.hp-copy {
+    display: flex;
+    gap: 0.5rem;
+    align-items: stretch;
+}
+
+.hp-copy__input {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border-strong);
+    border-radius: 0.5rem;
+    background-color: var(--surface);
+    color: var(--text);
+    font-size: 0.8125rem;
+}
+
+/* ── Conversation transcript (bot replies are an AI element) ──────── */
+
+.hp-thread {
+    max-height: 20rem;
+    overflow-y: auto;
+}
+
+.hp-bubble {
+    max-width: 48rem;
+    padding: 0.625rem 0.875rem;
+    border-radius: 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.5rem;
+    border: 1px solid var(--border);
+    background-color: var(--surface);
+}
+
+.hp-bubble--user {
+    margin-inline-start: auto;
+    background-color: var(--surface-subtle);
+}
+
+.hp-bubble--bot {
+    border-inline-start: 3px solid var(--ai-accent);
+}
+
+.hp-bubble__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    margin-bottom: 0.25rem;
+}
+
+/* ── Widget preview (WidgetSettings) — a mock of the storefront widget ─ */
+
+.hp-preview {
+    position: relative;
+    min-height: 26rem;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background-color: var(--bg);
+    overflow: hidden;
+}
+
+.hp-preview__window {
+    position: absolute;
+    bottom: 1rem;
+    width: min(18.75rem, calc(100% - 2rem));
+    border-radius: 1rem;
+    overflow: hidden;
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+}
+
+.hp-preview__window--right {
+    right: 1rem;
+}
+
+.hp-preview__window--left {
+    left: 1rem;
+}
+
+.hp-preview__head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.875rem 1rem;
+    color: var(--on-interactive);
+}
+
+.hp-preview__avatar {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.hp-preview__title {
+    font-size: 0.9375rem;
+    font-weight: 600;
+}
+
+.hp-preview__body {
+    padding: 1rem;
+    min-height: 7.5rem;
+}
+
+.hp-preview__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    padding: 0 1rem 1rem;
+}
+
+.hp-preview__bubble {
+    max-width: 85%;
+    padding: 0.625rem 0.875rem;
+    border-radius: 0.75rem;
+    background-color: var(--surface-subtle);
+    color: var(--text);
+    font-size: 0.875rem;
+}
+
+.hp-preview__chip {
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    padding: 0.25rem 0.625rem;
+    font-size: 0.75rem;
+}
+
+/* ── Loading ──────────────────────────────────────────────────────────
+ * Livewire adds .hp-is-loading via wire:loading.class while a request for
+ * that region is in flight: the old content dims in place instead of
+ * jumping, and nothing else on the page moves. */
+
+.hp-loadable {
+    transition: opacity 150ms ease;
+}
+
+.hp-loadable.hp-is-loading {
+    opacity: 0.55;
+    pointer-events: none;
+}
+
+.hp-skeleton {
+    display: block;
+    border-radius: 0.375rem;
+    background-color: var(--surface-subtle);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .hp-loadable {
+        transition: none;
+    }
+}

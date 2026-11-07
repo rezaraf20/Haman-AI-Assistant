@@ -1,7 +1,7 @@
 <?php
 namespace App\Filament\Customer\Widgets;
 
-use App\Support\CustomerDashboardData;
+use App\Support\{CustomerOnboarding, CustomerDashboardData};
 use Filament\Widgets\Widget;
 
 // Every new merchant hits the same wall: a bot that can't answer "where are
@@ -15,9 +15,14 @@ class BusinessProfileWarning extends Widget {
     protected static ?int $sort = -9;
     protected static bool $isLazy = false;
 
+    // Not while the onboarding checklist is up: that checklist has its own
+    // business-profile step, and the same request twice on one screen is
+    // noise. Once onboarding is done this takes over, unchanged.
     public static function canView(): bool {
         $tenant = auth()->user()?->tenant;
-        return $tenant && CustomerDashboardData::forTenant($tenant)['profileGaps'] !== [];
+        return $tenant
+            && CustomerOnboarding::isComplete($tenant)
+            && CustomerDashboardData::forTenant($tenant)['profileGaps'] !== [];
     }
 
     public function getGaps(): array {

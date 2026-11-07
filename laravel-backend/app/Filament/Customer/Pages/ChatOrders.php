@@ -21,6 +21,7 @@ class ChatOrders extends Page {
     public static function getNavigationLabel(): string { return __('chat_orders.nav'); }
     public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_chatbots'); }
     public function getTitle(): string { return __('chat_orders.nav'); }
+    public function getSubheading(): ?string { return __('portal.page_chat_orders'); }
 
     public function getOrders(): array {
         $tenant = auth()->user()->tenant;

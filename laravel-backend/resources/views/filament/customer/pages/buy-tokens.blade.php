@@ -1,22 +1,21 @@
 <x-filament-panels::page>
-    <div class="space-y-6">
-        <x-filament::section>
-            <x-slot name="heading">وضعیت فعلی</x-slot>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                    <p class="text-sm text-gray-500">موجودی کیف پول</p>
-                    <p class="text-2xl font-bold">{{ \App\Support\Money::forCurrentTenant($this->getWalletBalance()) }}</p>
-                </div>
-                <div>
-                    <p class="text-sm text-gray-500">موجودی توکن اضافه (خریداری‌شده)</p>
-                    <p class="text-2xl font-bold">{{ number_format($this->getBonusBalance()) }}</p>
-                </div>
+    <div class="hp-stack">
+        <div class="hp-grid hp-grid--wide">
+            <div class="hp-card hp-stat">
+                <span class="hp-stat__label">{{ __('portal.buy_wallet_balance') }}</span>
+                <span class="hp-stat__value">{{ \App\Support\Money::forCurrentTenant($this->getWalletBalance()) }}</span>
             </div>
-            <p class="text-xs text-gray-500 mt-3">این توکن‌ها فقط زمانی مصرف می‌شوند که سقف توکن ماهانه‌ی پلن شما تمام شده باشد و تا زمان مصرف، هر ماه باقی می‌مانند.</p>
-        </x-filament::section>
+            <div class="hp-card hp-stat">
+                <div class="hp-stat__top">
+                    <span class="hp-stat__label">{{ __('portal.buy_tokens_bonus_balance') }}</span>
+                    <x-filament::icon icon="heroicon-o-cpu-chip" class="hp-stat__icon hp-stat__icon--ai" />
+                </div>
+                <span class="hp-stat__value">{{ \App\Support\Numbers::format($this->getBonusBalance()) }}</span>
+                <span class="hp-stat__foot">{{ __('portal.buy_tokens_note') }}</span>
+            </div>
+        </div>
 
-        <x-filament::section>
-            <x-slot name="heading">بسته‌های توکن</x-slot>
+        <x-filament::section :heading="__('portal.buy_tokens_packages')">
             {{ $this->table }}
         </x-filament::section>
     </div>

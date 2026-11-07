@@ -20,7 +20,7 @@
                         <div class="min-w-0">
                             <div class="flex items-center gap-2">
                                 <span class="inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-primary-100 text-primary-700 text-sm font-bold">
-                                    {{ number_format($s['count']) }}
+                                    {{ \App\Support\Numbers::format($s['count']) }}
                                 </span>
                                 <h3 class="text-base font-semibold text-gray-800">{{ $s['text'] }}</h3>
                             </div>

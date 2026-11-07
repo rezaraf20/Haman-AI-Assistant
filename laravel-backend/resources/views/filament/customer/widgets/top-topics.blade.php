@@ -1,16 +1,16 @@
 @php $rows = $this->getRows(); @endphp
 <x-filament-widgets::widget>
-    <x-filament::section>
-        <x-slot name="heading">{{ __('dashboard.customer_top_topics') }}</x-slot>
-
+    <x-filament::section :heading="__('dashboard.customer_top_topics')" :description="__('portal.top_topics_desc')">
         @if (empty($rows))
-            <p class="text-sm text-gray-500">{{ __('dashboard.customer_top_topics_empty') }}</p>
+            <div class="hp-empty hp-empty--compact">
+                <p class="hp-empty__desc">{{ __('dashboard.customer_top_topics_empty') }}</p>
+            </div>
         @else
-            <ul class="space-y-2">
+            <ul class="hp-list">
                 @foreach ($rows as $row)
-                    <li class="flex items-center justify-between gap-2 text-sm border-b last:border-0 pb-2 last:pb-0">
-                        <span class="truncate">{{ $row->content }}</span>
-                        <span class="shrink-0 text-gray-500">{{ $this->fmt($row->cnt) }}</span>
+                    <li class="hp-list__item">
+                        <span class="hp-list__main hp-truncate" title="{{ $row->content }}">{{ $row->content }}</span>
+                        <span class="hp-strong">{{ $this->fmt($row->cnt) }}</span>
                     </li>
                 @endforeach
             </ul>

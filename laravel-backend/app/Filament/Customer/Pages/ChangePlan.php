@@ -43,6 +43,7 @@ class ChangePlan extends Page implements HasTable {
     public static function getNavigationLabel(): string { return __('plan.change_plan_nav'); }
     public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_wallet'); }
     public function getTitle(): string { return __('plan.change_plan_title'); }
+    public function getSubheading(): ?string { return __('portal.page_change_plan'); }
 
     public function getCurrentPlan(): Plan {
         return auth()->user()->tenant->plan;
@@ -55,13 +56,19 @@ class ChangePlan extends Page implements HasTable {
 
     public function table(Table $table): Table {
         return $table
+            // Zebra rows and a sentence instead of Filament's generic
+            // "no records" — see portal-theme.css for the header tint.
+            ->striped()
+            ->emptyStateIcon('heroicon-o-rectangle-stack')
+            ->emptyStateHeading(__('portal.empty_plans_title'))
+            ->emptyStateDescription(__('portal.empty_plans_desc'))
             ->query(fn () => Plan::where('is_public', true)->where('is_active', true)->orderBy('sort_order'))
             ->columns([
                 TextColumn::make('display_name')->label(__('common.name')),
                 TextColumn::make('price_monthly')->label(__('plans.price_monthly'))
                     ->formatStateUsing(fn (Plan $record) => Money::forCurrentTenant((int) $record->price_monthly)),
                 TextColumn::make('max_tokens_monthly')->label(__('plans.max_tokens'))
-                    ->formatStateUsing(fn (int $state) => number_format($state)),
+                    ->formatStateUsing(fn (int $state) => \App\Support\Numbers::format($state)),
                 TextColumn::make('max_chatbots')->label(__('plans.max_chatbots')),
             ])
             ->actions([

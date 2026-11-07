@@ -21,7 +21,7 @@
                     @foreach ($data['intents'] as $row)
                         <tr class="border-b last:border-0">
                             <td class="py-2 pe-4">{{ $page->intentLabel($row['intent']) }}</td>
-                            <td class="py-2 pe-4">{{ number_format($row['count']) }}</td>
+                            <td class="py-2 pe-4">{{ \App\Support\Numbers::format($row['count']) }}</td>
                             <td class="py-2 pe-4">{{ $row['share_pct'] }}%</td>
                             <td @class([
                                 'py-2',
@@ -48,7 +48,7 @@
                 @foreach ($data['asked_products'] as $row)
                     <li class="py-2 flex justify-between gap-4">
                         <span>{{ $row['title'] }}</span>
-                        <span class="text-gray-500">{{ number_format($row['count']) }}</span>
+                        <span class="text-gray-500">{{ \App\Support\Numbers::format($row['count']) }}</span>
                     </li>
                 @endforeach
             </ul>
@@ -65,7 +65,7 @@
                 @foreach ($data['best_sellers'] as $row)
                     <li class="py-2 flex justify-between gap-4">
                         <span>{{ $row['title'] }}</span>
-                        <span class="text-gray-500">{{ number_format($row['count']) }}</span>
+                        <span class="text-gray-500">{{ \App\Support\Numbers::format($row['count']) }}</span>
                     </li>
                 @endforeach
             </ul>
@@ -97,7 +97,7 @@
                             <td class="py-2 pe-4">
                                 {{ $row['sell_rank'] ?? __('trends.not_sold') }}
                             </td>
-                            <td class="py-2">{{ number_format($row['asked']) }}</td>
+                            <td class="py-2">{{ \App\Support\Numbers::format($row['asked']) }}</td>
                         </tr>
                     @endforeach
                 </tbody>
@@ -130,7 +130,7 @@
                                 {{ $row['names'][1] }}
                             </td>
                             <td class="py-2 pe-4">
-                                {{ number_format($row['count']) }}
+                                {{ \App\Support\Numbers::format($row['count']) }}
                                 @if ($row['explicit'] > 0 && $row['explicit'] < $row['count'])
                                     <span class="text-xs text-gray-400">
                                         ({{ __('trends.explicit_n', ['n' => $row['explicit']]) }})
@@ -169,7 +169,7 @@
             @foreach ($data['missing_from_catalog'] as $row)
                 <li class="py-2 flex justify-between gap-4">
                     <span>{{ $row['label'] }}</span>
-                    <span class="text-gray-500">{{ number_format($row['count']) }}</span>
+                    <span class="text-gray-500">{{ \App\Support\Numbers::format($row['count']) }}</span>
                 </li>
             @endforeach
         </ul>
@@ -187,7 +187,7 @@
                 @foreach ($data['emerging_topics'] as $row)
                     <li class="py-2 flex justify-between gap-4">
                         <span>{{ $row['label'] }}</span>
-                        <span class="text-success-600">{{ __('trends.change_new') }} · {{ number_format($row['count']) }}</span>
+                        <span class="text-success-600">{{ __('trends.change_new') }} · {{ \App\Support\Numbers::format($row['count']) }}</span>
                     </li>
                 @endforeach
             </ul>
@@ -205,7 +205,7 @@
                     <li class="py-2 flex justify-between gap-4">
                         <span>{{ $row['label'] }}</span>
                         <span class="text-danger-600" dir="ltr">
-                            {{ number_format($row['prev_count']) }} → {{ number_format($row['count']) }}
+                            {{ \App\Support\Numbers::format($row['prev_count']) }} → {{ \App\Support\Numbers::format($row['count']) }}
                         </span>
                     </li>
                 @endforeach
@@ -225,7 +225,7 @@
                 <li class="py-2">
                     <div class="flex justify-between gap-4">
                         <span>{{ $row['label'] }}</span>
-                        <span class="text-gray-500">{{ number_format($row['count']) }}</span>
+                        <span class="text-gray-500">{{ \App\Support\Numbers::format($row['count']) }}</span>
                     </div>
                     @if (count($row['variants']) > 1)
                         <div class="mt-1 text-xs text-gray-400">

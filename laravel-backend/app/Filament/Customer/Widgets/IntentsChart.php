@@ -1,35 +1,25 @@
 <?php
 namespace App\Filament\Customer\Widgets;
 
-use App\Support\{Jalali, CustomerOnboarding, CustomerDashboardData};
+use App\Support\{CustomerOnboarding, CustomerDashboardData};
 use Filament\Widgets\ChartWidget;
 
 // doc-04 "Intent analytics" (Very high) — the portal-visible half of
-// intent_classifier.py's classification: a stacked bar per day, one
-// series per intent, over the same 30-day window every other customer
-// dashboard chart uses. Only intents with a nonzero total in the window
-// get their own series — a chatbot that's never seen a "returns"
-// question shouldn't clutter the legend with an always-zero line.
+// intent_classifier.py's classification: how many questions fell into each
+// intent over the last 30 days, ranked. One bar per intent in a single
+// colour (the AI accent, since this is the model's classification, through
+// Filament's own palette) rather than a stacked series per intent per day,
+// which needed eleven distinct colours to tell apart. Only intents with a
+// nonzero total get a bar, and an empty window shows a sentence instead of
+// an empty axis.
 class IntentsChart extends ChartWidget {
+    protected static string $view = 'filament.customer.widgets.intents-chart';
     protected static ?string $pollingInterval = null;
+    protected static string $color = 'primary';
+    protected static ?string $maxHeight = '18rem';
     protected int|string|array $columnSpan = 2;
+    protected static ?int $sort = 7;
     protected static bool $isLazy = false;
-
-    // Stable per-intent colors so the same category is always the same
-    // color across page loads — deliberately not auto-generated/random.
-    private const COLORS = [
-        'price'              => '#1B3A6B',
-        'availability'       => '#0EA5E9',
-        'comparison'         => '#8B5CF6',
-        'consultation'       => '#14B8A6',
-        'authenticity'       => '#EF4444',
-        'shipping'           => '#F59E0B',
-        'return'             => '#F97316',
-        'payment'            => '#10B981',
-        'order_status'       => '#6366F1',
-        'technical_support'  => '#EC4899',
-        'other'              => '#94A3B8',
-    ];
 
     public static function canView(): bool {
         $tenant = auth()->user()?->tenant;
@@ -37,37 +27,37 @@ class IntentsChart extends ChartWidget {
     }
 
     public function getHeading(): string {
-        return __('dashboard.customer_chart_intents');
+        return __('portal.chart_intents_title');
+    }
+
+    public function getDescription(): ?string {
+        return __('portal.chart_intents_desc');
+    }
+
+    public function hasAnyData(): bool {
+        return $this->getData()['labels'] !== [];
     }
 
     protected function getData(): array {
-        $tenant = auth()->user()->tenant;
-        $data = CustomerDashboardData::forTenant($tenant);
-        $dailyRows = $data['intentDailyRows'];
-        $totals = $data['intentTotals'];
+        $totals = CustomerDashboardData::forTenant(auth()->user()->tenant)['intentTotals'];
 
         $labels = [];
-        $dateKeys = [];
-        for ($i = 29; $i >= 0; $i--) {
-            $date = now()->subDays($i);
-            $dateKeys[] = $date->toDateString();
-            $labels[] = Jalali::date($date);
-        }
-
-        $datasets = [];
-        foreach (array_keys($totals) as $intent) {
-            if (($totals[$intent] ?? 0) <= 0) continue;
-            $datasets[] = [
-                'label' => __('dashboard.intent_' . $intent) !== 'dashboard.intent_' . $intent
-                    ? __('dashboard.intent_' . $intent) : $intent,
-                'data' => array_map(fn ($key) => (int) ($dailyRows[$key][$intent] ?? 0), $dateKeys),
-                'backgroundColor' => self::COLORS[$intent] ?? '#CBD5E1',
-            ];
+        $values = [];
+        foreach ($totals as $intent => $count) {
+            if ($count <= 0) continue;
+            $labels[] = __('dashboard.intent_' . $intent) !== 'dashboard.intent_' . $intent
+                ? __('dashboard.intent_' . $intent) : $intent;
+            $values[] = (int) $count;
         }
 
         return [
-            'datasets' => $datasets,
-            'labels'   => $labels,
+            'datasets' => [[
+                'label' => __('portal.chart_intents_label'),
+                'data'  => $values,
+                'borderWidth' => 0,
+                'borderRadius' => 4,
+            ]],
+            'labels' => $labels,
         ];
     }
 
@@ -76,10 +66,18 @@ class IntentsChart extends ChartWidget {
     }
 
     protected function getOptions(): array {
+        $rtl = __('filament-panels::layout.direction') === 'rtl';
+
         return [
+            'indexAxis' => 'y',
+            'layout' => ['padding' => ['left' => 12, 'right' => 12]],
+            'plugins' => [
+                'legend' => ['display' => false],
+                'tooltip' => ['rtl' => $rtl],
+            ],
             'scales' => [
-                'x' => ['stacked' => true],
-                'y' => ['stacked' => true, 'beginAtZero' => true, 'ticks' => ['precision' => 0]],
+                'x' => ['reverse' => $rtl, 'beginAtZero' => true, 'ticks' => ['precision' => 0]],
+                'y' => ['position' => $rtl ? 'right' : 'left'],
             ],
         ];
     }

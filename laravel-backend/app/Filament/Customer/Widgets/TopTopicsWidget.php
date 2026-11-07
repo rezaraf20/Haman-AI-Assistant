@@ -12,6 +12,7 @@ use Filament\Widgets\Widget;
 class TopTopicsWidget extends Widget {
     protected static string $view = 'filament.customer.widgets.top-topics';
     protected int|string|array $columnSpan = 1;
+    protected static ?int $sort = 8;
     protected static bool $isLazy = false;
 
     public static function canView(): bool {

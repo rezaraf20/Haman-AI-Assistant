@@ -117,6 +117,7 @@ class WidgetSettings extends Page implements HasForms {
     public function getTitle(): string {
         return __('chatbot.widget_settings_title', ['name' => $this->chatbotName]);
     }
+    public function getSubheading(): ?string { return __('portal.page_widget_settings'); }
 
     public function form(Form $form): Form {
         return $form->statePath('data')->schema([

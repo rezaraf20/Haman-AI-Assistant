@@ -28,9 +28,28 @@ class MyChatbots extends Page implements HasTable {
     public static function getNavigationLabel(): string { return __('chatbot.my_chatbots_nav'); }
     public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_chatbots'); }
     public function getTitle(): string { return __('chatbot.my_chatbots_nav'); }
+    public function getSubheading(): ?string { return __('portal.page_my_chatbots'); }
+
+    protected function getHeaderActions(): array {
+        return [
+            \Filament\Actions\Action::make('buy_chatbot')
+                ->label(__('chatbot.buy_new_nav'))
+                ->icon('heroicon-o-plus')
+                ->url(BuyChatbot::getUrl()),
+        ];
+    }
 
     public function table(Table $table): Table {
         return $table
+            // Zebra rows and a sentence instead of Filament's generic
+            // "no records" — see portal-theme.css for the header tint.
+            ->striped()
+            ->emptyStateIcon('heroicon-o-chat-bubble-left-right')
+            ->emptyStateHeading(__('portal.empty_chatbots_title'))
+            ->emptyStateDescription(__('portal.empty_chatbots_desc'))
+            ->emptyStateActions([
+                Action::make('empty_buy')->label(__('chatbot.buy_new_nav'))->icon('heroicon-o-plus')->url(fn () => BuyChatbot::getUrl()),
+            ])
             ->query(fn () => ChatbotIndexEntry::query()->where('tenant_id', auth()->user()->tenant_id))
             ->columns([
                 TextColumn::make('name')->label(__('common.name'))->default(__('panel.chatbot_no_name')),

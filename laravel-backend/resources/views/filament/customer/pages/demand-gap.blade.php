@@ -2,51 +2,41 @@
     $data = $this->getDashboardData();
 @endphp
 <x-filament-panels::page>
-    <div class="space-y-6">
-        <p class="text-sm text-gray-500">
+    <div class="hp-stack">
+        <p class="hp-small hp-muted hp-m0">
             {{ __('chatbot.demand_gap_range', ['from' => \App\Support\Jalali::date($data['range_start']), 'to' => \App\Support\Jalali::date($data['range_end'])]) }}
         </p>
 
-        <div class="rounded-lg border border-warning-300 bg-warning-50 px-4 py-3 text-sm text-warning-800 dark:border-warning-500/30 dark:bg-warning-500/10 dark:text-warning-400">
-            {{ __('chatbot.demand_gap_reliability_warning') }}
+        <div class="hp-notice hp-notice--warning" role="note">
+            <x-filament::icon icon="heroicon-o-exclamation-triangle" class="hp-icon hp-notice__icon" />
+            <span>{{ __('chatbot.demand_gap_reliability_warning') }}</span>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <x-filament::section>
-                <x-slot name="heading">{{ __('chatbot.demand_gap_total_questions') }}</x-slot>
-                <p class="text-3xl font-bold">{{ number_format($data['total_questions']) }}</p>
-            </x-filament::section>
-
-            <x-filament::section>
-                <x-slot name="heading">{{ __('chatbot.demand_gap_unanswered') }}</x-slot>
-                <p class="text-3xl font-bold {{ $data['unanswered_count'] > 0 ? 'text-danger-600' : '' }}">
-                    {{ number_format($data['unanswered_count']) }}
-                    <span class="text-base font-normal text-gray-500">({{ $data['unanswered_pct'] }}%)</span>
-                </p>
-            </x-filament::section>
+        <div class="hp-grid">
+            <div class="hp-card hp-stat">
+                <span class="hp-stat__label">{{ __('chatbot.demand_gap_total_questions') }}</span>
+                <span class="hp-stat__value">{{ \App\Support\Numbers::format($data['total_questions']) }}</span>
+            </div>
+            <div class="hp-card hp-stat">
+                <span class="hp-stat__label">{{ __('chatbot.demand_gap_unanswered') }}</span>
+                <span class="hp-stat__value">{{ \App\Support\Numbers::format($data['unanswered_count']) }}</span>
+                <span class="hp-stat__foot">{{ __('portal.demand_gap_share', ['pct' => \App\Support\Numbers::format($data['unanswered_pct'], fmod((float) $data['unanswered_pct'], 1.0) != 0.0 ? 1 : 0)]) }}</span>
+            </div>
         </div>
 
-        <x-filament::section>
-            <x-slot name="heading">{{ __('chatbot.demand_gap_unanswered_list_heading') }}</x-slot>
-            <x-slot name="description">{{ __('chatbot.demand_gap_unanswered_list_desc') }}</x-slot>
-
+        <x-filament::section :heading="__('chatbot.demand_gap_unanswered_list_heading')" :description="__('chatbot.demand_gap_unanswered_list_desc')">
             @if (count($data['top_unanswered']) === 0)
-                <p class="text-sm text-gray-500">{{ __('chatbot.demand_gap_no_unanswered') }}</p>
+                <div class="hp-empty hp-empty--compact">
+                    <x-filament::icon icon="heroicon-o-check-circle" class="hp-empty__icon" />
+                    <p class="hp-empty__desc">{{ __('chatbot.demand_gap_no_unanswered') }}</p>
+                </div>
             @else
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="text-start text-gray-500 border-b">
-                                <th class="py-2 pe-4 text-start">{{ __('chatbot.demand_gap_question_col') }}</th>
-                                <th class="py-2 text-start">{{ __('chatbot.demand_gap_count_col') }}</th>
-                            </tr>
-                        </thead>
+                <div class="hp-table-wrap">
+                    <table class="hp-table">
+                        <thead><tr><th>{{ __('chatbot.demand_gap_question_col') }}</th><th class="hp-num">{{ __('chatbot.demand_gap_count_col') }}</th></tr></thead>
                         <tbody>
                             @foreach ($data['top_unanswered'] as $row)
-                                <tr class="border-b last:border-0">
-                                    <td class="py-2 pe-4">{{ $row->question }}</td>
-                                    <td class="py-2">{{ \App\Support\Numbers::format($row->cnt) }}</td>
-                                </tr>
+                                <tr><td>{{ $row->question }}</td><td class="hp-num">{{ \App\Support\Numbers::format($row->cnt) }}</td></tr>
                             @endforeach
                         </tbody>
                     </table>
@@ -54,26 +44,18 @@
             @endif
         </x-filament::section>
 
-        <x-filament::section>
-            <x-slot name="heading">{{ __('chatbot.demand_gap_top_questions_heading') }}</x-slot>
-
+        <x-filament::section :heading="__('chatbot.demand_gap_top_questions_heading')">
             @if ($data['top_questions']->isEmpty())
-                <p class="text-sm text-gray-500">{{ __('chatbot.demand_gap_no_questions') }}</p>
+                <div class="hp-empty hp-empty--compact">
+                    <p class="hp-empty__desc">{{ __('chatbot.demand_gap_no_questions') }}</p>
+                </div>
             @else
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="text-start text-gray-500 border-b">
-                                <th class="py-2 pe-4 text-start">{{ __('chatbot.demand_gap_question_col') }}</th>
-                                <th class="py-2 text-start">{{ __('chatbot.demand_gap_count_col') }}</th>
-                            </tr>
-                        </thead>
+                <div class="hp-table-wrap">
+                    <table class="hp-table">
+                        <thead><tr><th>{{ __('chatbot.demand_gap_question_col') }}</th><th class="hp-num">{{ __('chatbot.demand_gap_count_col') }}</th></tr></thead>
                         <tbody>
                             @foreach ($data['top_questions'] as $row)
-                                <tr class="border-b last:border-0">
-                                    <td class="py-2 pe-4">{{ $row->content }}</td>
-                                    <td class="py-2">{{ \App\Support\Numbers::format($row->cnt) }}</td>
-                                </tr>
+                                <tr><td>{{ $row->content }}</td><td class="hp-num">{{ \App\Support\Numbers::format($row->cnt) }}</td></tr>
                             @endforeach
                         </tbody>
                     </table>

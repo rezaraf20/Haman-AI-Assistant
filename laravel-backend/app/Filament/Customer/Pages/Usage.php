@@ -10,6 +10,7 @@ class Usage extends Page {
     public static function getNavigationLabel(): string { return __('chatbot.usage_nav'); }
     public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_chatbots'); }
     public function getTitle(): string { return __('chatbot.usage_nav'); }
+    public function getSubheading(): ?string { return __('portal.page_usage'); }
 
     // Same shape as TenantController::usage() (routes/api.php's Sanctum
     // dashboard API) — not calling that endpoint itself since this Livewire
@@ -26,7 +27,10 @@ class Usage extends Page {
                 'limit' => $tenant->plan?->max_messages_monthly,
             ],
             'bonus_tokens' => $tenant->bonus_tokens,
-            'resets_at' => now()->endOfMonth(),
+            // The earlier of the two live reset mechanisms — see QuotaPeriod.
+            // This used to say end of the calendar month, which the per-
+            // tenant anchored rollover can beat.
+            'resets_at' => \App\Support\QuotaPeriod::nextReset($tenant),
         ];
     }
 }

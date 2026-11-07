@@ -27,6 +27,7 @@ class Trends extends Page
     public static function getNavigationLabel(): string { return __('trends.nav'); }
     public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_chatbots'); }
     public function getTitle(): string { return __('trends.nav'); }
+    public function getSubheading(): ?string { return __('portal.page_trends'); }
 
     public function mount(): void
     {

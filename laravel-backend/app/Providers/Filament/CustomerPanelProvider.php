@@ -16,6 +16,7 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\ShareSessionAcrossBrandDomains;
 use App\Support\Brand;
+use App\Support\PortalTheme;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Support\HtmlString;
 
@@ -31,7 +32,6 @@ class CustomerPanelProvider extends PanelProvider {
             ->path('portal')
             ->brandName(fn () => config('haman.brand.name') . ' — ' . __('common.customer_portal'))
             ->brandLogo(fn () => view('partials.brand-logo', ['height' => 28]))
-            ->darkModeBrandLogo(fn () => view('partials.brand-logo', ['height' => 28, 'variant' => 'light']))
             ->brandLogoHeight('1.75rem')
             ->favicon(Brand::markUrl())
             // No ->login() — auth is phone+SMS-OTP via the plain Livewire flow
@@ -41,7 +41,18 @@ class CustomerPanelProvider extends PanelProvider {
             // Filament's Authenticate middleware below recognizes it exactly
             // like its own login would — bootstrap/app.php's redirectGuestsTo
             // sends unauthenticated /portal* visitors to that route instead.
-            ->colors(['primary' => Brand::primaryColor()])
+            // The portal's own palette (App\Support\PortalTheme), through
+            // Filament's theme API rather than CSS overrides, so every stock
+            // component — buttons, badges, inputs, notifications — picks up
+            // the same shades our own markup reads from var(--token). The
+            // admin panel keeps Brand::primaryColor() and stock grays on
+            // purpose: the two panels are meant to look different.
+            ->colors(PortalTheme::filamentColors())
+            // Light only. The navy structure colour (--brand-primary) is
+            // indistinguishable from a dark-mode background, so dark mode
+            // would need a separate token set; until that exists, offering
+            // the toggle would mean a half-themed panel.
+            ->darkMode(false)
             // See AdminPanelProvider for why this is a render hook and not
             // ->font() (whose $family parameter is a plain, eagerly-evaluated
             // string, not string|Closure), and why it overrides the
@@ -50,9 +61,26 @@ class CustomerPanelProvider extends PanelProvider {
             // variable on every utility class, not from inheritance.
             // See AdminPanelProvider for why one self-hosted stylesheet now
             // serves both languages instead of a link swapped by locale.
+            // portal-theme.css is plain CSS on Filament's fi-* hook classes
+            // plus a handful of hp-* components for our own Blade views —
+            // no build step, and nothing in it is a literal colour: the
+            // :root block before it, generated from PortalTheme::TOKENS,
+            // is where every value comes from. The ?v= hash busts the
+            // browser cache on deploy without a manifest.
             ->renderHook(
                 PanelsRenderHook::HEAD_END,
-                fn () => new HtmlString('<link rel="stylesheet" href="/css/brand.css"><style>:root{--font-family:"Roboto","Vazirmatn",sans-serif}</style>'),
+                fn () => new HtmlString(
+                    '<link rel="stylesheet" href="/css/brand.css">'
+                    . '<style>' . PortalTheme::rootCss() . ':root{--font-family:"Roboto","Vazirmatn",sans-serif}</style>'
+                    . '<link rel="stylesheet" href="/css/portal-theme.css?v=' . PortalTheme::stylesheetVersion() . '">'
+                    // Filament persists the sidebar's open state with a
+                    // default of open, so a merchant's first visit from a
+                    // phone opened onto a full-screen menu instead of their
+                    // dashboard. Below lg the sidebar is a drawer; start it
+                    // closed there. On desktop this panel's sidebar is not
+                    // collapsible, so the value has no effect at that width.
+                    . "<script>try{if(matchMedia('(max-width: 1023px)').matches)localStorage.setItem('isOpen','false')}catch(e){}</script>"
+                ),
             )
             // App\Filament\Customer\Pages\Dashboard (extends Filament's own)
             // now lives inside the discoverPages() directory below, so it's

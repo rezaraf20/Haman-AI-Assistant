@@ -26,9 +26,16 @@ class ApiKeys extends Page implements HasTable {
     public static function getNavigationLabel(): string { return __('panel.api_keys_nav'); }
     public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_account'); }
     public function getTitle(): string { return __('panel.my_api_keys_title'); }
+    public function getSubheading(): ?string { return __('portal.page_api_keys'); }
 
     public function table(Table $table): Table {
         return $table
+            // Zebra rows and a sentence instead of Filament's generic
+            // "no records" — see portal-theme.css for the header tint.
+            ->striped()
+            ->emptyStateIcon('heroicon-o-key')
+            ->emptyStateHeading(__('portal.empty_api_keys_title'))
+            ->emptyStateDescription(__('portal.empty_api_keys_desc'))
             ->query(fn () => ApiKey::query()->where('tenant_id', auth()->user()->tenant_id))
             ->columns([
                 TextColumn::make('name')->label(__('common.name')),

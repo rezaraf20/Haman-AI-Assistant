@@ -29,13 +29,14 @@ class Leads extends Page {
     public static function getNavigationLabel(): string { return __('leads.nav'); }
     public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_chatbots'); }
     public function getTitle(): string { return __('leads.nav'); }
+    public function getSubheading(): ?string { return __('portal.page_leads'); }
 
     // Deliberately no getNavigationBadge() here, unlike Tickets/TenantResource
     // — Filament renders the nav on every customer-portal page, not just this
     // one, so a badge here would mean 3 extra queries (schema switch + count
     // + reset) on every single page load platform-wide just to show a
-    // number nobody explicitly asked for. The dashboard's own "new leads
-    // this week" card (CustomerStatsOverview) already surfaces this without
+    // number nobody explicitly asked for. The dashboard's quick-actions
+    // card (QuickActionsWidget) already surfaces "new leads this week" without
     // that per-page cost, reusing CustomerDashboardData's single shared
     // schema switch instead of a standalone one.
 
@@ -103,6 +104,16 @@ class Leads extends Page {
 
     public function conversationUrl(string $conversationId): string {
         return Conversations::getUrl() . '?id=' . urlencode($conversationId);
+    }
+
+    protected function getHeaderActions(): array {
+        return [
+            \Filament\Actions\Action::make('export_csv')
+                ->label(__('leads.export_csv'))
+                ->icon('heroicon-o-arrow-down-tray')
+                ->color('gray')
+                ->action(fn () => $this->exportCsv()),
+        ];
     }
 
     public function exportCsv() {

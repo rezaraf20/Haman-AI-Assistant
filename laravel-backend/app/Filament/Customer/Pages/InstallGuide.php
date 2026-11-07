@@ -25,6 +25,7 @@ class InstallGuide extends Page
     public static function getNavigationLabel(): string { return __('install_guide.nav'); }
     public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_chatbots'); }
     public function getTitle(): string { return __('install_guide.title'); }
+    public function getSubheading(): ?string { return __('portal.page_install_guide'); }
 
     /** A badge only while there is something left to do. */
     public static function getNavigationBadge(): ?string
@@ -95,7 +96,7 @@ class InstallGuide extends Page
             ->get(['id', 'name', 'key_prefix', 'last_used_at', 'chatbot_id']);
     }
 
-    public function pluginDownloadUrl(): string
+    public static function pluginDownloadUrl(): string
     {
         return url('/downloads/haman-ai-chatbot.zip');
     }

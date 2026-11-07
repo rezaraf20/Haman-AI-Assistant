@@ -1,46 +1,47 @@
 @php
+    use App\Support\Numbers;
     $data = $this->getUsageData();
+    $meters = [
+        ['title' => __('chatbot.token_usage_heading'), 'used' => $data['tokens']['used'], 'limit' => $data['tokens']['limit'], 'unit' => __('chatbot.tokens_unit'), 'ai' => true],
+        ['title' => __('chatbot.message_usage_heading'), 'used' => $data['messages']['used'], 'limit' => $data['messages']['limit'], 'unit' => __('chatbot.messages_unit'), 'ai' => false],
+    ];
 @endphp
 <x-filament-panels::page>
-    <div class="space-y-6">
-        <x-filament::section>
-            <x-slot name="heading">{{ __('chatbot.token_usage_heading') }}</x-slot>
-            @php
-                $used  = $data['tokens']['used'];
-                $limit = $data['tokens']['limit'];
-                $pct   = $limit ? min(100, round(($used / max($limit, 1)) * 100)) : 0;
-            @endphp
-            <p class="mb-2">{{ number_format($used) }} / {{ $limit ? number_format($limit) : __('common.unlimited') }} {{ __('chatbot.tokens_unit') }}</p>
-            @if ($limit)
-                <div class="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
-                    <div class="h-2.5 rounded-full {{ $pct >= 100 ? 'bg-danger-500' : 'bg-primary-500' }}" style="width: {{ $pct }}%"></div>
+    <div class="hp-stack">
+        <div class="hp-grid hp-grid--wide">
+            @foreach ($meters as $m)
+                @php $pct = $m['limit'] ? min(100, (int) round($m['used'] / max($m['limit'], 1) * 100)) : null; @endphp
+                <div class="hp-card hp-meter">
+                    <div class="hp-meter__head">
+                        <h3 class="hp-card__title">{{ $m['title'] }}</h3>
+                        @if ($pct !== null)
+                            <span class="hp-small hp-muted">{{ __('portal.percent', ['value' => Numbers::format($pct)]) }}</span>
+                        @endif
+                    </div>
+                    <p class="hp-strong hp-m0">
+                        {{ Numbers::format($m['used']) }} / {{ $m['limit'] ? Numbers::format($m['limit']) : __('common.unlimited') }} {{ $m['unit'] }}
+                    </p>
+                    @if ($pct !== null)
+                        <div class="hp-meter__track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ $pct }}" aria-label="{{ $m['title'] }}">
+                            <div class="hp-meter__fill {{ $pct >= 100 ? 'hp-meter__fill--danger' : '' }}" style="width: {{ $pct }}%"></div>
+                        </div>
+                        @if ($pct >= 100)
+                            <span class="hp-badge hp-badge--danger">{{ __('portal.meter_quota_exhausted') }}</span>
+                        @endif
+                    @endif
                 </div>
-            @endif
-        </x-filament::section>
+            @endforeach
+        </div>
 
-        <x-filament::section>
-            <x-slot name="heading">{{ __('chatbot.message_usage_heading') }}</x-slot>
-            @php
-                $mUsed  = $data['messages']['used'];
-                $mLimit = $data['messages']['limit'];
-                $mPct   = $mLimit ? min(100, round(($mUsed / max($mLimit, 1)) * 100)) : 0;
-            @endphp
-            <p class="mb-2">{{ number_format($mUsed) }} / {{ $mLimit ? number_format($mLimit) : __('common.unlimited') }} {{ __('chatbot.messages_unit') }}</p>
-            @if ($mLimit)
-                <div class="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
-                    <div class="h-2.5 rounded-full {{ $mPct >= 100 ? 'bg-danger-500' : 'bg-primary-500' }}" style="width: {{ $mPct }}%"></div>
-                </div>
-            @endif
-        </x-filament::section>
+        <div class="hp-card hp-meter">
+            <div class="hp-meter__head">
+                <h3 class="hp-card__title">{{ __('chatbot.bonus_tokens_heading') }}</h3>
+                <span class="hp-badge hp-badge--neutral">{{ __('portal.meter_bonus_no_expiry') }}</span>
+            </div>
+            <p class="hp-strong hp-m0">{{ __('portal.meter_bonus_line', ['amount' => Numbers::format($data['bonus_tokens'])]) }}</p>
+            <span class="hp-small hp-muted">{{ __('chatbot.bonus_tokens_desc') }}</span>
+        </div>
 
-        @if ($data['bonus_tokens'] > 0)
-            <x-filament::section>
-                <x-slot name="heading">{{ __('chatbot.bonus_tokens_heading') }}</x-slot>
-                <p class="text-2xl font-bold">{{ number_format($data['bonus_tokens']) }}</p>
-                <p class="text-xs text-gray-500 mt-1">{{ __('chatbot.bonus_tokens_desc') }}</p>
-            </x-filament::section>
-        @endif
-
-        <p class="text-sm text-gray-500">{{ __('chatbot.monthly_reset_date') }} {{ \App\Support\Jalali::date($data['resets_at']) }}</p>
+        <p class="hp-small hp-muted hp-m0">{{ __('chatbot.monthly_reset_date') }} {{ \App\Support\Jalali::date($data['resets_at']) }}</p>
     </div>
 </x-filament-panels::page>

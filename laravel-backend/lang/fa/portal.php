@@ -1,0 +1,136 @@
+<?php
+// Customer portal (/portal) copy added with the portal redesign: the
+// dashboard's welcome header, stat cards, usage meters, empty states and
+// quick actions, plus each page's one-line description. Older portal
+// strings stay where they were (dashboard.php, chatbot.php, …).
+return [
+    // ── Dashboard header ──
+    'welcome_heading' => 'سلام، :name',
+    'welcome_heading_anonymous' => 'خوش آمدید',
+    'welcome_plan' => 'پلن :name',
+    'welcome_trial_ends' => 'پایان دوره‌ی آزمایشی: :date',
+    'welcome_trial_ended' => 'دوره‌ی آزمایشی در :date تمام شد',
+    'welcome_period_ends' => 'پایان دوره‌ی جاری: :date',
+
+    // ── Stat cards ──
+    'percent' => ':value٪',
+    'stat_conversations' => 'گفتگوهای این ماه',
+    'stat_quota_used' => 'سهمیه‌ی مصرف‌شده',
+    'stat_unanswered' => 'سوال‌های بی‌پاسخ این ماه',
+    'stat_through_yesterday' => 'از اول ماه تا پایان دیروز — آمار هر شب به‌روز می‌شود',
+    'stat_quota_foot' => 'ریست در :days روز',
+    'stat_quota_unlimited_foot' => 'پلن شما سقف توکن ماهانه ندارد',
+    'stat_wallet_month_change' => 'تغییر این ماه: :amount',
+    'stat_wallet_no_transactions' => 'این ماه تراکنشی ثبت نشده',
+    'trend_up' => ':pct٪ بیشتر از همین بازه‌ی ماه قبل',
+    'trend_down' => ':pct٪ کمتر از همین بازه‌ی ماه قبل',
+    'trend_same' => 'بدون تغییر نسبت به همین بازه‌ی ماه قبل',
+    'trend_from_zero' => 'در همین بازه‌ی ماه قبل صفر بود',
+    'trend_first_day' => 'امروز روز اول ماه است؛ مقایسه از فردا',
+
+    // ── Usage meters ──
+    'meter_quota_title' => 'سهمیه‌ی این ماه',
+    'meter_quota_line' => ':used از :limit توکن',
+    'meter_quota_unlimited' => 'نامحدود',
+    'meter_quota_reset' => 'ریست در :days روز (:date)',
+    'meter_quota_near' => 'نزدیک به سقف سهمیه',
+    'meter_quota_exhausted' => 'سهمیه‌ی این ماه تمام شده',
+    'meter_bonus_title' => 'توکن خریداری‌شده',
+    'meter_bonus_line' => ':amount توکن',
+    'meter_bonus_no_expiry' => 'بدون انقضا',
+
+    // ── Charts ──
+    'chart_daily_desc' => 'تعداد گفتگوهای شروع‌شده در هر روز',
+    'chart_daily_empty_title' => 'هنوز داده‌ی روزانه‌ای ثبت نشده',
+    'chart_daily_empty_desc' => 'آمار هر شب برای روز قبل محاسبه می‌شود. بعد از اولین گفتگوها، نمودار از فردا اینجا نمایش داده می‌شود.',
+    'chart_intents_title' => 'سوال‌ها بر اساس موضوع (۳۰ روز گذشته)',
+    'chart_intents_desc' => 'دسته‌بندی خودکار هوش مصنوعی از سوال‌های بازدیدکنندگان',
+    'chart_intents_label' => 'تعداد سوال',
+
+    // ── Chatbot status ──
+    'chatbot_status_awaiting_plugin' => 'در انتظار اتصال افزونه',
+    'chatbot_status_documents' => ':count سند',
+    'chatbot_status_manage' => 'مدیریت',
+    'chatbot_status_empty' => 'هنوز چت‌باتی ندارید.',
+
+    // ── Lists ──
+    'unanswered_desc' => 'پنج سوال آخری که بات جوابی برایشان پیدا نکرد',
+    'top_topics_desc' => 'پرتکرارترین سوال‌های این ماه',
+
+    // ── Quick actions ──
+    'quick_title' => 'اقدامات سریع',
+    'quick_api_key' => 'کلید API (نمایش و کپی)',
+    'quick_download_plugin' => 'دانلود افزونه‌ی وردپرس',
+    'quick_sync' => 'همگام‌سازی محتوا',
+    'quick_business_profile' => 'ویرایش پروفایل کسب‌وکار',
+    'quick_new_leads' => 'لیدهای ۷ روز گذشته: :count',
+    'copied' => 'کپی شد',
+
+    // ── Onboarding checklist ──
+    'onboarding_progress' => ':done از :total مرحله انجام شده',
+    'onboarding_done' => 'انجام شده',
+    'onboarding_todo' => 'انجام نشده',
+    'onboarding_chatbot_hint' => 'نوع چت‌بات را انتخاب کنید؛ هزینه از کیف پول کم می‌شود.',
+    'onboarding_profile' => 'پروفایل کسب‌وکار پر شد',
+    'onboarding_profile_hint' => 'آدرس، راه تماس، ساعت کاری و توضیح کسب‌وکار — تا بات به سوال‌های پایه جواب بدهد.',
+    'onboarding_needs_chatbot' => 'بعد از ساخت چت‌بات فعال می‌شود.',
+    'onboarding_plugin_hint' => 'افزونه را روی سایت وردپرسی نصب کنید و کلید API را در تنظیماتش بچسبانید.',
+    'onboarding_plugin_cta' => 'راهنمای نصب',
+    'onboarding_sync_hint' => 'بعد از اتصال، افزونه محصولات و صفحات سایت را می‌فرستد؛ از صفحه‌ی چت‌بات‌ها هم می‌شود دستی شروعش کرد.',
+    'onboarding_sync_cta' => 'چت‌بات‌های من',
+    'onboarding_conversation_hint' => 'ویجت گفتگو را روی سایت باز کنید و یک سوال بپرسید.',
+    'onboarding_conversation_cta' => 'باز کردن سایت',
+
+    // ── One-line page descriptions (Filament page subheading) ──
+    'page_my_chatbots' => 'چت‌بات‌هایتان، وضعیت هر کدام و تمدید.',
+    'page_datasheets' => 'فایل‌های PDF محصولات که بات از آن‌ها جواب می‌دهد.',
+    'page_conversation' => 'متن کامل یک گفتگو بین بازدیدکننده و بات.',
+    'page_demand_gap' => 'سوال‌هایی که مشتری‌ها پرسیدند و بات جوابی برایشان نداشت.',
+    'page_leads' => 'راه‌های تماسی که بازدیدکننده‌ها در گفتگو گذاشتند.',
+    'page_widget_settings' => 'ظاهر ویجت، پیام‌ها و پروفایل کسب‌وکار این چت‌بات.',
+    'page_sync_settings' => 'چه محتوایی از سایت وارد دانش بات شود.',
+    'page_wallet' => 'موجودی، شارژ کیف پول و تاریخچه‌ی تراکنش‌ها.',
+    'page_change_plan' => 'پلن فعلی شما و پلن‌هایی که می‌توانید انتخاب کنید.',
+    'page_profile' => 'نام، راه‌های تماس و زبان پنل.',
+    'page_api_keys' => 'کلیدهایی که افزونه‌ی وردپرس با آن‌ها به حساب شما وصل می‌شود.',
+    'page_usage' => 'مصرف توکن و پیام در دوره‌ی جاری.',
+    'page_buy_tokens' => 'بسته‌های توکن اضافه، بدون تاریخ انقضا.',
+    'page_buy_chatbot' => 'یک چت‌بات تازه بسازید؛ هزینه از کیف پول پرداخت می‌شود.',
+    'page_tickets' => 'درخواست‌های پشتیبانی شما و پاسخ‌هایشان.',
+    'page_install_guide' => 'مراحل نصب و اتصال افزونه روی سایت وردپرسی شما.',
+    'page_trends' => 'موضوعات رو به رشد و رو به افت در سوال‌های مشتری‌ها.',
+    'page_suggestions' => 'کارهای پیشنهادی بر اساس آمار واقعی گفتگوها.',
+    'page_product_requests' => 'محصولاتی که مشتری‌ها خواستند و نتوانستند بخرند.',
+    'page_chat_orders' => 'سفارش‌هایی که از داخل گفتگو ساخته شد، با وضعیت پرداخت.',
+
+    // ── Table empty states ──
+    'empty_chatbots_title' => 'هنوز چت‌باتی نساخته‌اید',
+    'empty_chatbots_desc' => 'با ساخت اولین چت‌بات، کلید API و راهنمای نصب در اختیارتان قرار می‌گیرد.',
+    'empty_api_keys_title' => 'کلید API‌ای ندارید',
+    'empty_api_keys_desc' => 'برای هر چت‌بات، هنگام ساختنش یک کلید ساخته می‌شود.',
+    'empty_token_packages_title' => 'فعلاً بسته‌ی توکنی برای فروش نیست',
+    'empty_token_packages_desc' => 'بسته‌ها را مدیر پلتفرم تعریف می‌کند؛ بعداً دوباره سر بزنید.',
+    'empty_plans_title' => 'پلنی برای انتخاب نیست',
+    'empty_plans_desc' => 'در حال حاضر پلن عمومی فعالی تعریف نشده است.',
+    'empty_tickets_title' => 'درخواست پشتیبانی‌ای ندارید',
+    'empty_tickets_desc' => 'درخواست‌هایی که ثبت کنید و پاسخ‌هایشان اینجا نمایش داده می‌شوند.',
+    'empty_wallet_tx_title' => 'هنوز تراکنشی ثبت نشده',
+    'empty_wallet_tx_desc' => 'شارژ کیف پول و پرداخت‌ها اینجا نمایش داده می‌شوند.',
+
+    // ── Page bodies ──
+    'cost_unpriced' => 'قیمت‌گذاری نشده',
+    'datasheets_empty_desc' => 'فایل‌های PDF پیوست محصولات، بعد از sync اینجا با وضعیت پردازششان نمایش داده می‌شوند.',
+    'leads_empty_desc' => 'وقتی بازدیدکننده‌ای در گفتگو شماره یا ایمیل بگذارد، اینجا ثبت می‌شود.',
+    'demand_gap_share' => ':pct٪ از کل سوال‌ها',
+
+    // ── Buy chatbot / buy tokens (moved out of the views) ──
+    'buy_chatbot_created' => 'چت‌بات «:name» با موفقیت ساخته شد',
+    'buy_chatbot_key_once' => 'این کلید فقط همین یک‌بار نمایش داده می‌شود. آن را کپی کنید و در تنظیمات افزونه‌ی وردپرس سایت خود (Settings → Haman AI → API Key) وارد کنید.',
+    'buy_wallet_balance' => 'موجودی کیف پول',
+    'buy_chatbot_cost' => 'هزینه‌ی این خرید',
+    'buy_chatbot_submit' => 'خرید و پرداخت از کیف پول',
+    'buy_tokens_status' => 'وضعیت فعلی',
+    'buy_tokens_bonus_balance' => 'موجودی توکن خریداری‌شده',
+    'buy_tokens_note' => 'این توکن‌ها منقضی نمی‌شوند و تا زمان مصرف باقی می‌مانند.',
+    'buy_tokens_packages' => 'بسته‌های توکن',
+];

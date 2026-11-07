@@ -36,7 +36,7 @@
             </div>
             <div class="mt-1 text-sm">
                 {{ __('trends.questions_total') }}:
-                <strong>{{ number_format($data['user_messages']) }}</strong>
+                <strong>{{ \App\Support\Numbers::format($data['user_messages']) }}</strong>
                 @if ($data['messages_change'] !== null)
                     <span @class(['text-success-600' => $data['messages_change'] >= 0, 'text-danger-600' => $data['messages_change'] < 0])>
                         ({{ $this->changeText($data['messages_change']) }})
@@ -52,7 +52,7 @@
                 <div class="text-center py-6">
                     <h3 class="text-base font-semibold text-gray-700">{{ __('trends.low_data_title') }}</h3>
                     <p class="mt-2 text-sm text-gray-500 max-w-xl mx-auto">
-                        {{ __('trends.low_data_body', ['count' => number_format($data['user_messages']), 'min' => $data['min_messages']]) }}
+                        {{ __('trends.low_data_body', ['count' => \App\Support\Numbers::format($data['user_messages']), 'min' => $data['min_messages']]) }}
                     </p>
                 </div>
             </x-filament::section>
@@ -70,17 +70,17 @@
             @if (! $data['seasonal']['available'])
                 <p class="text-sm text-gray-500">{{ __('trends.seasonal_unavailable') }}</p>
                 <p class="mt-1 text-xs text-gray-400">
-                    {{ __('trends.seasonal_progress', ['days' => number_format($data['history_days'])]) }}
+                    {{ __('trends.seasonal_progress', ['days' => \App\Support\Numbers::format($data['history_days'])]) }}
                 </p>
             @else
                 <div class="flex flex-wrap gap-8">
                     <div>
                         <div class="text-xs text-gray-500">{{ __('trends.seasonal_this_month') }}</div>
-                        <div class="text-2xl font-semibold">{{ number_format($data['seasonal']['current']) }}</div>
+                        <div class="text-2xl font-semibold">{{ \App\Support\Numbers::format($data['seasonal']['current']) }}</div>
                     </div>
                     <div>
                         <div class="text-xs text-gray-500">{{ __('trends.seasonal_last_year') }}</div>
-                        <div class="text-2xl font-semibold">{{ number_format($data['seasonal']['last_year']) }}</div>
+                        <div class="text-2xl font-semibold">{{ \App\Support\Numbers::format($data['seasonal']['last_year']) }}</div>
                     </div>
                     <div>
                         <div class="text-xs text-gray-500">{{ __('trends.col_change') }}</div>

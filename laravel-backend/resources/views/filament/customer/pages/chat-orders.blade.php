@@ -24,7 +24,7 @@
                                         <span dir="ltr" class="inline-block">#{{ $order->woo_order_id }}</span>
                                     </td>
                                     <td class="py-2 pe-4">
-                                        <span dir="ltr" class="inline-block">{{ number_format((float) $order->total) }} {{ $order->currency }}</span>
+                                        <span dir="ltr" class="inline-block">{{ \App\Support\Numbers::format((float) $order->total) }} {{ $order->currency }}</span>
                                     </td>
                                     <td class="py-2 pe-4">
                                         @php

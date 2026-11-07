@@ -1,0 +1,136 @@
+<?php
+// Customer portal (/portal) copy added with the portal redesign: the
+// dashboard's welcome header, stat cards, usage meters, empty states and
+// quick actions, plus each page's one-line description. Older portal
+// strings stay where they were (dashboard.php, chatbot.php, …).
+return [
+    // ── Dashboard header ──
+    'welcome_heading' => 'Hello, :name',
+    'welcome_heading_anonymous' => 'Welcome',
+    'welcome_plan' => ':name plan',
+    'welcome_trial_ends' => 'Trial ends :date',
+    'welcome_trial_ended' => 'Trial ended :date',
+    'welcome_period_ends' => 'Current period ends :date',
+
+    // ── Stat cards ──
+    'percent' => ':value%',
+    'stat_conversations' => 'Conversations this month',
+    'stat_quota_used' => 'Quota used',
+    'stat_unanswered' => 'Unanswered questions this month',
+    'stat_through_yesterday' => 'Month to date through yesterday — updated nightly',
+    'stat_quota_foot' => 'Resets in :days days',
+    'stat_quota_unlimited_foot' => 'Your plan has no monthly token cap',
+    'stat_wallet_month_change' => 'This month: :amount',
+    'stat_wallet_no_transactions' => 'No transactions this month',
+    'trend_up' => ':pct% more than the same days last month',
+    'trend_down' => ':pct% fewer than the same days last month',
+    'trend_same' => 'Same as the same days last month',
+    'trend_from_zero' => 'Was zero over the same days last month',
+    'trend_first_day' => 'First day of the month — comparison starts tomorrow',
+
+    // ── Usage meters ──
+    'meter_quota_title' => "This month's quota",
+    'meter_quota_line' => ':used of :limit tokens',
+    'meter_quota_unlimited' => 'Unlimited',
+    'meter_quota_reset' => 'Resets in :days days (:date)',
+    'meter_quota_near' => 'Approaching your quota',
+    'meter_quota_exhausted' => "This month's quota is used up",
+    'meter_bonus_title' => 'Purchased tokens',
+    'meter_bonus_line' => ':amount tokens',
+    'meter_bonus_no_expiry' => 'Never expire',
+
+    // ── Charts ──
+    'chart_daily_desc' => 'Conversations started each day',
+    'chart_daily_empty_title' => 'No daily data recorded yet',
+    'chart_daily_empty_desc' => "Statistics are calculated every night for the previous day. After your first conversations, the chart appears here the next day.",
+    'chart_intents_title' => 'Questions by topic (last 30 days)',
+    'chart_intents_desc' => "The AI's automatic classification of visitor questions",
+    'chart_intents_label' => 'Questions',
+
+    // ── Chatbot status ──
+    'chatbot_status_awaiting_plugin' => 'Awaiting plugin connection',
+    'chatbot_status_documents' => ':count documents',
+    'chatbot_status_manage' => 'Manage',
+    'chatbot_status_empty' => "You don't have a chatbot yet.",
+
+    // ── Lists ──
+    'unanswered_desc' => "The last five questions the bot couldn't find an answer to",
+    'top_topics_desc' => "This month's most frequent questions",
+
+    // ── Quick actions ──
+    'quick_title' => 'Quick actions',
+    'quick_api_key' => 'API key (show and copy)',
+    'quick_download_plugin' => 'Download the WordPress plugin',
+    'quick_sync' => 'Sync content',
+    'quick_business_profile' => 'Edit business profile',
+    'quick_new_leads' => 'Leads in the last 7 days: :count',
+    'copied' => 'Copied',
+
+    // ── Onboarding checklist ──
+    'onboarding_progress' => ':done of :total steps done',
+    'onboarding_done' => 'done',
+    'onboarding_todo' => 'not done',
+    'onboarding_chatbot_hint' => 'Pick a chatbot type; the cost is taken from your wallet.',
+    'onboarding_profile' => 'Business profile filled in',
+    'onboarding_profile_hint' => 'Address, contact, working hours and a description — so the bot can answer the basics.',
+    'onboarding_needs_chatbot' => 'Available once you have a chatbot.',
+    'onboarding_plugin_hint' => 'Install the plugin on your WordPress site and paste your API key into its settings.',
+    'onboarding_plugin_cta' => 'Installation guide',
+    'onboarding_sync_hint' => 'Once connected, the plugin sends your products and pages; you can also start it by hand from My Chatbots.',
+    'onboarding_sync_cta' => 'My chatbots',
+    'onboarding_conversation_hint' => 'Open the chat widget on your site and ask it a question.',
+    'onboarding_conversation_cta' => 'Open your site',
+
+    // ── One-line page descriptions (Filament page subheading) ──
+    'page_my_chatbots' => 'Your chatbots, their status and renewal.',
+    'page_datasheets' => 'Product PDF files the bot answers from.',
+    'page_conversation' => 'The full transcript of one visitor conversation.',
+    'page_demand_gap' => 'Questions customers asked that the bot had no answer for.',
+    'page_leads' => 'Contact details visitors left in a conversation.',
+    'page_widget_settings' => "This chatbot's widget look, messages and business profile.",
+    'page_sync_settings' => "Which site content goes into the bot's knowledge.",
+    'page_wallet' => 'Balance, top-ups and transaction history.',
+    'page_change_plan' => 'Your current plan and the plans you can switch to.',
+    'page_profile' => 'Your name, contact details and panel language.',
+    'page_api_keys' => 'The keys the WordPress plugin uses to connect to your account.',
+    'page_usage' => 'Token and message usage in the current period.',
+    'page_buy_tokens' => 'Extra token packages that never expire.',
+    'page_buy_chatbot' => 'Create a new chatbot, paid from your wallet.',
+    'page_tickets' => 'Your support requests and their replies.',
+    'page_install_guide' => 'Steps to install and connect the plugin on your WordPress site.',
+    'page_trends' => "Rising and fading topics in your customers' questions.",
+    'page_suggestions' => 'Suggested actions, each based on real conversation counts.',
+    'page_product_requests' => "Products customers asked for and couldn't buy.",
+    'page_chat_orders' => 'Orders created from a conversation, with payment status.',
+
+    // ── Table empty states ──
+    'empty_chatbots_title' => "You haven't created a chatbot yet",
+    'empty_chatbots_desc' => 'Create your first chatbot to get an API key and the installation guide.',
+    'empty_api_keys_title' => 'No API keys yet',
+    'empty_api_keys_desc' => 'A key is created for each chatbot when you create it.',
+    'empty_token_packages_title' => 'No token packages on sale right now',
+    'empty_token_packages_desc' => 'Packages are set up by the platform team; check back later.',
+    'empty_plans_title' => 'No plans to choose from',
+    'empty_plans_desc' => 'There are no active public plans at the moment.',
+    'empty_tickets_title' => 'No support requests',
+    'empty_tickets_desc' => 'Requests you open and their replies will appear here.',
+    'empty_wallet_tx_title' => 'No transactions yet',
+    'empty_wallet_tx_desc' => 'Wallet top-ups and payments will appear here.',
+
+    // ── Page bodies ──
+    'cost_unpriced' => 'Not priced',
+    'datasheets_empty_desc' => 'PDF files attached to your products appear here after a sync, with their processing status.',
+    'leads_empty_desc' => 'When a visitor leaves a phone number or email in a conversation, it appears here.',
+    'demand_gap_share' => ':pct% of all questions',
+
+    // ── Buy chatbot / buy tokens (moved out of the views) ──
+    'buy_chatbot_created' => 'Chatbot “:name” created',
+    'buy_chatbot_key_once' => "This key is shown only once. Copy it into your WordPress plugin's settings (Settings → Haman AI → API Key).",
+    'buy_wallet_balance' => 'Wallet balance',
+    'buy_chatbot_cost' => 'Cost of this purchase',
+    'buy_chatbot_submit' => 'Buy and pay from wallet',
+    'buy_tokens_status' => 'Current balance',
+    'buy_tokens_bonus_balance' => 'Purchased token balance',
+    'buy_tokens_note' => 'These tokens never expire and stay until they are used.',
+    'buy_tokens_packages' => 'Token packages',
+];

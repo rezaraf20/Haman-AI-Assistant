@@ -25,6 +25,7 @@ class Wallet extends Page implements HasForms, HasTable {
     public static function getNavigationLabel(): string { return __('wallet.nav'); }
     public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_wallet'); }
     public function getTitle(): string { return __('wallet.nav'); }
+    public function getSubheading(): ?string { return __('portal.page_wallet'); }
 
     public ?array $data = [];
 
@@ -115,6 +116,12 @@ class Wallet extends Page implements HasForms, HasTable {
 
     public function table(Table $table): Table {
         return $table
+            // Zebra rows and a sentence instead of Filament's generic
+            // "no records" — see portal-theme.css for the header tint.
+            ->striped()
+            ->emptyStateIcon('heroicon-o-banknotes')
+            ->emptyStateHeading(__('portal.empty_wallet_tx_title'))
+            ->emptyStateDescription(__('portal.empty_wallet_tx_desc'))
             ->query(fn () => WalletTransaction::query()->where('tenant_id', auth()->user()->tenant_id))
             ->columns([
                 TextColumn::make('created_at')->label(__('wallet.date'))->formatStateUsing(fn ($state) => Jalali::dateTime($state)),
@@ -130,7 +137,7 @@ class Wallet extends Page implements HasForms, HasTable {
                     default => $state,
                 }),
                 TextColumn::make('amount_toman')->label(__('wallet.amount_toman_col'))
-                    ->formatStateUsing(fn (int $state) => number_format($state))
+                    ->formatStateUsing(fn (int $state) => \App\Support\Numbers::format($state))
                     ->color(fn (int $state) => $state >= 0 ? 'success' : 'danger'),
                 BadgeColumn::make('status')->label(__('common.status'))->colors([
                     'success' => 'completed',

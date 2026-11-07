@@ -23,6 +23,7 @@ class Tickets extends Page implements HasTable {
     public static function getNavigationLabel(): string { return __('ticket.support_nav'); }
     public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_account'); }
     public function getTitle(): string { return __('ticket.plural'); }
+    public function getSubheading(): ?string { return __('portal.page_tickets'); }
 
     // Mirrors TicketResource::getNavigationBadge() on the admin side: 'answered'
     // means the admin replied and it's now waiting on the customer, the same
@@ -42,6 +43,12 @@ class Tickets extends Page implements HasTable {
 
     public function table(Table $table): Table {
         return $table
+            // Zebra rows and a sentence instead of Filament's generic
+            // "no records" — see portal-theme.css for the header tint.
+            ->striped()
+            ->emptyStateIcon('heroicon-o-lifebuoy')
+            ->emptyStateHeading(__('portal.empty_tickets_title'))
+            ->emptyStateDescription(__('portal.empty_tickets_desc'))
             ->query(fn () => Ticket::query()->where('tenant_id', auth()->user()->tenant_id))
             ->columns([
                 TextColumn::make('subject')->label(__('ticket.subject')),
@@ -117,13 +124,14 @@ class Tickets extends Page implements HasTable {
     }
 
     private function renderThread(Ticket $ticket): string {
-        $html = '<div class="space-y-3 max-h-80 overflow-y-auto">';
+        // Same bubble component as the conversation transcript (portal-theme.css):
+        // the customer's own messages sit on the end side.
+        $html = '<div class="hp-stack hp-stack--tight hp-thread">';
         foreach ($ticket->messages as $message) {
             $who = $message->sender_type === 'admin' ? __('ticket.support_label') : __('ticket.you_label');
-            $bg  = $message->sender_type === 'admin' ? 'background:#eef2ff' : 'background:#f9fafb';
-            $html .= '<div style="padding:10px;border-radius:8px;' . $bg . '">'
-                . '<div style="font-size:11px;color:#6b7280;margin-bottom:4px">' . e($who) . ' — ' . Jalali::dateTime($message->created_at) . '</div>'
-                . '<div style="white-space:pre-wrap">' . e($message->body) . '</div>'
+            $html .= '<div class="hp-bubble' . ($message->sender_type === 'admin' ? '' : ' hp-bubble--user') . '">'
+                . '<div class="hp-bubble__meta">' . e($who) . ' — ' . Jalali::dateTime($message->created_at) . '</div>'
+                . '<div class="hp-prewrap">' . e($message->body) . '</div>'
                 . '</div>';
         }
         $html .= '</div>';

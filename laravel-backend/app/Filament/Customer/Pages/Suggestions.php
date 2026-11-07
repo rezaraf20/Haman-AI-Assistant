@@ -24,6 +24,7 @@ class Suggestions extends Page
     public static function getNavigationLabel(): string { return __('suggestions.nav'); }
     public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_chatbots'); }
     public function getTitle(): string { return __('suggestions.nav'); }
+    public function getSubheading(): ?string { return __('portal.page_suggestions'); }
 
     /**
      * A count badge is the honest way to say "you have things to act on",

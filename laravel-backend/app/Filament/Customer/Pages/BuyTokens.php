@@ -25,6 +25,7 @@ class BuyTokens extends Page implements HasTable {
     public static function getNavigationLabel(): string { return __('plan.buy_tokens_nav'); }
     public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_wallet'); }
     public function getTitle(): string { return __('plan.buy_tokens_title'); }
+    public function getSubheading(): ?string { return __('portal.page_buy_tokens'); }
 
     public function getWalletBalance(): int {
         return (int) (auth()->user()->tenant->wallet_balance_toman ?? 0);
@@ -36,12 +37,18 @@ class BuyTokens extends Page implements HasTable {
 
     public function table(Table $table): Table {
         return $table
+            // Zebra rows and a sentence instead of Filament's generic
+            // "no records" — see portal-theme.css for the header tint.
+            ->striped()
+            ->emptyStateIcon('heroicon-o-bolt')
+            ->emptyStateHeading(__('portal.empty_token_packages_title'))
+            ->emptyStateDescription(__('portal.empty_token_packages_desc'))
             ->query(fn () => TokenPackage::query()->active())
             ->columns([
                 TextColumn::make('name')->label(__('plan.package_name')),
                 TextColumn::make('chatbot_type')->label(__('chatbot.type'))->badge()->placeholder(__('plan.all_chatbot_types')),
                 TextColumn::make('token_amount')->label(__('plan.token_amount'))
-                    ->formatStateUsing(fn (int $state) => number_format($state)),
+                    ->formatStateUsing(fn (int $state) => \App\Support\Numbers::format($state)),
                 TextColumn::make('price_toman')->label(__('plan.price'))
                     ->formatStateUsing(fn (int $state) => Money::forCurrentTenant($state)),
             ])
@@ -53,7 +60,7 @@ class BuyTokens extends Page implements HasTable {
                     ->requiresConfirmation()
                     ->modalDescription(fn (TokenPackage $record) => __('plan.buy_confirm_description', [
                         'price' => Money::forCurrentTenant($record->price_toman),
-                        'amount' => number_format($record->token_amount),
+                        'amount' => \App\Support\Numbers::format($record->token_amount),
                     ]))
                     ->action(fn (TokenPackage $record) => $this->buy($record)),
             ])

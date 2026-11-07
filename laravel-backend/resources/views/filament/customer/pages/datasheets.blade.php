@@ -1,62 +1,64 @@
 @php
     $attachments = $this->getAttachments();
+    $tone = fn ($s) => match ($s) { 'indexed' => 'success', 'skipped' => 'warning', 'failed' => 'danger', 'processing' => 'info', default => 'neutral' };
+    $label = fn ($s) => match ($s) {
+        'indexed' => __('datasheets.status_indexed'),
+        'skipped' => __('datasheets.status_skipped'),
+        'failed' => __('datasheets.status_failed'),
+        'processing' => __('datasheets.status_processing'),
+        default => __('datasheets.status_pending'),
+    };
 @endphp
 <x-filament-panels::page>
-    <div class="space-y-6">
-        <x-filament::section>
-            @if (empty($attachments))
-                <p class="text-sm text-gray-500">{{ __('datasheets.empty') }}</p>
-            @else
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="text-start text-gray-500 border-b">
-                                <th class="py-2 pe-4 text-start">{{ __('datasheets.col_file') }}</th>
-                                <th class="py-2 pe-4 text-start">{{ __('datasheets.col_product') }}</th>
-                                <th class="py-2 pe-4 text-start">{{ __('datasheets.col_status') }}</th>
-                                <th class="py-2 pe-4 text-start">{{ __('datasheets.col_pages') }}</th>
-                                <th class="py-2 pe-4 text-start">{{ __('datasheets.col_cost') }}</th>
-                                <th class="py-2 text-start">{{ __('common.created_at') }}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach ($attachments as $doc)
-                                <tr class="border-b last:border-0" wire:key="doc-{{ $doc['id'] }}">
-                                    <td class="py-2 pe-4">{{ $doc['title'] }}</td>
-                                    <td class="py-2 pe-4 text-gray-500">{{ $doc['product_name'] ?? '—' }}</td>
-                                    <td class="py-2 pe-4">
-                                        @php
-                                            $badgeColor = match ($doc['status']) {
-                                                'indexed' => 'bg-success-100 text-success-700',
-                                                'skipped' => 'bg-warning-100 text-warning-700',
-                                                'failed' => 'bg-danger-100 text-danger-700',
-                                                'processing' => 'bg-info-100 text-info-700',
-                                                default => 'bg-gray-100 text-gray-700',
-                                            };
-                                            $badgeLabel = match ($doc['status']) {
-                                                'indexed' => __('datasheets.status_indexed'),
-                                                'skipped' => __('datasheets.status_skipped'),
-                                                'failed' => __('datasheets.status_failed'),
-                                                'processing' => __('datasheets.status_processing'),
-                                                default => __('datasheets.status_pending'),
-                                            };
-                                        @endphp
-                                        <span class="px-2 py-0.5 rounded text-xs {{ $badgeColor }}">{{ $badgeLabel }}</span>
-                                        @if ($doc['error_message'])
-                                            <div class="text-xs text-gray-400 mt-1">{{ $doc['error_message'] }}</div>
-                                        @endif
-                                    </td>
-                                    <td class="py-2 pe-4 text-gray-500">{{ $doc['page_count'] ?? '—' }}</td>
-                                    <td class="py-2 pe-4 text-gray-500">
-                                        {{ $doc['cost_toman'] !== null ? \App\Support\Numbers::format($doc['cost_toman']) . ' ' . __('common.toman') : '—' }}
-                                    </td>
-                                    <td class="py-2 text-gray-500">{{ \App\Support\Jalali::dateTime($doc['created_at']) }}</td>
-                                </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
-                </div>
-            @endif
-        </x-filament::section>
-    </div>
+    @if (empty($attachments))
+        <div class="hp-card">
+            <div class="hp-empty">
+                <x-filament::icon icon="heroicon-o-document-text" class="hp-empty__icon" />
+                <p class="hp-empty__title">{{ __('datasheets.empty') }}</p>
+                <p class="hp-empty__desc">{{ __('portal.datasheets_empty_desc') }}</p>
+            </div>
+        </div>
+    @else
+        <div class="hp-table-wrap">
+            <table class="hp-table">
+                <thead>
+                    <tr>
+                        <th>{{ __('datasheets.col_file') }}</th>
+                        <th>{{ __('datasheets.col_product') }}</th>
+                        <th>{{ __('datasheets.col_status') }}</th>
+                        <th class="hp-num">{{ __('datasheets.col_pages') }}</th>
+                        <th class="hp-num">{{ __('datasheets.col_cost') }}</th>
+                        <th>{{ __('common.created_at') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach ($attachments as $doc)
+                        <tr wire:key="doc-{{ $doc['id'] }}">
+                            <td class="hp-strong">{{ $doc['title'] }}</td>
+                            <td class="hp-muted">{{ $doc['product_name'] ?? '—' }}</td>
+                            <td>
+                                <span class="hp-badge hp-badge--{{ $tone($doc['status']) }}">{{ $label($doc['status']) }}</span>
+                                @if ($doc['error_message'])
+                                    <div class="hp-small hp-muted">{{ $doc['error_message'] }}</div>
+                                @endif
+                            </td>
+                            <td class="hp-num">{{ $doc['page_count'] !== null ? \App\Support\Numbers::format($doc['page_count']) : '—' }}</td>
+                            {{-- 0 here means the embedding price was never configured
+                                 (EMBEDDING_PRICE_PER_1M_TOMAN), not that it was free. --}}
+                            <td class="hp-num">
+                                @if ($doc['cost_toman'] === null)
+                                    —
+                                @elseif ((float) $doc['cost_toman'] <= 0)
+                                    <span class="hp-small hp-muted">{{ __('portal.cost_unpriced') }}</span>
+                                @else
+                                    {{ \App\Support\Numbers::format($doc['cost_toman']) }} {{ __('common.toman') }}
+                                @endif
+                            </td>
+                            <td class="hp-nowrap hp-muted">{{ \App\Support\Jalali::dateTime($doc['created_at']) }}</td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+    @endif
 </x-filament-panels::page>

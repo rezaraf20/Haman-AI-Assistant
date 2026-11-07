@@ -26,6 +26,7 @@ class BuyChatbot extends Page implements HasForms {
     public static function getNavigationLabel(): string { return __('chatbot.buy_new_nav'); }
     public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_chatbots'); }
     public function getTitle(): string { return __('chatbot.buy_new_nav'); }
+    public function getSubheading(): ?string { return __('portal.page_buy_chatbot'); }
 
     public ?array $data = [];
     public ?string $newApiKey = null;

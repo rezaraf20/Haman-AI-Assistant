@@ -19,6 +19,7 @@ class Datasheets extends Page {
     public static function getNavigationLabel(): string { return __('datasheets.nav'); }
     public static function getNavigationGroup(): ?string { return __('panel.nav_group_customer_chatbots'); }
     public function getTitle(): string { return __('datasheets.title'); }
+    public function getSubheading(): ?string { return __('portal.page_datasheets'); }
 
     public function getAttachments(): array {
         $tenant = auth()->user()->tenant;
