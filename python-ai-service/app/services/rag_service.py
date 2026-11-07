@@ -77,6 +77,13 @@ GROUNDING_RULES = (
     "the source file and page number in your answer (e.g. 'according to Datasheet.pdf, "
     "page 4, ...'). Write it that way, in words: the file name and page are useful to "
     "a customer, the bracketed label is not.\n\n"
+    "When a source is marked with an item type in parentheses and a link in angle "
+    "brackets (e.g. '[Source 3] Shoe shop website (Portfolio) <https://example.com/"
+    "portfolio/shoe-shop>'), it is one of this business's own items of that type — a "
+    "portfolio project, a service, a case study. When you answer from it, say so in "
+    "words ('this is one of our portfolio projects: ...') and give its link exactly as "
+    "written there, without the angle brackets, so the customer can open it. Never "
+    "build or guess a link that isn't written in the context.\n\n"
     "Never invent specific capabilities, integrations, or supported third-party "
     "platforms/tools/software (e.g. claiming compatibility with a named e-commerce "
     "platform, CRM, or app) unless that exact name appears in the context — a generic "
@@ -159,6 +166,12 @@ GROUNDING_RULES_FA = (
     "فنی است — برای سوالاتی که از آن پاسخ داده می‌شود، نام فایل و شماره صفحه را با کلمات در پاسخت "
     "بیاور (مثلاً «طبق Datasheet.pdf، صفحه ۴، ...»). نام فایل و صفحه برای مشتری مفید است؛ "
     "برچسب داخل کروشه نه.\n\n"
+    "اگر کنار یک منبع، نوع آن داخل پرانتز و یک لینک داخل <> آمده باشد (مثلاً «[Source 3] سایت "
+    "فروشگاه کفش (نمونه کار) <https://example.com/portfolio/shoe-shop>»)، آن منبع یکی از "
+    "موارد خود این کسب‌وکار از همان نوع است — یک نمونه کار، یک خدمت، یک پروژه. وقتی از آن جواب "
+    "می‌دهی، این را با کلمات بگو («این یکی از نمونه کارهای ماست: ...») و لینکش را دقیقاً همان‌طور "
+    "که آنجا نوشته شده، بدون <>، بیاور تا مشتری بتواند بازش کند. هرگز لینکی را که در زمینه "
+    "نوشته نشده نساز یا حدس نزن.\n\n"
     "هرگز قابلیت، یکپارچه‌سازی یا پلتفرم/نرم‌افزار شخص ثالثی (مثلاً ادعای سازگاری با یک پلتفرم "
     "فروشگاهی، CRM یا اپلیکیشن خاص با نام) را از خودت نساز، مگر این‌که همان نام دقیقاً در زمینه آمده "
     "باشد — جمله‌ی کلی‌ای مثل «با فروشگاه‌های آنلاین کار می‌کند» اجازه نمی‌دهد خودت اسم پلتفرم‌های "
@@ -228,6 +241,31 @@ _INTERIM_CHECKING_MESSAGE_EN = "Checking products..."
 
 def _interim_checking_message(is_fa: bool) -> str:
     return _INTERIM_CHECKING_MESSAGE_FA if is_fa else _INTERIM_CHECKING_MESSAGE_EN
+
+
+def _source_header(index: int, meta: dict) -> str:
+    """The label a retrieved chunk carries in the prompt context.
+
+    A PDF datasheet chunk adds its page number (see the citation rule in
+    DEFAULT_SYSTEM). A chunk from a custom WordPress post type -- a
+    portfolio item, a service, a project; SyncService stores these as
+    source_type 'wordpress_cpt' with type 'cpt' in metadata -- adds the type
+    label and its link, because for a corporate site "this is one of our
+    portfolio projects, here it is" is part of the answer, and the model
+    can only give a link it can actually see. Pages and products keep the
+    label they always had.
+    """
+    title = meta.get("title", "")
+    header = f"[Source {index}]" + (f" {title}" if title else "")
+    if meta.get("page"):
+        header += f" (page {meta['page']})"
+    if meta.get("type") == "cpt":
+        label = meta.get("post_type_label") or meta.get("post_type")
+        if label:
+            header += f" ({label})"
+        if meta.get("url"):
+            header += f" <{meta['url']}>"
+    return header
 
 
 def _looks_persian(text_val: str) -> bool:
@@ -1727,10 +1765,7 @@ async def run_rag_pipeline_stream(
 
     context_parts = []
     for i, chunk in enumerate(chunks, 1):
-        meta = chunk.get("metadata", {})
-        title = meta.get("title", "")
-        page = meta.get("page")
-        header = f"[Source {i}]" + (f" {title}" if title else "") + (f" (page {page})" if page else "")
+        header = _source_header(i, chunk.get("metadata", {}))
         context_parts.append(f"{header}\n{chunk['content']}")
     context = "\n\n---\n\n".join(context_parts)
 
@@ -1933,10 +1968,7 @@ async def run_rag_pipeline(
 
     context_parts = []
     for i, chunk in enumerate(chunks, 1):
-        meta = chunk.get("metadata", {})
-        title = meta.get("title", "")
-        page = meta.get("page")
-        header = f"[Source {i}]" + (f" {title}" if title else "") + (f" (page {page})" if page else "")
+        header = _source_header(i, chunk.get("metadata", {}))
         context_parts.append(f"{header}\n{chunk['content']}")
     context = "\n\n---\n\n".join(context_parts)
 
