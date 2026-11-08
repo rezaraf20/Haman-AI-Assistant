@@ -46,9 +46,23 @@ class ApiKeyLastUsedTest extends TestCase
             'name' => 'Owner', 'role' => 'owner', 'email_verified_at' => now(),
         ]);
 
+        // One API key = one chatbot: an unbound key is refused outright.
+        $chatbotId = (string) Str::uuid();
+        DB::statement("SET search_path TO {$schema}, public");
+        DB::table('chatbots')->insert([
+            'id' => $chatbotId, 'name' => 'Bot', 'type' => 'support', 'status' => 'active',
+            'is_active' => true, 'language' => 'fa', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::statement('SET search_path TO public');
+        DB::table('chatbot_index')->insert([
+            'chatbot_id' => $chatbotId, 'tenant_id' => $tenant->id, 'schema_name' => $schema,
+            'is_active' => true, 'name' => 'Bot', 'primary_domain' => 'shop.example.test',
+        ]);
+
         $raw = 'hfp_' . Str::random(32);
         $key = ApiKey::create([
             'tenant_id'  => $tenant->id,
+            'chatbot_id' => $chatbotId,
             'created_by' => $user->id,
             'name'       => 'WordPress Plugin',
             'key_prefix' => substr($raw, 0, 12),
@@ -157,14 +171,10 @@ class ApiKeyLastUsedTest extends TestCase
     {
         ['tenant' => $tenant, 'schema' => $schema, 'key' => $key] = $this->makeTenantWithKey();
 
-        $chatbotId = (string) Str::uuid();
+        // A sync of the key's own chatbot (every key is bound to one).
         DB::statement("SET search_path TO {$schema}, public");
-        DB::table('chatbots')->insert([
-            'id' => $chatbotId, 'name' => 'Bot', 'type' => 'support', 'status' => 'active',
-            'is_active' => true, 'language' => 'fa', 'created_at' => now(), 'updated_at' => now(),
-        ]);
         DB::table('sync_jobs')->insert([
-            'id' => (string) Str::uuid(), 'chatbot_id' => $chatbotId, 'job_type' => 'products',
+            'id' => (string) Str::uuid(), 'chatbot_id' => $key->chatbot_id, 'job_type' => 'products',
             'triggered_by' => 'plugin', 'status' => 'completed', 'items_total' => 1,
             'started_at' => now()->subDays(3), 'created_at' => now()->subDays(3),
         ]);

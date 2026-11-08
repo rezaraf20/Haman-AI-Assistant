@@ -14,11 +14,19 @@ use App\Support\DomainNormalizer;
 // once at self-purchase time (BuyChatbot) — and is the real, populated
 // source of truth today.
 //
-// Enforcement is soft when primary_domain is unset (nullable — a chatbot
-// created without one shouldn't be locked out of its own widget) and strict
-// once it's set. Only a single domain is supported; if multi-domain per
-// chatbot is ever needed, that's a real feature to build, not something to
-// improvise here against a table nothing else uses.
+// One chatbot = one domain, strictly. A chatbot with no registered domain
+// does not answer at all — it used to answer every site, which is how two
+// unrelated sites ended up sharing one chatbot (and one quota, and one
+// set of sync settings). Such a chatbot is "awaiting connection"
+// (disabled_reason = awaiting_domain) until its owner registers the
+// domain in the portal; TenantService::setChatbotActive() refuses to
+// switch it on before that. Multi-domain is not supported, deliberately.
+//
+// Every refusal answers with a sentence the site owner can act on (in
+// Persian and English — the visitor's language isn't known here) and a
+// machine-readable `reason`; a request from an unregistered domain is
+// also recorded (App\Support\DomainRejections) so the owner sees it in
+// the portal and the platform sees it in the activity log.
 //
 // Real (browser fetch) widget requests always carry an Origin header — a
 // browser refuses to let JS override or omit it on a cross-origin POST — so
@@ -59,18 +67,39 @@ class ValidateChatbotDomain {
             return response()->json(['error' => 'Origin header is required'], 403);
         }
 
-        $index = DB::table('chatbot_index')->where('chatbot_id', $chatbotId)->where('is_active', true)->first();
+        $index = DB::table('chatbot_index')->where('chatbot_id', $chatbotId)->first();
+        $storedDomain = $index ? DomainNormalizer::normalize($index->primary_domain) : null;
+
         if (!$index) {
             return response()->json(['error' => 'Chatbot not found'], 404);
         }
-
-        $storedDomain = DomainNormalizer::normalize($index->primary_domain);
-        if ($storedDomain && $storedDomain !== $origin) {
-            return response()->json(['error' => 'Domain not authorized'], 403);
+        if (!$index->is_active) {
+            // Suspended, expired, unverified: unchanged, a plain 404.
+            return $index->disabled_reason === 'awaiting_domain'
+                ? $this->refuse('awaiting_domain', 403)
+                : response()->json(['error' => 'Chatbot not found'], 404);
+        }
+        if (!$storedDomain) {
+            // Active with no domain cannot happen after the 2026_11_08
+            // migration and setChatbotActive(); refused all the same.
+            return $this->refuse('awaiting_domain', 403);
+        }
+        if ($storedDomain !== $origin) {
+            \App\Support\DomainRejections::record($index, $origin);
+            return $this->refuse('domain_not_registered', 403);
         }
 
         $request->attributes->set('chatbot_index', $index);
         return $next($request);
+    }
+
+    /** `error` stays a short code-like string for old clients; `message` is for people. */
+    private function refuse(string $reason, int $status): \Illuminate\Http\JsonResponse {
+        return response()->json([
+            'error' => $reason === 'awaiting_domain' ? 'Chatbot awaiting connection' : 'Domain not authorized',
+            'reason' => $reason,
+            'message' => __("chatbot_domain.{$reason}", [], 'fa') . ' / ' . __("chatbot_domain.{$reason}", [], 'en'),
+        ], $status);
     }
 
     private function resolveChatbotIdFromConversation(string $conversationId): ?string {

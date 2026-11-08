@@ -311,9 +311,11 @@ class CustomPostTypeSyncTest extends TestCase
         $this->assertSame(2, $portfolio['documents']);
         $this->assertSame('نمونه کار', $portfolio['post_type_label']);
 
-        // Another tenant's key must not see this chatbot at all.
+        // Another tenant's key must not see this chatbot at all — it is
+        // bound to its own chatbot, so the request is refused outright.
         ['rawKey' => $otherKey] = $this->makeTenant();
-        $this->getJson("/api/v1/chatbots/{$chatbotId}/knowledge", $this->auth($otherKey))->assertNotFound();
+        $this->getJson("/api/v1/chatbots/{$chatbotId}/knowledge", $this->auth($otherKey))
+            ->assertForbidden()->assertJsonPath('reason', 'api_key_other_chatbot');
     }
 
     public function test_the_knowledge_page_breaks_documents_down_by_post_type(): void

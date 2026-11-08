@@ -235,7 +235,7 @@ class TenantService
             'name'                => $language === 'fa' ? 'چت‌بات آزمایشی' : 'Trial Assistant', // i18n:widget
             'type'                => 'trial',
             'status'              => 'active',
-            'is_active'           => $active,
+            'is_active'           => false, // see chatbot_index below: awaiting a domain
             'embedding_model'     => 'models/text-embedding-004',
             'llm_model'           => 'gemini-1.5-flash',
             'temperature'         => 0.3,
@@ -251,8 +251,13 @@ class TenantService
             'chatbot_id'          => $chatbot->id,
             'tenant_id'           => $tenant->id,
             'schema_name'         => $tenant->schema_name,
-            'is_active'           => $active,
-            'disabled_reason'     => $active ? null : 'pending_verification',
+            // Never active at signup: the domain isn't asked for here, and a
+            // chatbot without one does not answer (one chatbot = one domain).
+            // An unverified email waits for verification first; after that,
+            // or straight away for a phone signup, it waits for the owner to
+            // register their site's domain in the portal.
+            'is_active'           => false,
+            'disabled_reason'     => $active ? 'awaiting_domain' : 'pending_verification',
             'name'                => $chatbot->name,
             // Left null on purpose, not asked for at signup: the first
             // plugin connection fills it in itself (ChatbotController's own
@@ -327,16 +332,41 @@ class TenantService
 
         if ($entries->isEmpty()) return;
 
-        DB::table('chatbot_index')
-            ->where('tenant_id', $tenant->id)
-            ->where('disabled_reason', 'pending_verification')
-            ->update(['is_active' => true, 'disabled_reason' => null]);
-
-        DB::statement("SET search_path TO {$tenant->schema_name}, public");
+        // Through setChatbotActive(), so a verified trial chatbot that has
+        // no domain yet moves on to "awaiting connection", not to active.
         foreach ($entries as $entry) {
-            DB::table('chatbots')->where('id', $entry->chatbot_id)->update(['is_active' => true]);
+            $this->setChatbotActive($entry->chatbot_id, true);
         }
-        DB::statement('SET search_path TO public');
+    }
+
+    /**
+     * Binds a chatbot to its one domain — the portal's "register domain"
+     * action, the admin form and API chatbot creation all come through
+     * here. Normalised and validated first; a chatbot that was waiting for
+     * a domain becomes active (if nothing else is holding it back).
+     *
+     * Only an unset domain can be set this way. Changing a registered one
+     * is a support action (ChatbotResource), because every widget and
+     * plugin request is checked against it.
+     *
+     * @throws \InvalidArgumentException when the domain is not a valid host
+     * @return bool false when the chatbot already has a domain
+     */
+    public function registerDomain(string $chatbotId, string $domain, bool $overwrite = false): bool
+    {
+        $normalized = \App\Support\DomainNormalizer::normalize($domain);
+        if (!\App\Support\DomainNormalizer::isValid($normalized)) {
+            throw new \InvalidArgumentException('invalid_domain');
+        }
+
+        $query = DB::table('chatbot_index')->where('chatbot_id', $chatbotId);
+        if (!$overwrite) $query->where(fn ($q) => $q->whereNull('primary_domain')->orWhere('primary_domain', ''));
+        if ($query->update(['primary_domain' => $normalized]) === 0) return false;
+
+        if (DB::table('chatbot_index')->where('chatbot_id', $chatbotId)->value('disabled_reason') === 'awaiting_domain') {
+            $this->setChatbotActive($chatbotId, true);
+        }
+        return true;
     }
 
     /**
@@ -353,8 +383,18 @@ class TenantService
      */
     public function setChatbotActive(string $chatbotId, bool $active, ?string $disabledReason = null): bool
     {
-        $schema = DB::table('chatbot_index')->where('chatbot_id', $chatbotId)->value('schema_name');
-        if (!$schema) return false;
+        $row = DB::table('chatbot_index')->where('chatbot_id', $chatbotId)->first(['schema_name', 'primary_domain']);
+        if (!$row) return false;
+        $schema = $row->schema_name;
+
+        // One chatbot = one domain: a chatbot with no registered domain is
+        // never active. Anything that would switch it on (renewal, admin
+        // reactivation, email verification) parks it as "awaiting
+        // connection" instead, until registerDomain() is called.
+        if ($active && !\App\Support\DomainNormalizer::normalize($row->primary_domain)) {
+            $active = false;
+            $disabledReason = 'awaiting_domain';
+        }
 
         DB::table('chatbot_index')->where('chatbot_id', $chatbotId)->update([
             'is_active'       => $active,

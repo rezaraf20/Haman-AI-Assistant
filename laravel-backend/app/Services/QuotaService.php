@@ -176,13 +176,6 @@ class QuotaService
         return $currentCount < $limit;
     }
 
-    /** True when a tenant may add another domain to a chatbot under their current plan (counted across all of the tenant's chatbots, not per-chatbot). */
-    public function canAddDomain(Tenant $tenant, int $currentCount): bool
-    {
-        $limit = $tenant->plan->max_domains ?? PHP_INT_MAX;
-        return $currentCount < $limit;
-    }
-
     /** True when a tenant may index another document under their current plan (counted per chatbot, matching max_documents' own per-chatbot framing on the pricing page). */
     public function canAddDocument(Tenant $tenant, int $currentCount): bool
     {

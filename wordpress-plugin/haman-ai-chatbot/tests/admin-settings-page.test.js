@@ -196,3 +196,17 @@ test('manual sync stops at the failing step and says why', async () => {
     assert.equal(box.getAttribute('data-tone'), 'danger');
     assert.match(box.textContent, /HTTP 429/);
 });
+
+test('status strip: a chatbot awaiting its domain is named as such, in amber, with the next step', async () => {
+    const { d } = boot({
+        haman_status: { success: true, data: { ...CONNECTED.data, knowledge: null,
+            connection: { state: 'awaiting_domain', reason: 'awaiting_domain', message: 'Register this site’s domain in your Haman panel' } } },
+        haman_check_version: { success: true, data: {} },
+    });
+    await settle();
+    const badge = d.getElementById('hm-status-connection');
+    assert.equal(badge.getAttribute('data-tone'), 'warning');
+    assert.equal(badge.textContent, 'stateAwaitingDomain');
+    assert.match(d.getElementById('hm-status-connection-detail').textContent, /Register this site/);
+    assert.equal(d.getElementById('hm-status').getAttribute('data-overall'), 'attention');
+});

@@ -112,6 +112,8 @@ class Haman_Api_Client {
             'account_error'     => __( 'The Haman account this key belongs to has a problem. Contact Haman support.', 'haman-ai-chatbot' ),
             'key_expired'       => __( 'This API key has expired. Create a new one in your Haman panel.', 'haman-ai-chatbot' ),
             'chatbot_suspended' => __( 'The key is valid, but its chatbot is suspended — check its plan or trial in your Haman panel.', 'haman-ai-chatbot' ),
+            'key_unbound'       => __( 'This API key is not tied to a chatbot and is no longer accepted. Copy the key of this site’s own chatbot from your Haman panel (API keys).', 'haman-ai-chatbot' ),
+            'awaiting_domain'   => __( 'Connected, but this chatbot has no registered domain yet, so its chat widget does not answer. Register this site’s domain in your Haman panel (My chatbots → Register domain).', 'haman-ai-chatbot' ),
         ];
         $code = wp_remote_retrieve_response_code( $response );
         $message = $reason_messages[ $reason ]

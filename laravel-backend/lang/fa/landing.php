@@ -105,7 +105,6 @@ return [
     'pricing_chatbots' => ':count چت‌بات',
     'pricing_tokens' => ':count توکن در ماه',
     'pricing_documents' => ':count سند',
-    'pricing_domains' => ':count دامنه',
     // TODO(business): متن نسخه‌ی سازمانی، و اینکه قیمتش عمومی باشد یا
     // «با ما تماس بگیرید».
     'pricing_enterprise_note' => 'برای نیازهای بزرگ‌تر با ما صحبت کنید.',

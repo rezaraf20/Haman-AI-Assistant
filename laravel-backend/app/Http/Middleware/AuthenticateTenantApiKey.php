@@ -29,12 +29,26 @@ class AuthenticateTenantApiKey {
         if (empty($apiKey)) return response()->json(['error' => 'Invalid API key'], 401);
         if (empty($apiKey->tenant)) return response()->json(['error' => 'Account error'], 403);
         if ($apiKey->isExpired()) return response()->json(['error' => 'API key expired'], 401);
-        if ($apiKey->chatbot_id) {
-            $entry = ChatbotIndexEntry::find($apiKey->chatbot_id);
-            if (!$entry || !$entry->is_active) {
-                return response()->json(['error' => 'Chatbot suspended'], 403);
+        // One API key = one chatbot = one domain. A key not bound to a
+        // chatbot could act on every chatbot of its tenant — and a bound key
+        // used to be able to as well, because nothing compared the request's
+        // chatbot with the key's. Both are refused, with a sentence the site
+        // owner can act on.
+        if (!$apiKey->chatbot_id) {
+            return $this->refuse('api_key_unbound', 'API key not bound to a chatbot');
+        }
+        foreach ([$request->route('id'), $request->input('chatbot_id')] as $asked) {
+            if ($asked !== null && $asked !== '' && (string) $asked !== (string) $apiKey->chatbot_id) {
+                return $this->refuse('api_key_other_chatbot', 'API key belongs to another chatbot');
             }
         }
+        $entry = ChatbotIndexEntry::find($apiKey->chatbot_id);
+        // Awaiting a domain is not a suspension: the plugin may sync content
+        // in the meantime; only the widget waits (ValidateChatbotDomain).
+        if (!$entry || (!$entry->is_active && $entry->disabled_reason !== 'awaiting_domain')) {
+            return response()->json(['error' => 'Chatbot suspended'], 403);
+        }
+        $request->attributes->set('api_chatbot_id', (string) $apiKey->chatbot_id);
         $this->touchLastUsed($apiKey, $request);
 
         app()->instance('current_tenant', $apiKey->tenant);
@@ -45,6 +59,16 @@ class AuthenticateTenantApiKey {
         $request->attributes->set('api_key_id', (string) $apiKey->id);
 
         return $next($request);
+    }
+
+    private function refuse(string $reason, string $error): \Illuminate\Http\JsonResponse
+    {
+        return response()->json([
+            // `error` is what the plugin displays; it gets the full sentence.
+            'error' => __("chatbot_domain.{$reason}", [], 'fa') . ' / ' . __("chatbot_domain.{$reason}", [], 'en'),
+            'reason' => $reason,
+            'code' => $error,
+        ], 403);
     }
 
     /**

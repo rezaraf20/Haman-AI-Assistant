@@ -715,3 +715,12 @@ msgstr "— نگاشت نشده —"
 #: admin/partials/settings-page.php:279
 msgid "“Is this genuine?” is the question shoppers ask most. The bot only repeats exactly what you recorded in these fields — it never judges on its own. If your store keeps any of them in a custom field or product attribute, say which one here."
 msgstr "«این کالا اصل است؟» پرتکرارترین سؤال خریداران است. بات فقط دقیقاً همان چیزی را تکرار می‌کند که در این فیلدها ثبت کرده‌اید — هرگز خودش قضاوت نمی‌کند. اگر فروشگاه شما هر کدام از این‌ها را در یک فیلد سفارشی یا ویژگی محصول نگه می‌دارد، این‌جا مشخص کنید کدام."
+
+msgid "Awaiting domain registration"
+msgstr "در انتظار ثبت دامنه"
+
+msgid "This API key is not tied to a chatbot and is no longer accepted. Copy the key of this site’s own chatbot from your Haman panel (API keys)."
+msgstr "این کلید API به هیچ چت‌باتی وصل نیست و دیگر پذیرفته نمی‌شود. کلید چت‌بات همین سایت را از پنل هامان (کلیدهای API) کپی کنید."
+
+msgid "Connected, but this chatbot has no registered domain yet, so its chat widget does not answer. Register this site’s domain in your Haman panel (My chatbots → Register domain)."
+msgstr "متصل است، اما این چت‌بات هنوز دامنه‌ی ثبت‌شده ندارد و ویجت گفتگویش پاسخ نمی‌دهد. دامنه‌ی این سایت را در پنل هامان ثبت کنید (چت‌بات‌های من ← ثبت دامنه)."

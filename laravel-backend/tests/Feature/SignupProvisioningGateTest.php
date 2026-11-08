@@ -75,6 +75,12 @@ class SignupProvisioningGateTest extends TestCase
         $service->provisionVerifiedTenant($tenant->refresh(), $user);
         $service->activateChatbotsPendingVerification($tenant);
 
+        // Verification is done; what's left is the domain (one chatbot = one domain).
+        $entry = DB::table('chatbot_index')->where('tenant_id', $tenant->id)->first();
+        $this->assertFalse((bool) $entry->is_active);
+        $this->assertSame('awaiting_domain', $entry->disabled_reason);
+
+        $service->registerDomain($entry->chatbot_id, 'gate-off.example.test');
         $entry = DB::table('chatbot_index')->where('tenant_id', $tenant->id)->first();
         $this->assertTrue((bool) $entry->is_active);
         $this->assertNull($entry->disabled_reason);
@@ -114,7 +120,9 @@ class SignupProvisioningGateTest extends TestCase
 
         $entry = DB::table('chatbot_index')->where('tenant_id', $tenant->id)->first();
         $this->assertNotNull($entry);
-        $this->assertTrue((bool) $entry->is_active);
+        // Provisioned and verified; it switches on once its domain is registered.
+        $this->assertFalse((bool) $entry->is_active);
+        $this->assertSame('awaiting_domain', $entry->disabled_reason);
         $this->assertSame(1, DB::table('api_keys')->where('tenant_id', $tenant->id)->count());
     }
 

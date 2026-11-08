@@ -522,9 +522,9 @@
                             @if ($plan->max_documents)
                                 <li>{{ trans_choice('landing.pricing_documents', (int) $plan->max_documents, ['count' => number_format((int) $plan->max_documents)]) }}</li>
                             @endif
-                            @if ($plan->max_domains)
-                                <li>{{ trans_choice('landing.pricing_domains', (int) $plan->max_domains, ['count' => number_format((int) $plan->max_domains)]) }}</li>
-                            @endif
+                            {{-- No domain count: one chatbot = one domain, so "3 domains" would
+                                 promise a feature that does not exist. A plan's reach is its
+                                 number of chatbots. --}}
                             @foreach ($plan->display_features as $feature)
                                 <li>{{ $feature }}</li>
                             @endforeach

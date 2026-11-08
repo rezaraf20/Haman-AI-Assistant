@@ -48,6 +48,7 @@ class Haman_Admin {
             'stateConnected'    => __('Connected', 'haman-ai-chatbot'),
             'stateInvalidKey'   => __('Invalid key', 'haman-ai-chatbot'),
             'stateSuspended'    => __('Chatbot suspended', 'haman-ai-chatbot'),
+            'stateAwaitingDomain' => __('Awaiting domain registration', 'haman-ai-chatbot'),
             'stateDisconnected' => __('Not connected', 'haman-ai-chatbot'),
             'stateNotSet'       => __('Not set up', 'haman-ai-chatbot'),
             'documentsTotal'    => __('%1$s of %2$s documents', 'haman-ai-chatbot'),
@@ -342,8 +343,11 @@ class Haman_Admin {
     /** test_connection()'s WP_Error codes, grouped into what the status strip can say. */
     public static function connection_state( string $code ): string {
         return match ($code) {
-            'invalid_key', 'missing_key', 'key_expired', 'no_key', 'account_error' => 'invalid_key',
+            'invalid_key', 'missing_key', 'key_expired', 'no_key', 'account_error', 'key_unbound' => 'invalid_key',
             'chatbot_suspended' => 'suspended',
+            // The key works, but the chatbot has no registered domain yet, so
+            // its widget answers nobody (one chatbot = one domain).
+            'awaiting_domain' => 'awaiting_domain',
             default => 'disconnected',
         };
     }

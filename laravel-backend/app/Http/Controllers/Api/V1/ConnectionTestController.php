@@ -54,8 +54,17 @@ class ConnectionTestController extends Controller
             return $this->respond($apiKey->tenant_id, $apiKey->chatbot_id, $apiKey->id, 'key_expired', 'This API key has expired.', $ip, $userAgent, 401);
         }
 
-        $entry = $apiKey->chatbot_id ? ChatbotIndexEntry::find($apiKey->chatbot_id) : null;
-        if ($apiKey->chatbot_id && (!$entry || !$entry->is_active)) {
+        // One API key = one chatbot = one domain (see AuthenticateTenantApiKey).
+        if (!$apiKey->chatbot_id) {
+            return $this->respond($apiKey->tenant_id, null, $apiKey->id, 'key_unbound', self::both('chatbot_domain.api_key_unbound'), $ip, $userAgent, 403);
+        }
+        $entry = ChatbotIndexEntry::find($apiKey->chatbot_id);
+        if ($entry && !$entry->is_active && $entry->disabled_reason === 'awaiting_domain') {
+            // The key works (syncing is allowed); the widget won't answer
+            // until the domain is registered — say exactly that.
+            return $this->respond($apiKey->tenant_id, $apiKey->chatbot_id, $apiKey->id, 'awaiting_domain', self::both('chatbot_domain.awaiting_domain'), $ip, $userAgent, 409, ['chatbot_name' => $entry->name]);
+        }
+        if (!$entry || !$entry->is_active) {
             return $this->respond($apiKey->tenant_id, $apiKey->chatbot_id, $apiKey->id, 'chatbot_suspended', 'This chatbot is suspended — check your plan/trial status in the portal.', $ip, $userAgent, 403);
         }
 
@@ -69,6 +78,12 @@ class ConnectionTestController extends Controller
             'Connected' . ($entry?->name ? " as '{$entry->name}'" : ''),
             $ip, $userAgent, 200, ['chatbot_name' => $entry?->name ?? $apiKey->tenant->name],
         );
+    }
+
+    /** Persian and English: the site's language isn't known here, and the plugin shows this as-is. */
+    private static function both(string $key): string
+    {
+        return __($key, [], 'fa') . ' / ' . __($key, [], 'en');
     }
 
     private function respond(

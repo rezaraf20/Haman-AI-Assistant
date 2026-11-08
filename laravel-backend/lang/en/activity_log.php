@@ -49,6 +49,7 @@ return [
     'action_tenant_settings_changed' => 'Changed customer settings',
     'action_cache_cleared' => 'Cleared cache',
     'action_webhook_secret_rotated' => 'Regenerated secret',
+    'action_widget_domain_rejected' => 'Refused a widget request from an unregistered domain',
     'action_sync_domain_mismatch' => 'Refused a destructive sync request from an unregistered domain',
     'action_sync_triggered' => 'Ran a manual sync',
     'action_ticket_replied' => 'Replied to ticket',

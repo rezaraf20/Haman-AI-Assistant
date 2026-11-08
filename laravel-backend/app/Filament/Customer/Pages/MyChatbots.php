@@ -86,6 +86,17 @@ class MyChatbots extends Page implements HasTable {
                     ->formatStateUsing(fn (int $state) => $state > 0
                         ? Money::forCurrentTenant($state)
                         : __('chatbot.contact_support')),
+                // Widget requests refused because the page was not on this
+                // chatbot's domain (App\Support\DomainRejections) — so a
+                // silent widget on some other site has a visible reason.
+                TextColumn::make('domain_rejections')
+                    ->label(__('chatbot_domain.rejections_label'))
+                    ->getStateUsing(fn (ChatbotIndexEntry $record) => collect(\App\Support\DomainRejections::recentFor($record->chatbot_id))
+                        ->map(fn ($r) => __('chatbot_domain.rejections_row', ['origin' => $r->origin_domain, 'count' => Numbers::format($r->occurrences)]))
+                        ->implode(' · ') ?: null)
+                    ->placeholder('—')
+                    ->color('warning')
+                    ->wrap(),
                 TextColumn::make('sync_stats')
                     ->label(__('chatbot.sync_stats_label'))
                     ->getStateUsing(fn (ChatbotIndexEntry $record) => $this->syncStatsSummary($record))
@@ -93,6 +104,26 @@ class MyChatbots extends Page implements HasTable {
                     ->wrap(),
             ])
             ->actions([
+                // One chatbot = one domain. A chatbot without one is
+                // "awaiting connection" and answers nobody until this is
+                // done; once set, only support changes it.
+                Action::make('register_domain')
+                    ->label(__('chatbot_domain.register_action'))
+                    ->icon('heroicon-o-globe-alt')
+                    ->color('primary')
+                    ->visible(fn (ChatbotIndexEntry $record) => trim((string) $record->primary_domain) === '')
+                    ->modalHeading(__('chatbot_domain.register_heading'))
+                    ->form([
+                        \Filament\Forms\Components\TextInput::make('domain')
+                            ->label(__('chatbot.site_domain'))
+                            ->helperText(__('chatbot_domain.register_help'))
+                            ->required()
+                            ->maxLength(255)
+                            ->rule(fn () => function (string $attribute, $value, \Closure $fail) {
+                                if (!\App\Support\DomainNormalizer::isValid(\App\Support\DomainNormalizer::normalize((string) $value))) $fail(__('chatbot_domain.invalid'));
+                            }),
+                    ])
+                    ->action(fn (ChatbotIndexEntry $record, array $data) => $this->registerDomain($record, $data['domain'])),
                 // Superseded the old "appearance" modal (color/position/
                 // powered-by only) — this is now the one place for every
                 // content/appearance field (welcome message, chat title, AI
@@ -196,6 +227,24 @@ class MyChatbots extends Page implements HasTable {
      * bounded is the tenant's embedding spend, and a tenant with four
      * chatbots should not get four times the budget.
      */
+    private function registerDomain(ChatbotIndexEntry $record, string $domain): void {
+        // Scoped to the signed-in tenant's own chatbots, like every action here.
+        if ((string) $record->tenant_id !== (string) auth()->user()->tenant_id) return;
+
+        try {
+            $set = app(\App\Services\TenantService::class)->registerDomain($record->chatbot_id, $domain);
+        } catch (\InvalidArgumentException) {
+            Notification::make()->title(__('chatbot_domain.invalid'))->danger()->send();
+            return;
+        }
+        if (!$set) {
+            Notification::make()->title(__('chatbot_domain.already_set'))->warning()->send();
+            return;
+        }
+        $active = (bool) DB::table('chatbot_index')->where('chatbot_id', $record->chatbot_id)->value('is_active');
+        Notification::make()->title(__($active ? 'chatbot_domain.register_done' : 'chatbot_domain.register_done_inactive'))->success()->send();
+    }
+
     private function manualSync(ChatbotIndexEntry $record): void {
         $tenant = auth()->user()->tenant;
         $cap = (int) Settings::get('limits.manual_sync_per_tenant_per_day');

@@ -133,8 +133,10 @@ class SyncController extends BaseApiController {
         return $this->ok(['job_id'=>$j?->id,'event'=>$d['event']]);
     }
 
-    public function status(string $id): JsonResponse {
-        return $this->ok($this->jobArr(SyncJob::findOrFail($id)));
+    public function status(Request $req, string $id): JsonResponse {
+        // A job id from another chatbot of the same tenant is not this key's business.
+        $job = SyncJob::where('chatbot_id', $req->attributes->get('api_chatbot_id'))->findOrFail($id);
+        return $this->ok($this->jobArr($job));
     }
 
     /**

@@ -113,7 +113,6 @@ return [
     'pricing_chatbots' => ':count chatbot|:count chatbots',
     'pricing_tokens' => ':count token per month|:count tokens per month',
     'pricing_documents' => ':count document|:count documents',
-    'pricing_domains' => ':count domain|:count domains',
     // TODO(business): enterprise wording, and whether its price is public or
     // "contact us".
     'pricing_enterprise_note' => 'Talk to us about larger requirements.',

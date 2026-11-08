@@ -87,7 +87,8 @@ class PlanResource extends Resource
                     TextInput::make('max_tokens_monthly')->label(__('plans.max_tokens'))->numeric()->minValue(0)->default(100000),
                     TextInput::make('max_documents')->label(__('plans.max_documents'))->numeric()->minValue(0)->default(50),
                     TextInput::make('max_messages_monthly')->label(__('plans.max_messages'))->numeric()->minValue(0)->default(1000),
-                    TextInput::make('max_domains')->label(__('plans.max_domains'))->numeric()->minValue(0)->default(1),
+                    // No max_domains field: one chatbot = one domain, so a plan's
+                    // reach is max_chatbots. The column stays (old rows) but is unused.
                     TextInput::make('model_tier')->label(__('plans.model_tier'))->maxLength(50)->default('gemini-1.5-flash'),
                 ]),
                 Repeater::make('features')

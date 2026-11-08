@@ -4,23 +4,23 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "X-Domain: haman-ai-chatbot\n"
 
-#: admin/class-haman-admin.php:94
+#: admin/class-haman-admin.php:95
 msgid "%1$s documents and %2$s chunks removed; a fresh sync has run."
 msgstr ""
 
-#: admin/class-haman-admin.php:88
+#: admin/class-haman-admin.php:89
 msgid "%1$s new, %2$s updated, %3$s unchanged, %4$s failed"
 msgstr ""
 
-#: admin/class-haman-admin.php:53
+#: admin/class-haman-admin.php:54
 msgid "%1$s of %2$s documents"
 msgstr ""
 
-#: admin/class-haman-admin.php:54
+#: admin/class-haman-admin.php:55
 msgid "%s documents"
 msgstr ""
 
-#: admin/class-haman-admin.php:56 admin/partials/settings-page.php:384
+#: admin/class-haman-admin.php:57 admin/partials/settings-page.php:384
 msgid "%s documents were not indexed because your plan’s document limit was reached. The bot does not answer from them; upgrading, or turning off types you don’t need, lets the next sync add them."
 msgstr ""
 
@@ -28,7 +28,7 @@ msgstr ""
 msgid "(opens in a new tab)"
 msgstr ""
 
-#: includes/api/class-haman-api-client.php:137
+#: includes/api/class-haman-api-client.php:139
 msgid "(unnamed)"
 msgstr ""
 
@@ -52,7 +52,7 @@ msgstr ""
 msgid "Appearance & texts"
 msgstr ""
 
-#: admin/class-haman-admin.php:102
+#: admin/class-haman-admin.php:103
 msgid "Assistant name"
 msgstr ""
 
@@ -64,12 +64,16 @@ msgstr ""
 msgid "Authenticity status"
 msgstr ""
 
-#: includes/sync/class-haman-sync-manager.php:261
+#: includes/sync/class-haman-sync-manager.php:263
 msgid "Auto-cancelled by Haman AI: unpaid draft order created from chat exceeded the hold period."
 msgstr ""
 
-#: admin/class-haman-admin.php:103
+#: admin/class-haman-admin.php:104
 msgid "Avatar URL"
+msgstr ""
+
+#: admin/class-haman-admin.php:51
+msgid "Awaiting domain registration"
 msgstr ""
 
 #: admin/partials/settings-page.php:315
@@ -92,7 +96,7 @@ msgstr ""
 msgid "Chat widget"
 msgstr ""
 
-#: admin/class-haman-admin.php:101
+#: admin/class-haman-admin.php:102
 msgid "Chat window title"
 msgstr ""
 
@@ -116,7 +120,7 @@ msgstr ""
 msgid "Clear cache"
 msgstr ""
 
-#: admin/class-haman-admin.php:93
+#: admin/class-haman-admin.php:94
 msgid "Cleared"
 msgstr ""
 
@@ -128,6 +132,10 @@ msgstr ""
 msgid "Connected to “%s”"
 msgstr ""
 
+#: includes/api/class-haman-api-client.php:116
+msgid "Connected, but this chatbot has no registered domain yet, so its chat widget does not answer. Register this site’s domain in your Haman panel (My chatbots → Register domain)."
+msgstr ""
+
 #: admin/partials/settings-page.php:23 admin/partials/settings-page.php:66
 msgid "Connection"
 msgstr ""
@@ -136,11 +144,11 @@ msgstr ""
 msgid "Content"
 msgstr ""
 
-#: admin/class-haman-admin.php:72 admin/partials/settings-page.php:194
+#: admin/class-haman-admin.php:73 admin/partials/settings-page.php:194
 msgid "Content type"
 msgstr ""
 
-#: admin/class-haman-admin.php:79
+#: admin/class-haman-admin.php:80
 msgid "Copied"
 msgstr ""
 
@@ -148,7 +156,7 @@ msgstr ""
 msgid "Copy"
 msgstr ""
 
-#: admin/class-haman-admin.php:80
+#: admin/class-haman-admin.php:81
 msgid "Copy failed — select the key and copy it manually."
 msgstr ""
 
@@ -180,15 +188,15 @@ msgstr ""
 msgid "Deletes everything currently synced and rebuilds it with the settings above — for when you changed what to sync and old content is still in the index. FAQs you entered by hand are not affected."
 msgstr ""
 
-#: admin/class-haman-admin.php:71
+#: admin/class-haman-admin.php:72
 msgid "Documents"
 msgstr ""
 
-#: admin/class-haman-admin.php:75
+#: admin/class-haman-admin.php:76
 msgid "Download"
 msgstr ""
 
-#: admin/class-haman-admin.php:534
+#: admin/class-haman-admin.php:538
 msgid "Download the new version"
 msgstr ""
 
@@ -200,7 +208,7 @@ msgstr ""
 msgid "Enter the API key and Chatbot ID from your Haman panel, save, then test the connection."
 msgstr ""
 
-#: admin/class-haman-admin.php:309
+#: admin/class-haman-admin.php:310
 msgid "Enter the API key and Chatbot ID from your Haman panel, then save."
 msgstr ""
 
@@ -208,11 +216,11 @@ msgstr ""
 msgid "Error"
 msgstr ""
 
-#: admin/class-haman-admin.php:68
+#: admin/class-haman-admin.php:69
 msgid "Everything is working: connected, synced and the widget is live."
 msgstr ""
 
-#: admin/class-haman-admin.php:62 admin/class-haman-admin.php:85 admin/partials/settings-page.php:366
+#: admin/class-haman-admin.php:63 admin/class-haman-admin.php:86 admin/partials/settings-page.php:366
 msgid "FAQs"
 msgstr ""
 
@@ -228,11 +236,11 @@ msgstr ""
 msgid "Haman AI Chatbot"
 msgstr ""
 
-#: admin/class-haman-admin.php:539
+#: admin/class-haman-admin.php:543
 msgid "Haman AI Chatbot %1$s is available — you have %2$s. Upload the new ZIP from Plugins → Add New → Upload Plugin."
 msgstr ""
 
-#: includes/api/class-haman-api-client.php:121
+#: includes/api/class-haman-api-client.php:123
 msgid "Haman answered with an unexpected response (HTTP %d)."
 msgstr ""
 
@@ -240,7 +248,7 @@ msgstr ""
 msgid "Haman does not recognise this API key — it may have been regenerated. Copy the current key from your Haman panel."
 msgstr ""
 
-#: admin/class-haman-admin.php:78
+#: admin/class-haman-admin.php:79
 msgid "Hide"
 msgstr ""
 
@@ -284,7 +292,7 @@ msgstr ""
 msgid "Last sync results"
 msgstr ""
 
-#: admin/class-haman-admin.php:108
+#: admin/class-haman-admin.php:109
 msgid "Lead capture"
 msgstr ""
 
@@ -312,7 +320,7 @@ msgstr ""
 msgid "Messages per visitor"
 msgstr ""
 
-#: admin/class-haman-admin.php:92
+#: admin/class-haman-admin.php:93
 msgid "Migrated"
 msgstr ""
 
@@ -324,11 +332,11 @@ msgstr ""
 msgid "Move to Haman"
 msgstr ""
 
-#: admin/class-haman-admin.php:70
+#: admin/class-haman-admin.php:71
 msgid "Needs attention: %s"
 msgstr ""
 
-#: admin/class-haman-admin.php:63 admin/partials/settings-page.php:30
+#: admin/class-haman-admin.php:64 admin/partials/settings-page.php:30
 msgid "Never"
 msgstr ""
 
@@ -336,11 +344,11 @@ msgstr ""
 msgid "New"
 msgstr ""
 
-#: admin/class-haman-admin.php:98
+#: admin/class-haman-admin.php:99
 msgid "No"
 msgstr ""
 
-#: includes/api/class-haman-api-client.php:74 includes/api/class-haman-api-client.php:202
+#: includes/api/class-haman-api-client.php:74 includes/api/class-haman-api-client.php:204
 msgid "No API key has been entered. Paste the key from your Haman panel (it starts with hfp_) and save."
 msgstr ""
 
@@ -348,15 +356,15 @@ msgstr ""
 msgid "No custom field is sent unless you pick it. For each selected content type, the fields that actually exist on this site are listed with a real sample value; tick the ones the bot should know. Private fields (starting with _) are never shown or sent."
 msgstr ""
 
-#: admin/class-haman-admin.php:95
+#: admin/class-haman-admin.php:96
 msgid "No fields will be sent."
 msgstr ""
 
-#: admin/class-haman-admin.php:444
+#: admin/class-haman-admin.php:448
 msgid "No local settings were found to migrate."
 msgstr ""
 
-#: admin/class-haman-admin.php:51
+#: admin/class-haman-admin.php:52
 msgid "Not connected"
 msgstr ""
 
@@ -364,7 +372,7 @@ msgstr ""
 msgid "Not plain text"
 msgstr ""
 
-#: admin/class-haman-admin.php:52
+#: admin/class-haman-admin.php:53
 msgid "Not set up"
 msgstr ""
 
@@ -372,7 +380,7 @@ msgstr ""
 msgid "Not shown — not connected"
 msgstr ""
 
-#: admin/class-haman-admin.php:57
+#: admin/class-haman-admin.php:58
 msgid "Nothing has been synced yet. Run a full sync below."
 msgstr ""
 
@@ -412,11 +420,11 @@ msgstr ""
 msgid "Page IDs to leave out"
 msgstr ""
 
-#: admin/class-haman-admin.php:60
+#: admin/class-haman-admin.php:61
 msgid "Pages"
 msgstr ""
 
-#: admin/class-haman-admin.php:84 admin/partials/settings-page.php:366
+#: admin/class-haman-admin.php:85 admin/partials/settings-page.php:366
 msgid "Pages and site content"
 msgstr ""
 
@@ -424,11 +432,11 @@ msgstr ""
 msgid "Plugin version"
 msgstr ""
 
-#: admin/class-haman-admin.php:105
+#: admin/class-haman-admin.php:106
 msgid "Position on the page"
 msgstr ""
 
-#: admin/class-haman-admin.php:61
+#: admin/class-haman-admin.php:62
 msgid "Posts"
 msgstr ""
 
@@ -436,11 +444,11 @@ msgstr ""
 msgid "Posts in these categories are never synced, even when posts are on."
 msgstr ""
 
-#: admin/class-haman-admin.php:104
+#: admin/class-haman-admin.php:105
 msgid "Primary colour"
 msgstr ""
 
-#: admin/class-haman-admin.php:59
+#: admin/class-haman-admin.php:60
 msgid "Product PDFs"
 msgstr ""
 
@@ -448,7 +456,7 @@ msgstr ""
 msgid "Product attribute"
 msgstr ""
 
-#: admin/class-haman-admin.php:58 admin/class-haman-admin.php:83 admin/partials/settings-page.php:366
+#: admin/class-haman-admin.php:59 admin/class-haman-admin.php:84 admin/partials/settings-page.php:366
 msgid "Products"
 msgstr ""
 
@@ -456,7 +464,7 @@ msgstr ""
 msgid "Published"
 msgstr ""
 
-#: admin/class-haman-admin.php:107
+#: admin/class-haman-admin.php:108
 msgid "Quick questions"
 msgstr ""
 
@@ -464,7 +472,7 @@ msgstr ""
 msgid "Re-check"
 msgstr ""
 
-#: admin/class-haman-admin.php:82
+#: admin/class-haman-admin.php:83
 msgid "Reading settings from Haman"
 msgstr ""
 
@@ -496,7 +504,7 @@ msgstr ""
 msgid "Send"
 msgstr ""
 
-#: admin/class-haman-admin.php:156 includes/api/class-haman-api-client.php:133
+#: admin/class-haman-admin.php:157 includes/api/class-haman-api-client.php:135
 msgid "Set the Chatbot ID on the Connection tab first."
 msgstr ""
 
@@ -508,7 +516,7 @@ msgstr ""
 msgid "Settings sections"
 msgstr ""
 
-#: admin/class-haman-admin.php:77 admin/partials/settings-page.php:113 admin/partials/settings-page.php:151
+#: admin/class-haman-admin.php:78 admin/partials/settings-page.php:113 admin/partials/settings-page.php:151
 msgid "Show"
 msgstr ""
 
@@ -524,7 +532,7 @@ msgstr ""
 msgid "Status"
 msgstr ""
 
-#: admin/class-haman-admin.php:81
+#: admin/class-haman-admin.php:82
 msgid "Step %1$s of %2$s: %3$s"
 msgstr ""
 
@@ -536,7 +544,7 @@ msgstr ""
 msgid "Sync"
 msgstr ""
 
-#: admin/class-haman-admin.php:86 admin/partials/settings-page.php:52
+#: admin/class-haman-admin.php:87 admin/partials/settings-page.php:52
 msgid "Sync finished."
 msgstr ""
 
@@ -544,7 +552,7 @@ msgstr ""
 msgid "Sync status"
 msgstr ""
 
-#: admin/class-haman-admin.php:87
+#: admin/class-haman-admin.php:88
 msgid "Sync stopped: %s"
 msgstr ""
 
@@ -552,7 +560,7 @@ msgstr ""
 msgid "Synced separately, by the WooCommerce products option above."
 msgstr ""
 
-#: admin/class-haman-admin.php:106
+#: admin/class-haman-admin.php:107
 msgid "System instruction"
 msgstr ""
 
@@ -564,11 +572,11 @@ msgstr ""
 msgid "The Haman account this key belongs to has a problem. Contact Haman support."
 msgstr ""
 
-#: admin/class-haman-admin.php:266
+#: admin/class-haman-admin.php:267
 msgid "The connection is not set up yet: enter the API key and Chatbot ID on the Connection tab and save."
 msgstr ""
 
-#: admin/class-haman-admin.php:89
+#: admin/class-haman-admin.php:90
 msgid "The current webhook secret will stop working immediately. Continue?"
 msgstr ""
 
@@ -584,7 +592,7 @@ msgstr ""
 msgid "These apply on this site only, per visitor IP address."
 msgstr ""
 
-#: admin/class-haman-admin.php:96
+#: admin/class-haman-admin.php:97
 msgid "These fields will be sent: %s"
 msgstr ""
 
@@ -600,11 +608,15 @@ msgstr ""
 msgid "This API key has expired. Create a new one in your Haman panel."
 msgstr ""
 
-#: admin/class-haman-admin.php:91
+#: includes/api/class-haman-api-client.php:115
+msgid "This API key is not tied to a chatbot and is no longer accepted. Copy the key of this site’s own chatbot from your Haman panel (API keys)."
+msgstr ""
+
+#: admin/class-haman-admin.php:92
 msgid "This deletes everything currently synced and rebuilds it with the settings above. FAQs you entered by hand are not affected. Continue?"
 msgstr ""
 
-#: admin/class-haman-admin.php:90
+#: admin/class-haman-admin.php:91
 msgid "This sends your current local WordPress settings to Haman and may overwrite what is set in the Haman portal. Continue?"
 msgstr ""
 
@@ -624,7 +636,7 @@ msgstr ""
 msgid "Type"
 msgstr ""
 
-#: admin/class-haman-admin.php:55
+#: admin/class-haman-admin.php:56
 msgid "Unavailable until connected"
 msgstr ""
 
@@ -632,7 +644,7 @@ msgstr ""
 msgid "Unchanged"
 msgstr ""
 
-#: admin/class-haman-admin.php:290
+#: admin/class-haman-admin.php:291
 msgid "Unknown sync step."
 msgstr ""
 
@@ -644,7 +656,7 @@ msgstr ""
 msgid "Uses the saved key and URL — save first if you just changed them. A successful test shows the name of the connected chatbot."
 msgstr ""
 
-#: admin/class-haman-admin.php:74
+#: admin/class-haman-admin.php:75
 msgid "Version %s is available."
 msgstr ""
 
@@ -656,7 +668,7 @@ msgstr ""
 msgid "Webhook secret"
 msgstr ""
 
-#: admin/class-haman-admin.php:100
+#: admin/class-haman-admin.php:101
 msgid "Welcome message"
 msgstr ""
 
@@ -672,19 +684,19 @@ msgstr ""
 msgid "WooCommerce products"
 msgstr ""
 
-#: admin/class-haman-admin.php:97
+#: admin/class-haman-admin.php:98
 msgid "Yes"
 msgstr ""
 
-#: admin/class-haman-admin.php:114 admin/class-haman-admin.php:149 admin/class-haman-admin.php:162 admin/class-haman-admin.php:233
+#: admin/class-haman-admin.php:115 admin/class-haman-admin.php:150 admin/class-haman-admin.php:163 admin/class-haman-admin.php:234
 msgid "You do not have permission to change these settings."
 msgstr ""
 
-#: admin/class-haman-admin.php:76
+#: admin/class-haman-admin.php:77
 msgid "You have the latest version."
 msgstr ""
 
-#: admin/class-haman-admin.php:64
+#: admin/class-haman-admin.php:65
 msgid "content has never been synced"
 msgstr ""
 
@@ -696,11 +708,11 @@ msgstr ""
 msgid "minutes"
 msgstr ""
 
-#: admin/class-haman-admin.php:65
+#: admin/class-haman-admin.php:66
 msgid "the chat widget is turned off on this site"
 msgstr ""
 
-#: admin/class-haman-admin.php:67
+#: admin/class-haman-admin.php:68
 msgid "the last sync left out %s documents (plan limit)"
 msgstr ""
 

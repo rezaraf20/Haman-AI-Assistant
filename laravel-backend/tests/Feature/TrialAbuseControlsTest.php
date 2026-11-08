@@ -50,6 +50,11 @@ class TrialAbuseControlsTest extends TestCase
             'email' => Str::random(10) . '@example.test', 'national_id' => null, 'address' => null,
         ]);
         $tenant = $result['tenant'];
+        // Active means a domain has been registered (one chatbot = one domain).
+        app(TenantService::class)->registerDomain(
+            ChatbotIndexEntry::where('tenant_id', $tenant->id)->value('chatbot_id'),
+            'trial-' . Str::lower(Str::random(6)) . '.example.test',
+        );
         $index = ChatbotIndexEntry::where('tenant_id', $tenant->id)->first();
 
         return ['tenant' => $tenant, 'index' => $index];

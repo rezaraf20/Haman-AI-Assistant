@@ -326,12 +326,12 @@ class PaymentLinkTest extends TestCase
         ]);
 
         Http::fake();
-        // No Origin-vs-stored-domain mismatch possible since primary_domain
-        // is null — any Origin passes ValidateChatbotDomain, matching the
-        // real-world case of a chatbot that hasn't had its domain set yet.
+        // One chatbot = one domain: a chatbot with no domain on file answers
+        // nobody, so ValidateChatbotDomain refuses before the controller —
+        // and long before any live call to a store — would run.
         $response = $this->postJson('/api/v1/chat/payment-link', $this->payload($chatbotId, $conversationId), self::ORIGIN);
 
-        $response->assertStatus(400);
+        $response->assertStatus(403)->assertJsonPath('reason', 'awaiting_domain');
         Http::assertNothingSent();
     }
 

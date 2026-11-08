@@ -66,7 +66,7 @@ class UnansweredMessageTest extends TestCase
 
         DB::table('chatbot_index')->insert([
             'chatbot_id' => $chatbotId, 'tenant_id' => $tenant->id, 'schema_name' => $schema,
-            'is_active' => true, 'name' => 'Test Bot', 'primary_domain' => null,
+            'is_active' => true, 'name' => 'Test Bot', 'primary_domain' => 'example.test',
         ]);
 
         return compact('chatbotId', 'conversationId', 'schema');

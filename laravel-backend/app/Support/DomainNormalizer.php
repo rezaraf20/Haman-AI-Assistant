@@ -29,4 +29,17 @@ class DomainNormalizer {
 
         return $host !== '' ? $host : null;
     }
+
+    /**
+     * A real public host name: dotted labels, a letter-led TLD, no IP
+     * address, no "localhost", no port or path left over. The one domain a
+     * chatbot is bound to is what every widget request and (later) every
+     * plugin request is checked against, so a typo here locks the owner
+     * out — better refused at the form than discovered in production.
+     * Internationalised names are accepted in their punycode form (xn--).
+     */
+    public static function isValid(?string $normalized): bool {
+        if ($normalized === null || strlen($normalized) > 253) return false;
+        return (bool) preg_match('/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/', $normalized);
+    }
 }

@@ -68,7 +68,7 @@ class ApiRouteAuthTest extends TestCase
 
         $raw = 'hfp_' . Str::random(32);
         ApiKey::create([
-            'tenant_id' => $tenant->id, 'created_by' => $user->id,
+            'tenant_id' => $tenant->id, 'created_by' => $user->id, 'chatbot_id' => $chatbotId,
             'name' => 'WordPress Plugin', 'key_prefix' => substr($raw, 0, 12),
             'key_hash' => password_hash($raw, PASSWORD_BCRYPT, ['cost' => 4]),
             'scopes' => ['read', 'write', 'sync', 'chat'],

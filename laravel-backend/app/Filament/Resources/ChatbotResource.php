@@ -66,7 +66,11 @@ class ChatbotResource extends Resource {
                 ->required()
                 ->visibleOn('create'),
             TextInput::make('name')->label(__('common.name'))->required()->maxLength(255),
-            TextInput::make('primary_domain')->label(__('common.domain'))->maxLength(255)
+            // One chatbot = one domain: required, and a real host name.
+            TextInput::make('primary_domain')->label(__('common.domain'))->maxLength(255)->required()
+                ->rule(fn () => function (string $attribute, $value, \Closure $fail) {
+                    if (!DomainNormalizer::isValid(DomainNormalizer::normalize((string) $value))) $fail(__('chatbot_domain.invalid'));
+                })
                 ->dehydrateStateUsing(fn ($state) => DomainNormalizer::normalize($state))
                 ->helperText(__('chatbot.primary_domain_help')),
             // Billing period and price are admin business. Support opens

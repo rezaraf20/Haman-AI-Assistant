@@ -70,12 +70,11 @@ class LegacyPluginCompatibilityTest extends TestCase
         ]);
         DB::statement('SET search_path TO public');
 
-        // primary_domain left null — enforcement is soft when unset (see
-        // ValidateChatbotDomain), so any Origin header is accepted; these
-        // tests are about chatbot_id resolution, not domain matching.
+        // The Origin these tests send is the chatbot's registered domain —
+        // they are about chatbot_id resolution, not domain matching.
         DB::table('chatbot_index')->insert([
             'chatbot_id' => $chatbotId, 'tenant_id' => $tenant->id, 'schema_name' => $schema,
-            'is_active' => true, 'name' => 'Test Bot', 'primary_domain' => null,
+            'is_active' => true, 'name' => 'Test Bot', 'primary_domain' => 'example.test',
         ]);
 
         return compact('chatbotId', 'conversationId');

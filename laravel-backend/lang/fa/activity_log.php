@@ -49,6 +49,7 @@ return [
     'action_tenant_settings_changed' => 'تغییر تنظیمات مشتری',
     'action_cache_cleared' => 'پاک کردن کش',
     'action_webhook_secret_rotated' => 'تولید مجدد secret',
+    'action_widget_domain_rejected' => 'درخواست ویجت از دامنه‌ی ثبت‌نشده رد شد',
     'action_sync_domain_mismatch' => 'درخواست مخرب از دامنه‌ی ثبت‌نشده رد شد',
     'action_sync_triggered' => 'اجرای sync دستی',
     'action_ticket_replied' => 'پاسخ به تیکت',

@@ -95,6 +95,7 @@
         connected:    ['success', 'stateConnected'],
         invalid_key:  ['danger', 'stateInvalidKey'],
         suspended:    ['warning', 'stateSuspended'],
+        awaiting_domain: ['warning', 'stateAwaitingDomain'],
         disconnected: ['danger', 'stateDisconnected'],
         not_set:      ['warning', 'stateNotSet']
     };

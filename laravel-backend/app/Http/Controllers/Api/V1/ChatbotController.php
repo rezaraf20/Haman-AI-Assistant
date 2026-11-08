@@ -1,5 +1,5 @@
 <?php namespace App\Http\Controllers\Api\V1;
-use App\Models\Tenant\{Chatbot, ChatbotDomain, Document, Product};
+use App\Models\Tenant\{Chatbot, Document, Product};
 use Illuminate\Http\{Request, JsonResponse};
 use Illuminate\Support\Facades\DB;
 use App\Support\DomainNormalizer;
@@ -7,12 +7,23 @@ use App\Support\WidgetDefaults;
 
 class ChatbotController extends BaseApiController {
 
-    public function index(): JsonResponse {
-        return $this->ok(Chatbot::orderBy('created_at','desc')->get());
+    public function index(Request $req): JsonResponse {
+        // Through a plugin key, only the key's own chatbot (one key = one chatbot).
+        $q = Chatbot::orderBy('created_at','desc');
+        if ($bound = $req->attributes->get('api_chatbot_id')) $q->where('id', $bound);
+        return $this->ok($q->get());
     }
 
     public function store(Request $req): JsonResponse {
-        $d      = $req->validate(['name'=>'required|string|max:255','type'=>'required|in:support,sales,faq,woocommerce,hr,custom','welcome_message'=>'nullable|string|max:2000','fallback_response'=>'nullable|string|max:2000','system_prompt'=>'nullable|string|max:10000','language'=>'nullable|string|max:10','response_language'=>'nullable|string|max:10','widget_config'=>'nullable|array']);
+        $d      = $req->validate(['name'=>'required|string|max:255','type'=>'required|in:support,sales,faq,woocommerce,hr,custom','welcome_message'=>'nullable|string|max:2000','fallback_response'=>'nullable|string|max:2000','system_prompt'=>'nullable|string|max:10000','language'=>'nullable|string|max:10','response_language'=>'nullable|string|max:10','widget_config'=>'nullable|array',
+            // One chatbot = one domain, required up front: a chatbot without
+            // one would sit "awaiting connection" and answer nobody.
+            'domain'=>'required|string|max:255']);
+        $domain = DomainNormalizer::normalize($d['domain']);
+        if (!DomainNormalizer::isValid($domain)) {
+            return response()->json(['error' => __('chatbot_domain.invalid', [], 'en'), 'reason' => 'invalid_domain'], 422);
+        }
+        unset($d['domain']);
         $tenant = app('current_tenant');
         $max    = $tenant->plan->max_chatbots ?? 1;
         if (Chatbot::count() >= $max) return $this->forbidden("Plan limit: max {$max} chatbot(s).");
@@ -20,7 +31,7 @@ class ChatbotController extends BaseApiController {
         // Register in public schema index
         DB::statement("SET search_path TO public");
         DB::table('chatbot_index')->upsert(
-            ['chatbot_id'=>$chatbot->id,'tenant_id'=>$tenant->id,'schema_name'=>$tenant->schema_name,'is_active'=>true,'name'=>$chatbot->name],
+            ['chatbot_id'=>$chatbot->id,'tenant_id'=>$tenant->id,'schema_name'=>$tenant->schema_name,'is_active'=>true,'name'=>$chatbot->name,'primary_domain'=>$domain],
             ['chatbot_id'],['schema_name','is_active','name']
         );
         DB::statement("SET search_path TO {$tenant->schema_name}, public");
@@ -181,22 +192,19 @@ class ChatbotController extends BaseApiController {
         return $this->noContent();
     }
 
+    /**
+     * Multi-domain is not supported (one chatbot = one domain): the domain is
+     * set when the chatbot is created, or registered once in the portal, and
+     * changed only by support. These two endpoints used to write the
+     * chatbot_domains table that nothing reads, and "first domain wins" into
+     * primary_domain; they now say so instead.
+     */
     public function addDomain(Request $req, string $id): JsonResponse {
-        $d      = $req->validate(['domain'=>'required|string|max:255']);
-        $domain = DomainNormalizer::normalize($d['domain']);
-        if (!$domain) return $this->badRequest('Invalid domain');
-        $result = ChatbotDomain::firstOrCreate(['chatbot_id'=>$id,'domain'=>$domain],['is_active'=>true,'created_at'=>now()]);
-        // Best-effort: keep the admin panel's display column in sync. Only set it if
-        // this chatbot doesn't already have a primary_domain (first domain added wins).
-        // Nothing later in this request depends on the tenant schema still being active.
-        DB::statement("SET search_path TO public");
-        DB::table('chatbot_index')->where('chatbot_id',$id)->whereNull('primary_domain')->update(['primary_domain'=>$domain]);
-        return $this->created($result);
+        return response()->json(['error' => __('chatbot_domain.multi_domain_unsupported', [], 'en'), 'reason' => 'multi_domain_unsupported'], 410);
     }
 
     public function removeDomain(string $id, string $domain): JsonResponse {
-        ChatbotDomain::where('chatbot_id',$id)->where('domain',$domain)->delete();
-        return $this->noContent();
+        return response()->json(['error' => __('chatbot_domain.multi_domain_unsupported', [], 'en'), 'reason' => 'multi_domain_unsupported'], 410);
     }
 
     public function documents(string $id): JsonResponse {

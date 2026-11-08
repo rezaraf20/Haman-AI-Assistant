@@ -50,6 +50,9 @@ class BuyChatbot extends Page implements HasForms {
                 ->label(__('chatbot.site_domain'))
                 ->required()
                 ->maxLength(255)
+                ->rule(fn () => function (string $attribute, $value, \Closure $fail) {
+                    if (!DomainNormalizer::isValid(DomainNormalizer::normalize((string) $value))) $fail(__('chatbot_domain.invalid'));
+                })
                 ->dehydrateStateUsing(fn ($state) => DomainNormalizer::normalize($state))
                 ->helperText(__('chatbot.domain_locked_help')),
         ])->statePath('data');

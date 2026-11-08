@@ -474,9 +474,11 @@ class PlatformActivityLogTest extends TestCase
 
         // Older than the window — must not be counted.
         PlatformActivity::record('ticket_replied');
-        DB::table('platform_activity_log')
-            ->orderByDesc('created_at')->limit(1)
-            ->update(['created_at' => now()->subDays(45)]);
+        // One of the ticket replies, by action: rows written in the same
+        // instant tie on created_at, and "the newest row" could then be the
+        // login or the conversation view (an intermittent 3-vs-2 failure).
+        $old = DB::table('platform_activity_log')->where('action', 'ticket_replied')->orderByDesc('created_at')->value('id');
+        DB::table('platform_activity_log')->where('id', $old)->update(['created_at' => now()->subDays(45)]);
 
         $summary = PlatformUserResource::activitySummary($support->fresh());
 

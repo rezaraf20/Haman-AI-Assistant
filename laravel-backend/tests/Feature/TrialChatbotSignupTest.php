@@ -44,7 +44,13 @@ class TrialChatbotSignupTest extends TestCase
      * an explicit verification step in between — see
      * TenantService::createTrialChatbot()'s email_verified_at gate.
      */
-    public function test_a_real_phone_signup_reaches_a_working_widget_session_immediately(): void
+    /**
+     * One chatbot = one domain. A trial chatbot answered ANY site until
+     * 2026-11 — which is how two unrelated sites came to share one. Now:
+     * signup → "awaiting connection" (and the widget says so in words) →
+     * the owner registers the domain → it works there and only there.
+     */
+    public function test_a_phone_signup_waits_for_a_domain_then_works_only_on_it(): void
     {
         $result = app(TenantService::class)->registerViaPhone([
             'phone' => '09121234567', 'first_name' => 'Ali', 'last_name' => 'Rezaei',
@@ -53,13 +59,24 @@ class TrialChatbotSignupTest extends TestCase
         $chatbotId = DB::table('chatbot_index')->where('tenant_id', $result['tenant']->id)->value('chatbot_id');
         $this->assertNotNull($chatbotId, 'signup did not create a chatbot_index row at all');
 
-        $response = $this->postJson('/api/v1/chat/session', [
-            'chatbot_id' => $chatbotId,
-            'session_id' => 'sess-trial-widget-1',
-        ], ['Origin' => 'https://any-domain-at-all.test']);
+        $session = fn (string $origin, string $sid) => $this->postJson('/api/v1/chat/session', [
+            'chatbot_id' => $chatbotId, 'session_id' => $sid,
+        ], ['Origin' => $origin]);
 
-        $response->assertStatus(201);
-        $this->assertNotNull($response->json('data.conversation_id'), 'a real widget session did not get back a conversation id');
+        $session('https://any-domain-at-all.test', 'sess-trial-1')
+            ->assertStatus(403)->assertJsonPath('reason', 'awaiting_domain');
+
+        $this->assertTrue(app(TenantService::class)->registerDomain($chatbotId, 'https://www.Ali-Shop.example.test/'));
+        $this->assertSame('ali-shop.example.test', DB::table('chatbot_index')->where('chatbot_id', $chatbotId)->value('primary_domain'));
+
+        $ok = $session('https://ali-shop.example.test', 'sess-trial-2')->assertStatus(201);
+        $this->assertNotNull($ok->json('data.conversation_id'), 'a real widget session did not get back a conversation id');
+
+        $session('https://any-domain-at-all.test', 'sess-trial-3')
+            ->assertStatus(403)->assertJsonPath('reason', 'domain_not_registered');
+
+        // Registered once; changing it is a support action.
+        $this->assertFalse(app(TenantService::class)->registerDomain($chatbotId, 'other.example.test'));
     }
 
     /** The abuse vector this closes: an unverified email must not reach a live widget at all. */
@@ -89,10 +106,11 @@ class TrialChatbotSignupTest extends TestCase
         app(TenantService::class)->activateChatbotsPendingVerification($tenant);
 
         $chatbotId = DB::table('chatbot_index')->where('tenant_id', $tenant->id)->value('chatbot_id');
+        app(TenantService::class)->registerDomain($chatbotId, 'verified-shop.example.test');
         $response = $this->postJson('/api/v1/chat/session', [
             'chatbot_id' => $chatbotId,
             'session_id' => 'sess-verified-1',
-        ], ['Origin' => 'https://any-domain-at-all.test']);
+        ], ['Origin' => 'https://verified-shop.example.test']);
 
         $response->assertStatus(201);
     }
@@ -127,7 +145,7 @@ class TrialChatbotSignupTest extends TestCase
         $this->assertEquals($result['user']->id, $key->created_by);
     }
 
-    public function test_registering_via_phone_creates_an_active_persian_trial_chatbot_immediately(): void
+    public function test_registering_via_phone_creates_a_persian_trial_chatbot_awaiting_its_domain(): void
     {
         $result = app(TenantService::class)->registerViaPhone([
             'phone' => '09121234567', 'first_name' => 'Ali', 'last_name' => 'Rezaei',
@@ -137,18 +155,19 @@ class TrialChatbotSignupTest extends TestCase
 
         $index = ChatbotIndexEntry::where('tenant_id', $tenant->id)->first();
         $this->assertNotNull($index);
-        $this->assertTrue((bool) $index->is_active, 'the phone path is already verified by a real OTP challenge before this point — no extra gate needed');
-        $this->assertNull($index->disabled_reason);
+        // Verified by the OTP challenge already; what it waits for is the domain.
+        $this->assertFalse((bool) $index->is_active);
+        $this->assertSame('awaiting_domain', $index->disabled_reason);
 
         DB::statement("SET search_path TO {$tenant->schema_name}, public");
         $chatbot = Chatbot::find($index->chatbot_id);
         DB::statement('SET search_path TO public');
-        $this->assertTrue((bool) $chatbot->is_active);
+        $this->assertFalse((bool) $chatbot->is_active, 'both tables agree');
         $this->assertEquals('trial', $chatbot->type);
         $this->assertEquals('fa', $chatbot->language);
     }
 
-    public function test_verifying_the_email_activates_the_pending_trial_chatbot(): void
+    public function test_verifying_the_email_moves_the_trial_chatbot_on_to_awaiting_its_domain(): void
     {
         $result = app(TenantService::class)->registerViaEmail([
             'name' => 'Verify Me', 'email' => 'verifyme@example.test', 'password' => 'password123',
@@ -158,6 +177,11 @@ class TrialChatbotSignupTest extends TestCase
         app(TenantService::class)->activateChatbotsPendingVerification($tenant);
 
         $index = ChatbotIndexEntry::where('tenant_id', $tenant->id)->first();
+        $this->assertFalse((bool) $index->is_active);
+        $this->assertSame('awaiting_domain', $index->disabled_reason);
+
+        app(TenantService::class)->registerDomain($index->chatbot_id, 'verifyme.example.test');
+        $index->refresh();
         $this->assertTrue((bool) $index->is_active);
         $this->assertNull($index->disabled_reason);
 
@@ -201,10 +225,8 @@ class TrialChatbotSignupTest extends TestCase
      * An already-active trial chatbot, for the enforcement-command tests
      * below — they test "does this command correctly suspend a chatbot
      * that started active," which the (unrelated) email-verification gate
-     * would otherwise get in the way of. The phone path is always active
-     * immediately (see test_registering_via_phone_creates_an_active_
-     * persian_trial_chatbot_immediately above), so it sidesteps that
-     * entirely without faking a verification step these tests aren't about.
+     * would otherwise get in the way of. The phone path needs no
+     * verification step; registering a domain is what makes it active.
      */
     private function makeTrialChatbot(): array
     {
@@ -213,6 +235,10 @@ class TrialChatbotSignupTest extends TestCase
             'email' => Str::random(10) . '@example.test', 'national_id' => null, 'address' => null,
         ]);
         $tenant = $result['tenant'];
+        app(TenantService::class)->registerDomain(
+            ChatbotIndexEntry::where('tenant_id', $tenant->id)->value('chatbot_id'),
+            'cap-' . Str::lower(Str::random(6)) . '.example.test',
+        );
         $index = ChatbotIndexEntry::where('tenant_id', $tenant->id)->first();
 
         return ['tenant' => $tenant, 'index' => $index];

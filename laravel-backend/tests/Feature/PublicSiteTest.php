@@ -194,14 +194,14 @@ class PublicSiteTest extends TestCase
         $this->withHeader('Accept-Language', 'en')->get('/')->assertOk()->assertSee('5 chatbots');
     }
 
-    public function test_a_single_domain_limit_reads_as_singular_in_english(): void
+    public function test_the_pricing_never_promises_a_number_of_domains(): void
     {
-        $this->publishedPlan(['max_domains' => 1]);
+        // One chatbot = one domain: even a plan row that still carries an old
+        // max_domains value must not advertise "3 domains".
+        $this->publishedPlan(['max_domains' => 3]);
 
-        $html = $this->withHeader('Accept-Language', 'en')->get('/')->assertOk()->getContent();
-
-        $this->assertStringContainsString('1 domain', $html);
-        $this->assertStringNotContainsString('1 domains', $html);
+        $this->withHeader('Accept-Language', 'en')->get('/')->assertOk()->assertDontSee('3 domains');
+        $this->withHeader('Accept-Language', 'fa')->get('/')->assertOk()->assertDontSee('۳ دامنه')->assertDontSee('3 دامنه');
     }
 
     public function test_the_price_of_a_chatbot_comes_from_the_table_the_panel_charges_from(): void

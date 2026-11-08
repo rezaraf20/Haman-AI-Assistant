@@ -57,6 +57,12 @@ class EditChatbot extends EditRecord {
             );
         }
 
+        // A chatbot that was waiting for its domain switches on once support
+        // enters one (through the one place that flips the active flag).
+        if ($record->fresh()->disabled_reason === 'awaiting_domain' && !empty($data['primary_domain'])) {
+            app(\App\Services\TenantService::class)->setChatbotActive((string) $record->chatbot_id, true);
+        }
+
         DB::statement("SET search_path TO {$record->schema_name}, public");
         $chatbot = Chatbot::find($record->chatbot_id);
         if ($chatbot) {

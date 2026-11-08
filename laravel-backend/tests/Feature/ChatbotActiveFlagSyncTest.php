@@ -43,6 +43,10 @@ class ChatbotActiveFlagSyncTest extends TestCase
             'email' => Str::random(10) . '@example.test', 'national_id' => null, 'address' => null,
         ]);
         $tenant = $result['tenant'];
+        // A trial chatbot waits for its domain; registering one is what
+        // makes it active (one chatbot = one domain).
+        $chatbotId = ChatbotIndexEntry::where('tenant_id', $tenant->id)->value('chatbot_id');
+        app(TenantService::class)->registerDomain($chatbotId, 'trial-' . Str::lower(Str::random(6)) . '.example.test');
         $index = ChatbotIndexEntry::where('tenant_id', $tenant->id)->first();
         return ['tenant' => $tenant, 'index' => $index];
     }
@@ -124,6 +128,11 @@ class ChatbotActiveFlagSyncTest extends TestCase
         $user->forceFill(['email_verified_at' => now()])->save();
         app(TenantService::class)->activateChatbotsPendingVerification($tenant);
 
-        $this->assertBothTablesAgree($tenant->schema_name, $index->chatbot_id, true, 'after verification');
+        // Verified, but no domain yet: "awaiting connection", still off in both tables.
+        $this->assertBothTablesAgree($tenant->schema_name, $index->chatbot_id, false, 'after verification, before a domain');
+        $this->assertSame('awaiting_domain', $index->fresh()->disabled_reason);
+
+        app(TenantService::class)->registerDomain($index->chatbot_id, 'sync-email.example.test');
+        $this->assertBothTablesAgree($tenant->schema_name, $index->chatbot_id, true, 'after the domain is registered');
     }
 }
