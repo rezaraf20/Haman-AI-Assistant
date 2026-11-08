@@ -1343,8 +1343,4 @@ class TenantService
         Tenant::where('id', $tenant->id)->update(['last_active_at' => now()]);
     }
 
-    public function resetMonthlyUsage(): void
-    {
-        Tenant::query()->update(['usage_tokens_current' => 0, 'usage_messages_current' => 0]);
-    }
 }

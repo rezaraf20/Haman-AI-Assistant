@@ -39,7 +39,7 @@ class TenantController extends BaseApiController {
     }
     public function usage(Request $req): JsonResponse {
         $t = $req->user()->tenant->load('plan');
-        return $this->ok(['tokens'=>['used'=>$t->usage_tokens_current,'limit'=>$t->plan?->max_tokens_monthly],'messages'=>['used'=>$t->usage_messages_current,'limit'=>$t->plan?->max_messages_monthly],'resets_at'=>now()->endOfMonth()->toISOString()]);
+        return $this->ok(['tokens'=>['used'=>$t->usage_tokens_current,'limit'=>$t->plan?->max_tokens_monthly],'messages'=>['used'=>$t->usage_messages_current,'limit'=>$t->plan?->max_messages_monthly],'resets_at'=>\App\Support\QuotaPeriod::nextReset($t)->toISOString()]);
     }
     public function apiKeys(Request $req): JsonResponse {
         return $this->ok(ApiKey::where('tenant_id',$req->user()->tenant_id)->where('is_active',true)->get(['id','name','key_prefix','scopes','last_used_at','created_at']));

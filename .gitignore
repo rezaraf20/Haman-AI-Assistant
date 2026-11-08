@@ -54,3 +54,6 @@ VECTOR_DIM_PATCH.txt
 # output, never a deliverable, and `docker compose up` will happily create
 # this directory locally too.
 /logs/
+
+# Database dumps and data exports made on the server (customer data). Never committed.
+/backups/

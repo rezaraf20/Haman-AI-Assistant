@@ -1,6 +1,10 @@
 <?php
 use Illuminate\Support\Facades\Schedule;
-Schedule::command('haman:reset-usage')->monthlyOn(1, '00:00');
+// No calendar reset of plan usage. Each tenant's quota resets on its own
+// anniversary (QuotaService::rolloverPeriodIfDue()); a second, calendar
+// reset on the 1st gave every tenant whose anniversary isn't the 1st an
+// extra month of quota (all nine active tenants in November 2026).
+// QuotaResetScheduleTest fails if one is scheduled again.
 Schedule::command('chatbots:expire-overdue')->dailyAt('01:00');
 // The message-count half of a trial chatbot's cap (see TenantService::
 // createTrialChatbot()) — hourly rather than daily since an abusive trial

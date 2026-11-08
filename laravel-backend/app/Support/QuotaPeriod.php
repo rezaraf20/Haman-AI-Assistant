@@ -8,15 +8,11 @@ use Carbon\CarbonInterface;
  * When a tenant's plan quota (usage_tokens_current) next goes back to zero,
  * for display only — this changes nothing about how or when it resets.
  *
- * Two independent mechanisms reset it today, and whichever fires first wins:
- *  - routes/console.php schedules haman:reset-usage on the 1st of every
- *    calendar month, which zeroes every tenant at once
- *    (TenantService::resetMonthlyUsage()).
- *  - QuotaService::rolloverPeriodIfDue() rolls each tenant's own period
- *    forward one month from quota_period_started_at (falling back to
- *    created_at), lazily, on the first request after that date.
- * Showing only one of them would sometimes promise a reset date that the
- * other one beats, so this reports the earlier of the two.
+ * There is exactly one reset: QuotaService::rolloverPeriodIfDue() rolls each
+ * tenant's own period forward one month from quota_period_started_at
+ * (falling back to created_at), lazily, on the first request after that
+ * date. The calendar reset on the 1st that used to run alongside it was
+ * removed in 2026-11 (it gave a second reset every month).
  */
 class QuotaPeriod
 {
@@ -33,9 +29,7 @@ class QuotaPeriod
 
     public static function nextReset(Tenant $tenant): CarbonInterface
     {
-        $calendar = now()->startOfMonth()->addMonthNoOverflow();
-        $anchored = self::anchoredPeriodEnd($tenant);
-        return $anchored->lessThan($calendar) ? $anchored : $calendar;
+        return self::anchoredPeriodEnd($tenant);
     }
 
     /** Whole days until nextReset(), never negative; 0 means "later today". */
