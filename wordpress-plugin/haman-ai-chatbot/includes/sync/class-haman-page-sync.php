@@ -2,12 +2,10 @@
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 class Haman_Page_Sync {
-    // Some hosts' front-end WAF (ModSecurity's default SecRequestBodyNoFilesLimit)
-    // rejects any POST body over 128KB with no useful error, which — depending on
-    // timing — surfaces as an empty request body, a 408, or a 504. Elementor page
-    // content varies wildly in size, so batches are sized by actual encoded byte
-    // length rather than a fixed item count, staying safely under that limit.
-    const MAX_BATCH_BYTES = 80000;
+    // Batches respect both the host's request-size limit and the platform's
+    // item count — see Haman_Sync_Batcher. (Some hosts' WAF, ModSecurity's
+    // default SecRequestBodyNoFilesLimit, rejects any POST over 128KB with no
+    // useful error; Elementor pages vary wildly in size.)
     const FETCH_PAGE_SIZE = 50;
 
     public function __construct( private Haman_Api_Client $api ) {}
@@ -90,22 +88,14 @@ class Haman_Page_Sync {
     public function sync_all( string $cid ): array {
         if (empty(self::enabled_post_types())) return Haman_Sync_Counts::empty();
 
-        $page = 1; $counts = Haman_Sync_Counts::empty(); $errors = []; $batch = []; $batchBytes = 0;
+        $page = 1; $counts = Haman_Sync_Counts::empty(); $errors = [];
+        $batcher = new Haman_Sync_Batcher(function (array $batch) use ($cid, &$counts, &$errors) { $this->flush_batch($cid, $batch, $counts, $errors); });
         do {
             $posts = get_posts($this->query_args(self::FETCH_PAGE_SIZE, $page));
-            foreach ($posts as $post) {
-                $item     = $this->post_to_array($post);
-                $itemSize = strlen(wp_json_encode($item));
-                if (!empty($batch) && ($batchBytes + $itemSize) > self::MAX_BATCH_BYTES) {
-                    $this->flush_batch($cid, $batch, $counts, $errors);
-                    $batch = []; $batchBytes = 0;
-                }
-                $batch[]     = $item;
-                $batchBytes += $itemSize;
-            }
+            foreach ($posts as $post) $batcher->add($this->post_to_array($post));
             $page++;
         } while (count($posts) === self::FETCH_PAGE_SIZE);
-        $this->flush_batch($cid, $batch, $counts, $errors);
+        $batcher->flush();
         $result = $counts;
         if (!empty($errors)) $result['errors'] = array_values(array_unique($errors));
         return $result;
@@ -126,7 +116,7 @@ class Haman_Page_Sync {
         ]));
         if (empty($posts)) return;
         $counts = Haman_Sync_Counts::empty(); $errors = [];
-        $this->flush_batch($cid, array_map([$this,'post_to_array'],$posts), $counts, $errors);
+        Haman_Sync_Batcher::send_all(array_map([$this,'post_to_array'],$posts), function (array $batch) use ($cid, &$counts, &$errors) { $this->flush_batch($cid, $batch, $counts, $errors); });
     }
 
     /**

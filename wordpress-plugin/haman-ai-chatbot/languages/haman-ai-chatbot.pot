@@ -28,7 +28,7 @@ msgstr ""
 msgid "(opens in a new tab)"
 msgstr ""
 
-#: includes/api/class-haman-api-client.php:139
+#: includes/api/class-haman-api-client.php:143
 msgid "(unnamed)"
 msgstr ""
 
@@ -124,15 +124,15 @@ msgstr ""
 msgid "Cleared"
 msgstr ""
 
-#: admin/class-haman-admin.php:48 includes/api/class-haman-api-client.php:105
+#: admin/class-haman-admin.php:48 includes/api/class-haman-api-client.php:109
 msgid "Connected"
 msgstr ""
 
-#: admin/class-haman-admin.php:47 includes/api/class-haman-api-client.php:105
+#: admin/class-haman-admin.php:47 includes/api/class-haman-api-client.php:109
 msgid "Connected to “%s”"
 msgstr ""
 
-#: includes/api/class-haman-api-client.php:116
+#: includes/api/class-haman-api-client.php:120
 msgid "Connected, but this chatbot has no registered domain yet, so its chat widget does not answer. Register this site’s domain in your Haman panel (My chatbots → Register domain)."
 msgstr ""
 
@@ -240,11 +240,11 @@ msgstr ""
 msgid "Haman AI Chatbot %1$s is available — you have %2$s. Upload the new ZIP from Plugins → Add New → Upload Plugin."
 msgstr ""
 
-#: includes/api/class-haman-api-client.php:123
+#: includes/api/class-haman-api-client.php:127
 msgid "Haman answered with an unexpected response (HTTP %d)."
 msgstr ""
 
-#: includes/api/class-haman-api-client.php:111
+#: includes/api/class-haman-api-client.php:115
 msgid "Haman does not recognise this API key — it may have been regenerated. Copy the current key from your Haman panel."
 msgstr ""
 
@@ -348,7 +348,7 @@ msgstr ""
 msgid "No"
 msgstr ""
 
-#: includes/api/class-haman-api-client.php:74 includes/api/class-haman-api-client.php:204
+#: includes/api/class-haman-api-client.php:74 includes/api/class-haman-api-client.php:208
 msgid "No API key has been entered. Paste the key from your Haman panel (it starts with hfp_) and save."
 msgstr ""
 
@@ -504,7 +504,7 @@ msgstr ""
 msgid "Send"
 msgstr ""
 
-#: admin/class-haman-admin.php:157 includes/api/class-haman-api-client.php:135
+#: admin/class-haman-admin.php:157 includes/api/class-haman-api-client.php:139
 msgid "Set the Chatbot ID on the Connection tab first."
 msgstr ""
 
@@ -568,7 +568,7 @@ msgstr ""
 msgid "Test connection"
 msgstr ""
 
-#: includes/api/class-haman-api-client.php:112
+#: includes/api/class-haman-api-client.php:116
 msgid "The Haman account this key belongs to has a problem. Contact Haman support."
 msgstr ""
 
@@ -580,11 +580,11 @@ msgstr ""
 msgid "The current webhook secret will stop working immediately. Continue?"
 msgstr ""
 
-#: includes/api/class-haman-api-client.php:114
+#: includes/api/class-haman-api-client.php:118
 msgid "The key is valid, but its chatbot is suspended — check its plan or trial in your Haman panel."
 msgstr ""
 
-#: includes/api/class-haman-api-client.php:110
+#: includes/api/class-haman-api-client.php:114
 msgid "The request reached Haman without an API key. Save the key on this tab and try again."
 msgstr ""
 
@@ -604,11 +604,11 @@ msgstr ""
 msgid "They are shown here read-only and cannot be changed on this page — they are kept on Haman so they stay the same on every site the chatbot runs on."
 msgstr ""
 
-#: includes/api/class-haman-api-client.php:113
+#: includes/api/class-haman-api-client.php:117
 msgid "This API key has expired. Create a new one in your Haman panel."
 msgstr ""
 
-#: includes/api/class-haman-api-client.php:115
+#: includes/api/class-haman-api-client.php:119
 msgid "This API key is not tied to a chatbot and is no longer accepted. Copy the key of this site’s own chatbot from your Haman panel (API keys)."
 msgstr ""
 

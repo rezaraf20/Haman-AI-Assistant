@@ -2,9 +2,7 @@
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 class Haman_Faq_Sync {
-    // See Haman_Page_Sync::MAX_BATCH_BYTES — batches sized by byte length, not
-    // item count, to stay under the host's ~128KB WAF request-body limit.
-    const MAX_BATCH_BYTES = 80000;
+    // Batching: Haman_Sync_Batcher (request size AND the platform's item count).
 
     public function __construct( private Haman_Api_Client $api ) {}
 
@@ -15,17 +13,8 @@ class Haman_Faq_Sync {
         // doesn't recognize.
         if (empty($faqs)) return Haman_Sync_Counts::empty();
         $counts = Haman_Sync_Counts::empty();
-        $errors = []; $batch = []; $batchBytes = 0;
-        foreach ($faqs as $faq) {
-            $itemSize = strlen(wp_json_encode($faq));
-            if (!empty($batch) && ($batchBytes + $itemSize) > self::MAX_BATCH_BYTES) {
-                $this->flush_batch($cid, $batch, $counts, $errors);
-                $batch = []; $batchBytes = 0;
-            }
-            $batch[]     = $faq;
-            $batchBytes += $itemSize;
-        }
-        $this->flush_batch($cid, $batch, $counts, $errors);
+        $errors = [];
+        Haman_Sync_Batcher::send_all($faqs, function (array $batch) use ($cid, &$counts, &$errors) { $this->flush_batch($cid, $batch, $counts, $errors); });
         $result = $counts;
         if (!empty($errors)) $result['errors'] = array_values(array_unique($errors));
         return $result;

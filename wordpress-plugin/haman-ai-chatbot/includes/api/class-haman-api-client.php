@@ -2,6 +2,10 @@
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 class Haman_Api_Client {
+    /** See request(): how often, and how long at most, a rate-limited call waits and retries. */
+    const RATE_LIMIT_RETRIES  = 4;
+    const RATE_LIMIT_MAX_WAIT = 65;
+
     private string $api_key;
     private string $base_url;
 
@@ -95,6 +99,10 @@ class Haman_Api_Client {
 
         $body = json_decode( wp_remote_retrieve_body( $response ), true );
         $reason = $body['reason'] ?? null;
+
+        // The platform's own sync limits (Haman_Sync_Limits) come with every
+        // connection test, success or "awaiting domain".
+        Haman_Sync_Limits::remember( $body );
 
         if ( ( $body['ok'] ?? false ) === true ) {
             $name = (string) ( $body['chatbot_name'] ?? '' );
@@ -211,7 +219,7 @@ class Haman_Api_Client {
 
         $args = [ 'method' => $method, 'headers' => $headers, 'timeout' => $timeout ];
         if ( ! empty( $data ) && in_array( $method, [ 'POST', 'PUT', 'PATCH' ] ) ) {
-            $encoded = wp_json_encode( $data, JSON_INVALID_UTF8_SUBSTITUTE );
+            $encoded = wp_json_encode( $data, Haman_Sync_Batcher::JSON_FLAGS );
             if ( false === $encoded ) {
                 // Retry once after stripping invalid UTF-8 byte sequences from every
                 // string in the payload (e.g. garbled bytes picked up from Elementor
@@ -219,7 +227,7 @@ class Haman_Api_Client {
                 // previously caused an empty request body and confusing "field is
                 // required" errors server-side instead of a clear local error.
                 $sanitized = $this->sanitize_utf8( $data );
-                $encoded   = wp_json_encode( $sanitized, JSON_INVALID_UTF8_SUBSTITUTE );
+                $encoded   = wp_json_encode( $sanitized, Haman_Sync_Batcher::JSON_FLAGS );
                 if ( false === $encoded ) {
                     return new WP_Error( 'json_encode_failed', 'Failed to encode request body as JSON: ' . json_last_error_msg() );
                 }
@@ -228,7 +236,21 @@ class Haman_Api_Client {
             $args['body'] = $encoded;
         }
 
-        $response = wp_remote_request( $this->base_url . $path, $args );
+        // The platform rate-limits sync calls per key (30 a minute by default).
+        // A full sync of a large shop needs more requests than that; a 429 used
+        // to drop the batch ("Too Many Attempts") and lose those items. Wait
+        // as long as the platform says (Retry-After, capped) and send the same
+        // batch again.
+        $attempt = 0;
+        while ( true ) {
+            $response = wp_remote_request( $this->base_url . $path, $args );
+            if ( is_wp_error( $response ) || wp_remote_retrieve_response_code( $response ) !== 429 || $attempt >= self::RATE_LIMIT_RETRIES ) break;
+            $attempt++;
+            $wait = (int) wp_remote_retrieve_header( $response, 'retry-after' );
+            $wait = min( max( $wait, 1 ), self::RATE_LIMIT_MAX_WAIT );
+            if ( class_exists( 'Haman_Admin' ) ) Haman_Admin::log( "{$method} {$path}: rate-limited, retrying in {$wait}s (attempt {$attempt})" );
+            sleep( $wait );
+        }
         if ( is_wp_error( $response ) ) {
             if ( class_exists( 'Haman_Admin' ) ) Haman_Admin::log( "{$method} {$path} failed: " . $response->get_error_message() );
             return $response;

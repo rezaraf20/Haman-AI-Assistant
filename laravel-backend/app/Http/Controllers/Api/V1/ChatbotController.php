@@ -125,7 +125,8 @@ class ChatbotController extends BaseApiController {
      */
     public function syncSettings(string $id): JsonResponse {
         $chatbot = Chatbot::findOrFail($id);
-        return $this->ok(\App\Support\SyncSettings::forApi(\App\Support\SyncSettings::merge($chatbot)));
+        return $this->ok(\App\Support\SyncSettings::forApi(\App\Support\SyncSettings::merge($chatbot))
+            + ['limits' => \App\Support\SyncLimits::forApi()]);
     }
 
     /**
@@ -175,6 +176,7 @@ class ChatbotController extends BaseApiController {
 
         return $this->ok(\App\Support\SyncSettings::forApi($result['settings']) + [
             'archived_documents' => $result['archived_documents'],
+            'limits' => \App\Support\SyncLimits::forApi(),
         ]);
     }
 

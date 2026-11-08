@@ -186,6 +186,7 @@ class Haman_Sync_Settings {
         $r = ( new Haman_Api_Client() )->get_sync_settings( $chatbot_id );
         if ( is_wp_error( $r ) || ! is_array( $r['data'] ?? null ) ) return false;
         $s = $r['data'];
+        Haman_Sync_Limits::remember( $s );
 
         if ( isset( $s['post_types'] ) && is_array( $s['post_types'] ) ) self::set_enabled_post_types( $s['post_types'] );
         if ( isset( $s['custom_fields'] ) && is_array( $s['custom_fields'] ) ) self::set_custom_fields( $s['custom_fields'] );

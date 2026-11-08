@@ -2,9 +2,7 @@
 if ( ! defined( 'ABSPATH' ) ) exit;
 
 class Haman_Product_Sync {
-    // See Haman_Page_Sync::MAX_BATCH_BYTES — batches sized by byte length, not
-    // item count, to stay under the host's ~128KB WAF request-body limit.
-    const MAX_BATCH_BYTES = 80000;
+    // Batching: Haman_Sync_Batcher (request size AND the platform's item count).
     const FETCH_PAGE_SIZE = 50;
 
     // "Is this genuine?" — the single most common question across both real
@@ -64,22 +62,17 @@ class Haman_Product_Sync {
             ]);
         }
         $this->bump_query_version();
-        $page=1; $counts=Haman_Sync_Counts::empty(); $errors=[]; $batch=[]; $batchBytes=0;
+        $page=1; $counts=Haman_Sync_Counts::empty(); $errors=[];
+        // Both limits — request size AND the platform's item count (see
+        // Haman_Sync_Batcher). Size alone let 50+ small products into one
+        // request, which the platform refused as a whole.
+        $batcher = new Haman_Sync_Batcher(function (array $batch) use ($cid, &$counts, &$errors) { $this->flush_batch($cid, $batch, $counts, $errors); });
         do {
             $products = wc_get_products(['status'=>'publish','limit'=>self::FETCH_PAGE_SIZE,'page'=>$page,'return'=>'objects','cache_results'=>false]);
-            foreach ($products as $product) {
-                $item     = $this->product_to_array($product);
-                $itemSize = strlen(wp_json_encode($item));
-                if (!empty($batch) && ($batchBytes + $itemSize) > self::MAX_BATCH_BYTES) {
-                    $this->flush_batch($cid, $batch, $counts, $errors);
-                    $batch = []; $batchBytes = 0;
-                }
-                $batch[]     = $item;
-                $batchBytes += $itemSize;
-            }
+            foreach ($products as $product) $batcher->add($this->product_to_array($product));
             $page++;
         } while (count($products) === self::FETCH_PAGE_SIZE);
-        $this->flush_batch($cid, $batch, $counts, $errors);
+        $batcher->flush();
         $result = $counts;
         if (!empty($errors)) $result['errors'] = array_values(array_unique($errors));
         return $result;
@@ -106,7 +99,7 @@ class Haman_Product_Sync {
         $products = wc_get_products(['status'=>'publish','limit'=>self::FETCH_PAGE_SIZE,'date_modified'=>'>'.date('Y-m-d H:i:s',strtotime("-{$hours} hours")),'cache_results'=>false]);
         if (empty($products)) return;
         $counts = Haman_Sync_Counts::empty(); $errors = [];
-        $this->flush_batch($cid, array_map([$this,'product_to_array'],$products), $counts, $errors);
+        Haman_Sync_Batcher::send_all(array_map([$this,'product_to_array'],$products), function (array $batch) use ($cid, &$counts, &$errors) { $this->flush_batch($cid, $batch, $counts, $errors); });
     }
 
     public function product_to_array( \WC_Product $p ): array {

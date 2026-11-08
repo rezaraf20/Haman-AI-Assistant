@@ -62,7 +62,7 @@ class ConnectionTestController extends Controller
         if ($entry && !$entry->is_active && $entry->disabled_reason === 'awaiting_domain') {
             // The key works (syncing is allowed); the widget won't answer
             // until the domain is registered — say exactly that.
-            return $this->respond($apiKey->tenant_id, $apiKey->chatbot_id, $apiKey->id, 'awaiting_domain', self::both('chatbot_domain.awaiting_domain'), $ip, $userAgent, 409, ['chatbot_name' => $entry->name]);
+            return $this->respond($apiKey->tenant_id, $apiKey->chatbot_id, $apiKey->id, 'awaiting_domain', self::both('chatbot_domain.awaiting_domain'), $ip, $userAgent, 409, ['chatbot_name' => $entry->name, 'limits' => \App\Support\SyncLimits::forApi()]);
         }
         if (!$entry || !$entry->is_active) {
             return $this->respond($apiKey->tenant_id, $apiKey->chatbot_id, $apiKey->id, 'chatbot_suspended', 'This chatbot is suspended — check your plan/trial status in the portal.', $ip, $userAgent, 403);
@@ -76,7 +76,7 @@ class ConnectionTestController extends Controller
         return $this->respond(
             $apiKey->tenant_id, $apiKey->chatbot_id, $apiKey->id, 'success',
             'Connected' . ($entry?->name ? " as '{$entry->name}'" : ''),
-            $ip, $userAgent, 200, ['chatbot_name' => $entry?->name ?? $apiKey->tenant->name],
+            $ip, $userAgent, 200, ['chatbot_name' => $entry?->name ?? $apiKey->tenant->name, 'limits' => \App\Support\SyncLimits::forApi()],
         );
     }
 

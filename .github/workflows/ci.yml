@@ -71,6 +71,11 @@ jobs:
       - name: Translations complete and compiled
         run: python3 ../../scripts/plugin-i18n.py check
 
+      # Batching respects both the request-size limit and the platform's
+      # item count (the latter read from the platform, not hard-coded).
+      - name: Plugin PHP tests (sync batcher)
+        run: php tests/php/sync-batcher-test.php
+
       - name: Plugin PHP lint
         run: |
           status=0
