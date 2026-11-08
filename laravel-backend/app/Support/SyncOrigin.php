@@ -6,6 +6,17 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
+ * TEMPORARY — remove this class and its three call sites (ChatbotController::
+ * updateSyncSettings, SyncController::clearIndex, SyncController::
+ * handleWebhook) once the permanent constraint holds:
+ *
+ *     one API key = one chatbot = one domain
+ *
+ * With that in place the key itself identifies the site, the User-Agent is
+ * irrelevant, and keeping this alongside would leave two parallel
+ * mechanisms deciding the same thing. Do not extend this guard; finish the
+ * constraint instead. (The sync_domain_alerts table can go with it.)
+ *
  * Which WordPress site a plugin request came from, and whether that site
  * may make destructive changes to a chatbot.
  *
