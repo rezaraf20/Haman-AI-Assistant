@@ -149,6 +149,7 @@ class ChatbotController extends BaseApiController {
         // Only the chatbot's own site may overwrite its settings — saving
         // them archives every type that is "off", which on a second site
         // sharing this chatbot means the first site's content. See SyncOrigin.
+        // TEMPORARY(SyncOrigin): remove once one API key = one chatbot = one domain.
         $origin = \App\Support\SyncOrigin::authorise($req, $chatbot->id, 'settings');
         if (!$origin['allowed']) {
             return response()->json([

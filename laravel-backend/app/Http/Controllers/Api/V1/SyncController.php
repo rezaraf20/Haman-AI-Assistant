@@ -122,6 +122,7 @@ class SyncController extends BaseApiController {
         // sharing this chatbot has its own post 12. Only the chatbot's own
         // site may remove anything (SyncOrigin); create/update still apply.
         if (in_array($d['event'], ['page.deleted', 'product.deleted'], true)) {
+            // TEMPORARY(SyncOrigin): remove once one API key = one chatbot = one domain.
             $origin = \App\Support\SyncOrigin::authorise($req, $d['chatbot_id'], 'delete');
             if (!$origin['allowed']) {
                 return $this->ok(['job_id' => null, 'event' => $d['event'], 'skipped' => 'domain_mismatch', 'message' => $origin['message']]);
@@ -148,6 +149,7 @@ class SyncController extends BaseApiController {
     public function clearIndex(Request $req): JsonResponse {
         $d = $req->validate(['chatbot_id' => 'required|uuid']);
         // Deletes every synced document — only from the chatbot's own site (SyncOrigin).
+        // TEMPORARY(SyncOrigin): remove once one API key = one chatbot = one domain.
         $origin = \App\Support\SyncOrigin::authorise($req, $d['chatbot_id'], 'clear');
         if (!$origin['allowed']) {
             return response()->json([
