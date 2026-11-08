@@ -1,0 +1,26 @@
+<?php
+
+return [
+    'nav' => 'Bot failures',
+    'intro' => 'Replies the bot itself got wrong: an empty reply, an error/fallback, or "I can\'t / didn\'t follow". Products a shop doesn\'t carry ("we don\'t have that") are not here; they are in that customer\'s demand-gap report.',
+    'all' => 'All',
+    'kind_empty' => 'Empty reply',
+    'kind_fallback' => 'Error / fallback',
+    'kind_misunderstood' => 'Couldn\'t / didn\'t follow',
+    'kind_not_carried' => 'Not carried',
+    'recent' => 'Last :days days',
+    'none' => 'No failures recorded in this period.',
+    'col_when' => 'When',
+    'col_chatbot' => 'Chatbot',
+    'col_kind' => 'Kind',
+    'col_question' => 'Customer question',
+    'col_reply' => 'Bot reply',
+    'empty_reply' => '(empty)',
+    'backfill' => 'from history',
+    'baselines' => 'Answer quality baselines',
+    'no_baselines' => 'No baseline recorded yet.',
+    'col_period' => 'Period',
+    'col_replies' => 'Replies',
+    'col_failed' => 'Failed',
+    'col_by_kind' => 'By kind',
+];

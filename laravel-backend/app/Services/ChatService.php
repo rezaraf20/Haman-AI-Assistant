@@ -304,7 +304,16 @@ class ChatService {
     }
 
     private function finish(Conversation $conv, Chatbot $chatbot, object $tenant, array $result, ?array $quota = null): array {
+        // Did this reply answer? Retrieval scores alone said "yes" for every
+        // empty reply, fallback and "we don't have that" — see AnswerOutcome.
+        $aiFlaggedGap = (bool) ($result['is_unanswered'] ?? false);
+        $outcome = \App\Support\AnswerOutcome::classify($result);
+        $result['is_unanswered'] = $outcome['unanswered'];
+
         $assMsg = Message::create(['conversation_id'=>$conv->id,'chatbot_id'=>$conv->chatbot_id,'role'=>'assistant','content'=>$result['response'],'retrieved_chunk_ids'=>$result['chunk_ids']??[],'retrieval_scores'=>$result['scores']??[],'prompt_tokens'=>$result['prompt_tokens']??0,'completion_tokens'=>$result['completion_tokens']??0,'total_tokens'=>$result['total_tokens']??0,'cost_toman'=>$result['cost_toman']??0,'model_used'=>$result['model']??$chatbot->llm_model,'latency_ms'=>$result['latency_ms']??null,'is_fallback'=>$result['is_fallback']??false,'is_unanswered'=>$result['is_unanswered']??false,'created_at'=>now()]);
+        $question = Message::where('conversation_id', $conv->id)->where('role', 'user')->latest('created_at')->value('content');
+        \App\Support\AnswerOutcomeRecorder::record($outcome, (string) $tenant->id, (string) $conv->chatbot_id, (string) $conv->id,
+            (string) $assMsg->id, $question, $result['response'] ?? '', now(), 'live', $aiFlaggedGap);
         $tokens = $result['total_tokens']??0;
         // Synchronous, not dispatch(fn()=>...)->afterResponse(): a raw Closure
         // job doesn't get SerializesModels' rehydration treatment the way a

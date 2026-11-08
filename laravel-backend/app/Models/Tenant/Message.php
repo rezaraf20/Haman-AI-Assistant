@@ -9,6 +9,15 @@ class Message extends Model
     protected $guarded = [];
     public $timestamps = false;
 
+    // The id is a UUID (set in creating() below, and the column's own
+    // default). Without these two, Eloquent treated it as an auto-increment
+    // integer: after create() it overwrote the UUID with the insert result
+    // cast to int — "9" for a UUID starting with 9 — and that number is what
+    // the chat endpoint returned to the widget as message_id, so the widget's
+    // feedback call (which requires a UUID) could never succeed.
+    public $incrementing = false;
+    protected $keyType = 'string';
+
     protected $casts = [
         'retrieved_chunk_ids' => 'array',
         'retrieval_scores'    => 'array',
