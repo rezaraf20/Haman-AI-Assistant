@@ -50,7 +50,7 @@ class CustomPostTypeSyncTest extends TestCase
         DB::statement('SET search_path TO public');
         DB::table('chatbot_index')->insert([
             'chatbot_id' => $chatbotId, 'tenant_id' => $tenant->id, 'schema_name' => $schema,
-            'is_active' => true, 'name' => 'Bot', 'primary_domain' => null,
+            'is_active' => true, 'name' => 'Bot', 'primary_domain' => 'agency.example.test',
         ]);
 
         $rawKey = 'hfp_' . Str::random(32);
@@ -66,7 +66,8 @@ class CustomPostTypeSyncTest extends TestCase
 
     private function auth(string $rawKey): array
     {
-        return ['Authorization' => "Bearer {$rawKey}"];
+        // What WordPress itself sends from the chatbot's own site — see SyncOrigin.
+        return ['Authorization' => "Bearer {$rawKey}", 'User-Agent' => 'WordPress/7.1.4; https://agency.example.test'];
     }
 
     private function inSchema(string $schema, callable $fn): mixed

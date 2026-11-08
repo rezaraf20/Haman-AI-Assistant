@@ -76,6 +76,17 @@ class Knowledge extends Page {
             'limit'      => $limit,
             'pct'        => $limit ? min(100, (int) round($liveTotal / max(1, $limit) * 100)) : null,
             'overLimit'  => $overLimit,
+            // Destructive requests refused because they came from a site that
+            // is not this chatbot's registered domain (App\Support\SyncOrigin).
+            'refused'    => array_map(fn ($r) => [
+                'text' => __('sync_origin.portal_row', [
+                    'origin' => $r->origin_domain !== '' ? $r->origin_domain : __('sync_origin.unknown_site'),
+                    'action' => __('sync_origin.action_' . $r->action),
+                    'count'  => Numbers::format($r->occurrences),
+                    'when'   => Jalali::dateTime($r->last_seen_at),
+                ]),
+                'registered' => $r->registered_domain,
+            ], \App\Support\SyncOrigin::recentFor($chatbotId)),
         ];
     }
 

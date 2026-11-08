@@ -17,6 +17,22 @@
                 </div>
             @endif
 
+            @if (!empty($d['refused']))
+                <div class="hp-notice hp-notice--warning" role="status">
+                    <x-filament::icon icon="heroicon-o-shield-exclamation" class="hp-icon hp-notice__icon" />
+                    <div>
+                        <p class="hp-notice__title">{{ __('sync_origin.portal_title') }}</p>
+                        <p class="hp-m0">{{ __('sync_origin.portal_body') }}</p>
+                        <p class="hp-m0 hp-small">{{ __('sync_origin.portal_registered', ['domain' => $d['refused'][0]['registered'] ?? __('sync_origin.no_domain')]) }}</p>
+                        <ul class="hp-m0 hp-small">
+                            @foreach ($d['refused'] as $r)
+                                <li dir="auto">{{ $r['text'] }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                </div>
+            @endif
+
             @if ($d['overLimit'] > 0)
                 <div class="hp-notice hp-notice--warning" role="status">
                     <x-filament::icon icon="heroicon-o-exclamation-triangle" class="hp-icon hp-notice__icon" />

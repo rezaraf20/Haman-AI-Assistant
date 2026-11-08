@@ -118,6 +118,15 @@ class SyncController extends BaseApiController {
             'chatbot_id' => 'required|uuid',
             'data'       => 'required|array',
         ]);
+        // A delete archives a document by its WordPress ID — and a second site
+        // sharing this chatbot has its own post 12. Only the chatbot's own
+        // site may remove anything (SyncOrigin); create/update still apply.
+        if (in_array($d['event'], ['page.deleted', 'product.deleted'], true)) {
+            $origin = \App\Support\SyncOrigin::authorise($req, $d['chatbot_id'], 'delete');
+            if (!$origin['allowed']) {
+                return $this->ok(['job_id' => null, 'event' => $d['event'], 'skipped' => 'domain_mismatch', 'message' => $origin['message']]);
+            }
+        }
         $t = app('current_tenant');
         $j = $this->svc->processWebhook($d, $t->schema_name);
         return $this->ok(['job_id'=>$j?->id,'event'=>$d['event']]);
@@ -138,6 +147,16 @@ class SyncController extends BaseApiController {
      */
     public function clearIndex(Request $req): JsonResponse {
         $d = $req->validate(['chatbot_id' => 'required|uuid']);
+        // Deletes every synced document — only from the chatbot's own site (SyncOrigin).
+        $origin = \App\Support\SyncOrigin::authorise($req, $d['chatbot_id'], 'clear');
+        if (!$origin['allowed']) {
+            return response()->json([
+                'error' => $origin['message'],
+                'reason' => 'domain_mismatch',
+                'origin_domain' => $origin['origin'],
+                'registered_domain' => $origin['registered'],
+            ], 409);
+        }
         $result = $this->svc->clearSyncedIndex($d['chatbot_id']);
         return $this->ok($result);
     }

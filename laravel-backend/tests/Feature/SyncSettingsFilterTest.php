@@ -47,7 +47,7 @@ class SyncSettingsFilterTest extends TestCase
         DB::statement('SET search_path TO public');
         DB::table('chatbot_index')->insert([
             'chatbot_id' => $chatbotId, 'tenant_id' => $tenant->id, 'schema_name' => $schema,
-            'is_active' => true, 'name' => 'Bot', 'primary_domain' => null,
+            'is_active' => true, 'name' => 'Bot', 'primary_domain' => 'shop.example.test',
         ]);
 
         $rawKey = 'hfp_' . Str::random(32);
@@ -65,7 +65,7 @@ class SyncSettingsFilterTest extends TestCase
     {
         ['chatbotId' => $chatbotId, 'rawKey' => $rawKey] = $this->makeTenantWithChatbot();
 
-        $r = $this->getJson("/api/v1/chatbots/{$chatbotId}/sync-settings", ['Authorization' => "Bearer {$rawKey}"]);
+        $r = $this->getJson("/api/v1/chatbots/{$chatbotId}/sync-settings", ['Authorization' => "Bearer {$rawKey}", 'User-Agent' => 'WordPress/7.1.4; https://shop.example.test']);
 
         $r->assertOk();
         $r->assertJsonPath('data.sync_products', true);
@@ -80,9 +80,9 @@ class SyncSettingsFilterTest extends TestCase
         $this->putJson("/api/v1/chatbots/{$chatbotId}/sync-settings", [
             'sync_posts' => true,
             'excluded_category_ids' => [4, 9],
-        ], ['Authorization' => "Bearer {$rawKey}"])->assertOk();
+        ], ['Authorization' => "Bearer {$rawKey}", 'User-Agent' => 'WordPress/7.1.4; https://shop.example.test'])->assertOk();
 
-        $r = $this->getJson("/api/v1/chatbots/{$chatbotId}/sync-settings", ['Authorization' => "Bearer {$rawKey}"]);
+        $r = $this->getJson("/api/v1/chatbots/{$chatbotId}/sync-settings", ['Authorization' => "Bearer {$rawKey}", 'User-Agent' => 'WordPress/7.1.4; https://shop.example.test']);
         $r->assertJsonPath('data.sync_posts', true);
         $r->assertJsonPath('data.excluded_category_ids', [4, 9]);
         // Untouched fields keep their default, not reset to null/false.
@@ -98,7 +98,7 @@ class SyncSettingsFilterTest extends TestCase
         $post = ['id' => 900, 'title' => 'Our GEO Blog Post', 'content' => 'Pricing table here.', 'url' => 'https://example.test/blog/geo', 'post_type' => 'post'];
         $page = ['id' => 901, 'title' => 'Services', 'content' => 'What we offer.', 'url' => 'https://example.test/services', 'post_type' => 'page'];
 
-        $r = $this->postJson('/api/v1/sync/pages', ['chatbot_id' => $chatbotId, 'pages' => [$post, $page]], ['Authorization' => "Bearer {$rawKey}"]);
+        $r = $this->postJson('/api/v1/sync/pages', ['chatbot_id' => $chatbotId, 'pages' => [$post, $page]], ['Authorization' => "Bearer {$rawKey}", 'User-Agent' => 'WordPress/7.1.4; https://shop.example.test']);
         $r->assertStatus(202);
 
         DB::statement("SET search_path TO {$schema}, public");
@@ -114,10 +114,10 @@ class SyncSettingsFilterTest extends TestCase
         Bus::fake([EmbedDocumentJob::class]);
         ['schema' => $schema, 'chatbotId' => $chatbotId, 'rawKey' => $rawKey] = $this->makeTenantWithChatbot();
 
-        $this->putJson("/api/v1/chatbots/{$chatbotId}/sync-settings", ['sync_posts' => true], ['Authorization' => "Bearer {$rawKey}"]);
+        $this->putJson("/api/v1/chatbots/{$chatbotId}/sync-settings", ['sync_posts' => true], ['Authorization' => "Bearer {$rawKey}", 'User-Agent' => 'WordPress/7.1.4; https://shop.example.test']);
 
         $post = ['id' => 902, 'title' => 'Our GEO Blog Post', 'content' => 'Pricing table here.', 'url' => 'https://example.test/blog/geo', 'post_type' => 'post'];
-        $this->postJson('/api/v1/sync/pages', ['chatbot_id' => $chatbotId, 'pages' => [$post]], ['Authorization' => "Bearer {$rawKey}"])
+        $this->postJson('/api/v1/sync/pages', ['chatbot_id' => $chatbotId, 'pages' => [$post]], ['Authorization' => "Bearer {$rawKey}", 'User-Agent' => 'WordPress/7.1.4; https://shop.example.test'])
             ->assertStatus(202);
 
         DB::statement("SET search_path TO {$schema}, public");
@@ -131,7 +131,7 @@ class SyncSettingsFilterTest extends TestCase
         ['schema' => $schema, 'chatbotId' => $chatbotId, 'rawKey' => $rawKey] = $this->makeTenantWithChatbot();
 
         $page = ['id' => 903, 'title' => 'Services', 'content' => 'What we offer.', 'url' => 'https://example.test/services', 'post_type' => 'page'];
-        $this->postJson('/api/v1/sync/pages', ['chatbot_id' => $chatbotId, 'pages' => [$page]], ['Authorization' => "Bearer {$rawKey}"]);
+        $this->postJson('/api/v1/sync/pages', ['chatbot_id' => $chatbotId, 'pages' => [$page]], ['Authorization' => "Bearer {$rawKey}", 'User-Agent' => 'WordPress/7.1.4; https://shop.example.test']);
 
         DB::statement("SET search_path TO {$schema}, public");
         DB::table('documents')->insert([
@@ -146,7 +146,7 @@ class SyncSettingsFilterTest extends TestCase
         ]);
         DB::statement('SET search_path TO public');
 
-        $r = $this->postJson('/api/v1/sync/clear', ['chatbot_id' => $chatbotId], ['Authorization' => "Bearer {$rawKey}"]);
+        $r = $this->postJson('/api/v1/sync/clear', ['chatbot_id' => $chatbotId], ['Authorization' => "Bearer {$rawKey}", 'User-Agent' => 'WordPress/7.1.4; https://shop.example.test']);
         $r->assertOk();
         $r->assertJsonPath('data.documents_deleted', 1);
         $r->assertJsonPath('data.chunks_deleted', 1);

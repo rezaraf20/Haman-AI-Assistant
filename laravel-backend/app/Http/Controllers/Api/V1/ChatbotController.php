@@ -146,6 +146,19 @@ class ChatbotController extends BaseApiController {
             'excluded_page_ids.*'     => 'integer',
         ]);
 
+        // Only the chatbot's own site may overwrite its settings — saving
+        // them archives every type that is "off", which on a second site
+        // sharing this chatbot means the first site's content. See SyncOrigin.
+        $origin = \App\Support\SyncOrigin::authorise($req, $chatbot->id, 'settings');
+        if (!$origin['allowed']) {
+            return response()->json([
+                'error' => $origin['message'],
+                'reason' => 'domain_mismatch',
+                'origin_domain' => $origin['origin'],
+                'registered_domain' => $origin['registered'],
+            ], 409);
+        }
+
         $result = app(\App\Services\SyncService::class)->applySyncSettings($chatbot, $d);
 
         return $this->ok(\App\Support\SyncSettings::forApi($result['settings']) + [

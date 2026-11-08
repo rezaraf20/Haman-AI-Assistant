@@ -53,7 +53,7 @@ class DocumentSyncSkipTest extends TestCase
 
         DB::table('chatbot_index')->insert([
             'chatbot_id' => $chatbotId, 'tenant_id' => $tenant->id, 'schema_name' => $schema,
-            'is_active' => true, 'name' => 'Test Bot', 'primary_domain' => null,
+            'is_active' => true, 'name' => 'Test Bot', 'primary_domain' => 'shop.example.test',
         ]);
 
         $rawKey = 'hfp_' . Str::random(32);
@@ -143,6 +143,7 @@ class DocumentSyncSkipTest extends TestCase
             'CONTENT_TYPE' => 'application/json',
             'HTTP_AUTHORIZATION' => "Bearer {$rawKey}",
             'HTTP_X_HAMAN_SIGNATURE' => $sig,
+            'HTTP_USER_AGENT' => 'WordPress/7.1.4; https://shop.example.test',
         ], $body);
         $response->assertStatus(200);
 
