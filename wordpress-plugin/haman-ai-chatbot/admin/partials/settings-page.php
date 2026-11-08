@@ -71,14 +71,79 @@ $authenticity_field_labels = [
     </p>
     <table class="form-table">
     <tr><th>چه چیزی همگام‌سازی شود / What to sync</th><td>
-        <label><input type="checkbox" name="haman_sync_products" value="1" <?php checked(get_option('haman_sync_products','1'),'1'); ?>> محصولات (WooCommerce) / Products</label><br>
-        <label><input type="checkbox" name="haman_sync_pages" value="1" <?php checked(get_option('haman_sync_pages','1'),'1'); ?>> صفحات / Pages</label><br>
-        <label><input type="checkbox" name="haman_sync_posts" value="1" <?php checked(get_option('haman_sync_posts','0'),'1'); ?>> نوشته‌های وبلاگ / Blog posts</label>
-        <p class="description">
-            به‌صورت پیش‌فرض خاموش است — یک نوشته‌ی وبلاگ به‌ندرت چیزی است که مشتری بخواهد وسط گفتگو جوابش را بگیرد.<br>
-            <em>Off by default — a blog post is rarely something a customer wants answered from mid-conversation.</em>
-        </p><br>
+        <label><input type="checkbox" name="haman_sync_products" value="1" <?php checked(get_option('haman_sync_products','1'),'1'); ?>> محصولات (WooCommerce) / Products</label>
+        <?php
+        // Every public post type this site really has — read from WordPress
+        // (get_post_types), not a hand-written list — with its own label and
+        // published count. See Haman_Sync_Settings.
+        $hm_types   = Haman_Sync_Settings::available_post_types();
+        $hm_enabled = Haman_Page_Sync::enabled_post_types();
+        $hm_fields  = Haman_Sync_Settings::custom_fields();
+        ?>
+        <table class="widefat striped hm-post-types" style="max-width:700px;margin-top:12px">
+            <thead><tr><th style="width:40px"></th><th>نوع محتوا / Content type</th><th>شناسه / Slug</th><th>منتشرشده / Published</th></tr></thead>
+            <tbody>
+            <?php foreach ($hm_types as $slug => $info): ?>
+                <tr>
+                    <td>
+                        <?php if ($info['separate']): ?>
+                            <input type="checkbox" disabled title="جداگانه مدیریت می‌شود / Managed separately">
+                        <?php else: ?>
+                            <input type="checkbox" class="hm-post-type-toggle" id="hm-pt-<?php echo esc_attr($slug); ?>" name="haman_sync_post_types[]" value="<?php echo esc_attr($slug); ?>" data-type="<?php echo esc_attr($slug); ?>" <?php checked(in_array($slug, $hm_enabled, true)); ?>>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <label for="hm-pt-<?php echo esc_attr($slug); ?>"><strong><?php echo esc_html($info['label']); ?></strong></label>
+                        <?php if ($info['separate']): ?>
+                            <br><span class="description">جداگانه با گزینه‌ی «محصولات» بالا همگام می‌شود / Synced separately, by the Products option above</span>
+                        <?php elseif ($slug === 'post'): ?>
+                            <br><span class="description">پیش‌فرض خاموش — نوشته‌ی وبلاگ به‌ندرت جواب سوال مشتری است / Off by default — a blog post is rarely what a customer is asking about</span>
+                        <?php endif; ?>
+                    </td>
+                    <td><code><?php echo esc_html($slug); ?></code></td>
+                    <td><?php echo esc_html(number_format_i18n($info['count'])); ?></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        <br>
         <label><input type="checkbox" name="haman_sync_pdfs" value="1" <?php checked(get_option('haman_sync_pdfs','1'),'1'); ?>> فایل‌های PDF ضمیمه‌ی محصول (دیتاشیت) / PDF attachments (datasheets)</label>
+    </td></tr>
+    <tr><th>فیلدهای سفارشی / Custom fields</th><td>
+        <p class="description" style="max-width:700px">
+            هیچ فیلد سفارشی‌ای بدون انتخاب شما فرستاده نمی‌شود. برای هر نوع محتوای انتخاب‌شده، فیلدهایی که واقعاً در این سایت وجود دارند با یک مقدار نمونه نشان داده شده‌اند؛ هر کدام را که می‌خواهید بات بداند علامت بزنید. فیلدهای خصوصی (که با _ شروع می‌شوند) هرگز نمایش داده یا فرستاده نمی‌شوند.<br>
+            <em>No custom field is sent unless you pick it. For each selected content type, the fields that actually exist on this site are listed with a real sample value; tick the ones the bot should know. Private fields (starting with _) are never shown or sent.</em>
+        </p>
+        <?php foreach ($hm_types as $slug => $info): if ($info['separate']) continue; ?>
+            <?php $hm_keys = Haman_Sync_Settings::discover_meta_keys($slug); $hm_picked = $hm_fields[$slug] ?? []; ?>
+            <fieldset class="hm-custom-fields" data-type="<?php echo esc_attr($slug); ?>" style="max-width:700px;margin:12px 0;<?php echo in_array($slug, $hm_enabled, true) ? '' : 'display:none'; ?>">
+                <legend><strong><?php echo esc_html($info['label']); ?></strong></legend>
+                <?php if (empty($hm_keys)): ?>
+                    <p class="description">این نوع فیلد سفارشی عمومی ندارد. / This type has no public custom fields.</p>
+                <?php else: ?>
+                    <table class="widefat striped">
+                        <thead><tr><th style="width:40px">ارسال / Send</th><th>کلید / Key</th><th>نمونه‌ی مقدار / Sample value</th><th>موارد / Items</th></tr></thead>
+                        <tbody>
+                        <?php foreach ($hm_keys as $k): ?>
+                            <tr>
+                                <td>
+                                    <?php if ($k['sendable']): ?>
+                                        <input type="checkbox" class="hm-field-toggle" name="haman_sync_custom_fields[<?php echo esc_attr($slug); ?>][]" value="<?php echo esc_attr($k['key']); ?>" <?php checked(in_array($k['key'], $hm_picked, true)); ?>>
+                                    <?php else: ?>
+                                        <input type="checkbox" disabled title="مقدار متنی نیست / Not plain text">
+                                    <?php endif; ?>
+                                </td>
+                                <td><code><?php echo esc_html($k['key']); ?></code></td>
+                                <td><?php echo $k['sendable'] ? esc_html(mb_strimwidth($k['sample'], 0, 80, '…')) : '<em>داده‌ی ساختاریافته — قابل ارسال نیست / structured data — not sendable</em>'; ?></td>
+                                <td><?php echo esc_html(number_format_i18n($k['items'])); ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    <p class="hm-field-summary description" data-none="هیچ فیلدی فرستاده نمی‌شود / No fields will be sent" data-prefix="این فیلدها فرستاده می‌شوند / These fields will be sent: "></p>
+                <?php endif; ?>
+            </fieldset>
+        <?php endforeach; ?>
     </td></tr>
     <tr><th>استثنا کردن محتوای خاص / Exclude specific content</th><td>
         <label>شناسه‌ی دسته‌های مستثنا (نوشته‌ها) / Excluded category IDs (posts):<br>
@@ -169,10 +234,10 @@ submit_button('ذخیره تنظیمات / Save Settings');
     <span id="hm-clear-reindex-result"></span>
     <?php $r = get_transient('haman_sync_results'); if($r): ?>
         <table class="widefat" style="max-width:700px">
-        <thead><tr><th>نوع / Type</th><th>جدید / New</th><th>به‌روزشده / Updated</th><th>بدون تغییر / Skipped</th><th>حذف‌شده / Deleted</th><th>ناموفق / Failed</th></tr></thead>
+        <thead><tr><th>نوع / Type</th><th>جدید / New</th><th>به‌روزشده / Updated</th><th>بدون تغییر / Skipped</th><th>حذف‌شده / Deleted</th><th>ناموفق / Failed</th><th>بیش از سقف / Over limit</th></tr></thead>
         <tbody>
         <?php
-        $labels = ['products' => 'محصولات / Products', 'pages' => 'صفحات / Pages', 'faqs' => 'سوالات متداول / FAQs'];
+        $labels = ['products' => 'محصولات / Products', 'pages' => 'صفحات و محتوای سایت / Pages & site content', 'faqs' => 'سوالات متداول / FAQs'];
         foreach ($labels as $key => $label):
             if (empty($r[$key])) continue;
             $row = $r[$key];
@@ -184,6 +249,7 @@ submit_button('ذخیره تنظیمات / Save Settings');
                 <td><?php echo esc_html($row['skipped'] ?? 0); ?></td>
                 <td><?php echo esc_html($row['deleted'] ?? 0); ?></td>
                 <td><?php echo esc_html($row['failed'] ?? 0); ?></td>
+                <td><?php echo esc_html($row['over_limit'] ?? 0); ?></td>
             </tr>
         <?php endforeach; ?>
         </tbody>
@@ -193,6 +259,12 @@ submit_button('ذخیره تنظیمات / Save Settings');
         ?>
             <div class="notice notice-info inline"><p><?php echo esc_html($r[$key]['note']); ?></p></div>
         <?php endforeach; ?>
+        <?php $hm_over = array_sum(array_map(fn($row) => is_array($row) ? (int) ($row['over_limit'] ?? 0) : 0, $r)); if ($hm_over > 0): ?>
+            <div class="notice notice-warning inline"><p>
+                <?php echo esc_html(sprintf('%d سند ایندکس نشد چون به سقف اسناد پلن رسیده‌اید. بات از این‌ها جواب نمی‌دهد؛ با ارتقای پلن یا خاموش کردن نوع‌هایی که لازم ندارید، در همگام‌سازی بعدی اضافه می‌شوند.', $hm_over)); ?><br>
+                <em><?php echo esc_html(sprintf('%d documents were not indexed because your plan\'s document limit was reached. The bot does not answer from them; upgrading, or turning off types you don\'t need, lets the next sync add them.', $hm_over)); ?></em>
+            </p></div>
+        <?php endif; ?>
         <?php if (!empty($r['error'])): ?>
             <div class="notice notice-error inline"><p><?php echo esc_html($r['error']); ?></p></div>
         <?php endif; ?>

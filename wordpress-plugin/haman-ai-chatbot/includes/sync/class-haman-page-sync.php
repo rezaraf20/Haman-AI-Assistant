@@ -14,20 +14,16 @@ class Haman_Page_Sync {
 
     /**
      * Which post types this site's own settings currently allow syncing at
-     * all. Pages and posts used to be one combined "haman_sync_pages"
-     * option (get_posts(['post_type'=>['page','post'],...]) unconditionally)
-     * -- the actual cause of a real incident: a hamantech.ir blog post's
-     * pricing table got indexed and surfaced mid-conversation to a customer
-     * who never asked about it, because there was no way to sync pages
-     * without also syncing every blog post. Posts default OFF for exactly
-     * that reason; pages keep the old default (on), so an existing install
-     * upgrading to this version sees no behavior change for pages.
+     * all — pages, posts and any custom post type the owner ticked (see
+     * Haman_Sync_Settings). Pages and posts used to be one combined
+     * "haman_sync_pages" option (get_posts(['post_type'=>['page','post'],
+     * ...]) unconditionally) -- the actual cause of a real incident: a
+     * hamantech.ir blog post's pricing table got indexed and surfaced
+     * mid-conversation to a customer who never asked about it. Posts still
+     * default OFF for that reason; pages keep the old default (on).
      */
     public static function enabled_post_types(): array {
-        $types = [];
-        if (get_option('haman_sync_pages', '1') === '1') $types[] = 'page';
-        if (get_option('haman_sync_posts', '0') === '1') $types[] = 'post';
-        return $types;
+        return Haman_Sync_Settings::enabled_post_types();
     }
 
     private static function excluded_ids( string $option ): array {
@@ -120,7 +116,7 @@ class Haman_Page_Sync {
         if (empty($batch)) return;
         $r = $this->api->sync_pages($cid, $batch);
         if (is_wp_error($r)) { $errors[] = $r->get_error_message(); return; }
-        Haman_Sync_Counts::add($counts, is_array($r) ? ($r['result'] ?? []) : []);
+        Haman_Sync_Counts::add($counts, Haman_Sync_Counts::result_of($r));
     }
 
     public function sync_recent( string $cid, int $hours=25 ): void {
@@ -133,14 +129,71 @@ class Haman_Page_Sync {
         $this->flush_batch($cid, array_map([$this,'post_to_array'],$posts), $counts, $errors);
     }
 
+    /**
+     * One item, in the shape POST /sync/pages expects. Pages, posts and
+     * custom post types all go through here — and through extract_content()
+     * below, the Elementor-aware extractor — so a "portfolio" item built
+     * with Elementor gets exactly the same clean-up a page does. Also used
+     * by Haman_Sync_Manager::on_post_saved(), so a single edit is sent the
+     * same way a full sync sends it.
+     */
     public function post_to_array( \WP_Post $p ): array {
-        return [
-            'id'        => $p->ID,
-            'title'     => get_the_title($p->ID),
-            'content'   => $this->extract_content($p),
-            'url'       => get_permalink($p->ID),
-            'post_type' => $p->post_type,
+        $type_obj = get_post_type_object($p->post_type);
+        $item = [
+            'id'              => $p->ID,
+            'title'           => get_the_title($p->ID),
+            'content'         => $this->extract_content($p),
+            'excerpt'         => $p->post_excerpt !== '' ? wp_strip_all_tags($p->post_excerpt) : '',
+            'url'             => get_permalink($p->ID),
+            'post_type'       => $p->post_type,
+            'post_type_label' => $type_obj ? (string) $type_obj->labels->singular_name : $p->post_type,
+            'date'            => get_post_time('c', true, $p),
+            'taxonomies'      => $this->taxonomies_of($p),
         ];
+
+        // Only when the type shows its author publicly at all.
+        if (post_type_supports($p->post_type, 'author') && $p->post_author) {
+            $item['author'] = get_the_author_meta('display_name', (int) $p->post_author);
+        }
+
+        $fields = $this->approved_custom_fields($p);
+        if ($fields) $item['custom_fields'] = $fields;
+
+        return $item;
+    }
+
+    /**
+     * The public taxonomies of this item's own type — category and tag for
+     * posts, a portfolio's own "project category", etc. — with each one's
+     * label and this item's term names. "Do you have web-design portfolio
+     * work?" has to be able to find an item whose only mention of web
+     * design is its category.
+     */
+    private function taxonomies_of( \WP_Post $p ): array {
+        $out = [];
+        foreach (get_object_taxonomies($p->post_type, 'objects') as $tax) {
+            if (empty($tax->public) || $tax->name === 'post_format') continue;
+            $terms = get_the_terms($p->ID, $tax->name);
+            if (empty($terms) || is_wp_error($terms)) continue;
+            $out[] = [
+                'taxonomy' => $tax->name,
+                'label'    => (string) ($tax->labels->singular_name ?? $tax->label),
+                'terms'    => array_values(array_map(fn($t) => html_entity_decode($t->name, ENT_QUOTES, 'UTF-8'), $terms)),
+            ];
+        }
+        return $out;
+    }
+
+    /** Only keys the owner approved for this type, only readable scalar values. */
+    private function approved_custom_fields( \WP_Post $p ): array {
+        $out = [];
+        foreach (Haman_Sync_Settings::approved_fields_for($p->post_type) as $key) {
+            if ($key === '' || $key[0] === '_') continue;
+            $value = get_post_meta($p->ID, $key, true);
+            if (!is_scalar($value) || trim((string) $value) === '') continue;
+            $out[$key] = mb_substr(wp_strip_all_tags((string) $value), 0, 500);
+        }
+        return $out;
     }
 
     private function extract_content( \WP_Post $p ): string {

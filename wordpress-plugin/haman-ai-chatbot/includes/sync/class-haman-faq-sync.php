@@ -43,7 +43,7 @@ class Haman_Faq_Sync {
         if (empty($batch)) return;
         $r = $this->api->sync_faqs($cid, $batch);
         if (is_wp_error($r)) { $errors[] = $r->get_error_message(); return; }
-        Haman_Sync_Counts::add($counts, is_array($r) ? ($r['result'] ?? []) : []);
+        Haman_Sync_Counts::add($counts, Haman_Sync_Counts::result_of($r));
     }
 
     private function extract_faqs(): array {

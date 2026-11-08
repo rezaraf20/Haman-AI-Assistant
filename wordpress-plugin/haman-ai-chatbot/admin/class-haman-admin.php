@@ -29,6 +29,14 @@ class Haman_Admin {
     }
     public function render(): void {
         if (!current_user_can('manage_options')) wp_die('No permission');
+        // Show what the platform currently has (it is authoritative — a type
+        // may have been switched on or off from the customer portal). At most
+        // once a minute, so the settings page isn't waiting on the API on
+        // every load; a failed pull simply shows the local copy.
+        if (false === get_transient('haman_sync_settings_pulled')) {
+            Haman_Sync_Settings::pull_from_server();
+            set_transient('haman_sync_settings_pulled', 1, MINUTE_IN_SECONDS);
+        }
         include HAMAN_PLUGIN_DIR.'admin/partials/settings-page.php';
     }
 
@@ -62,15 +70,22 @@ class Haman_Admin {
         update_option('haman_api_url',       esc_url_raw($_POST['haman_api_url']??HAMAN_API_BASE));
         update_option('haman_enabled',       isset($_POST['haman_enabled'])?'1':'0');
 
-        // همگام‌سازی / Sync scope. Pages and posts are two independent
-        // toggles (see Haman_Page_Sync::enabled_post_types()'s docblock for
-        // the incident behind splitting them) — posts default OFF, unlike
-        // every other checkbox here, since an unchecked box and "not sent
-        // in $_POST at all" are indistinguishable and a fresh install must
-        // not silently start syncing blog posts.
+        // همگام‌سازی / Sync scope: products on their own toggle, every other
+        // post type (page, post, custom types) as one checked list — see
+        // Haman_Sync_Settings. Only types this site actually has are kept.
         update_option('haman_sync_products', isset($_POST['haman_sync_products'])?'1':'0');
-        update_option('haman_sync_pages',    isset($_POST['haman_sync_pages'])?'1':'0');
-        update_option('haman_sync_posts',    isset($_POST['haman_sync_posts'])?'1':'0');
+        $available = array_keys(Haman_Sync_Settings::available_post_types());
+        $picked    = array_map('sanitize_key', (array) wp_unslash($_POST['haman_sync_post_types'] ?? []));
+        Haman_Sync_Settings::set_enabled_post_types(array_values(array_intersect($picked, $available)));
+
+        // Custom fields: only keys the owner ticked in the preview, per type.
+        // Haman_Sync_Settings drops any "_"-prefixed (private) key regardless.
+        $fields = [];
+        foreach ((array) wp_unslash($_POST['haman_sync_custom_fields'] ?? []) as $type => $keys) {
+            if (!in_array(sanitize_key($type), $available, true)) continue;
+            $fields[sanitize_key($type)] = array_map('sanitize_text_field', (array) $keys);
+        }
+        Haman_Sync_Settings::set_custom_fields($fields);
         update_option('haman_sync_pdfs',     isset($_POST['haman_sync_pdfs'])?'1':'0');
         update_option('haman_sync_excluded_category_ids', $this->sanitize_id_list($_POST['haman_sync_excluded_category_ids']??''));
         update_option('haman_sync_excluded_page_ids',     $this->sanitize_id_list($_POST['haman_sync_excluded_page_ids']??''));
@@ -83,16 +98,12 @@ class Haman_Admin {
         // trip. Never blocks the redirect below: a merchant without a
         // working API connection yet must still be able to save local
         // settings, exactly like every other field on this page already can.
-        $chatbot_id = get_option('haman_chatbot_id', '');
-        if (!empty($chatbot_id)) {
-            $r = (new Haman_Api_Client())->update_sync_settings($chatbot_id, [
-                'sync_products'         => get_option('haman_sync_products') === '1',
-                'sync_pages'            => get_option('haman_sync_pages') === '1',
-                'sync_posts'            => get_option('haman_sync_posts') === '1',
-                'excluded_category_ids' => $this->id_list_to_array(get_option('haman_sync_excluded_category_ids', '')),
-                'excluded_page_ids'     => $this->id_list_to_array(get_option('haman_sync_excluded_page_ids', '')),
-            ]);
-            if (is_wp_error($r)) self::log('Push sync settings to server failed: ' . $r->get_error_message());
+        if (!empty(get_option('haman_chatbot_id', ''))) {
+            $pushed = Haman_Sync_Settings::push_to_server();
+            if (is_array($pushed) && !empty($pushed['archived_documents'])) {
+                self::log('Sync settings saved; the platform archived ' . (int) $pushed['archived_documents'] . ' document(s) of the types you turned off.');
+            }
+            delete_transient('haman_sync_settings_pulled');
         }
 
         // نگاشت فیلدهای اصالت / Authenticity field mapping — see

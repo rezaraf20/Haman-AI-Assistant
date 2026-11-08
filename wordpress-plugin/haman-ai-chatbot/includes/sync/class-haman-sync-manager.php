@@ -23,6 +23,11 @@ class Haman_Sync_Manager {
 
     public function run_full_sync(): array {
         if (!$this->isReady()) return ['error'=>'Not configured'];
+        // The platform is authoritative for what gets synced (see
+        // Haman_Sync_Settings): a post type turned on or off in the customer
+        // portal must change THIS run, not wait for someone to open the
+        // WordPress settings page. A failed pull just keeps local settings.
+        Haman_Sync_Settings::pull_from_server();
         $cid     = $this->chatbotId();
         $api     = $this->api();
         $results = [];
@@ -63,7 +68,12 @@ class Haman_Sync_Manager {
         // sync.
         if (!Haman_Page_Sync::is_allowed($post)) return;
         if (!$this->isReady()) return;
-        $data  = ['id'=>$id,'title'=>get_the_title($id),'content'=>wp_strip_all_tags(get_post_field('post_content',$id)),'url'=>get_permalink($id),'post_type'=>$post->post_type];
+        // The same Haman_Page_Sync::post_to_array() a full sync uses. This
+        // used to send wp_strip_all_tags(post_content) instead, so every
+        // single edit to an Elementor-built page re-introduced exactly the
+        // widget-setting noise the full sync's extractor exists to remove —
+        // and a custom post type would have lost its taxonomies and fields.
+        $data  = (new Haman_Page_Sync($this->api()))->post_to_array($post);
         $event = $update ? 'page.updated' : 'page.created';
         $this->api()->send_webhook(['event'=>$event,'chatbot_id'=>$this->chatbotId(),'data'=>$data]);
     }
@@ -81,7 +91,7 @@ class Haman_Sync_Manager {
         // this webhook's job to reconcile -- it fires only on a real
         // delete/trash, not on a settings change; see SyncSettings' "Clear
         // and reindex" for the latter.
-        if (!in_array( get_post_type($id), ['page','post'], true )) return;
+        if (!in_array( get_post_type($id), Haman_Page_Sync::enabled_post_types(), true )) return;
         $this->api()->send_webhook(['event'=>'page.deleted','chatbot_id'=>$this->chatbotId(),'data'=>['id'=>$id]]);
     }
 

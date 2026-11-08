@@ -225,8 +225,33 @@
         }).catch(function () { /* silent — non-critical */ });
     }
 
+    /**
+     * Sync tab: each selected post type shows its custom-field preview, and
+     * the line under it always says exactly which fields will be sent — the
+     * owner approves a concrete list, not "the fields".
+     */
+    function initPostTypeFields() {
+        function summarise(fieldset) {
+            var line = fieldset.querySelector('.hm-field-summary');
+            if (!line) return;
+            var keys = Array.prototype.map.call(fieldset.querySelectorAll('.hm-field-toggle:checked'), function (cb) { return cb.value; });
+            line.textContent = keys.length ? line.getAttribute('data-prefix') + keys.join('، ') : line.getAttribute('data-none');
+        }
+        document.querySelectorAll('.hm-custom-fields').forEach(function (fieldset) {
+            summarise(fieldset);
+            fieldset.addEventListener('change', function () { summarise(fieldset); });
+        });
+        document.querySelectorAll('.hm-post-type-toggle').forEach(function (cb) {
+            cb.addEventListener('change', function () {
+                var fieldset = document.querySelector('.hm-custom-fields[data-type="' + cb.getAttribute('data-type') + '"]');
+                if (fieldset) fieldset.style.display = cb.checked ? '' : 'none';
+            });
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         initTabs();
+        initPostTypeFields();
         initTestConnection();
         initClearCache();
         initWebhookSecret();
