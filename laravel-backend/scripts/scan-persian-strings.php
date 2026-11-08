@@ -19,6 +19,9 @@
  *     the same: a corpus of Persian phrases the rules match customer
  *     questions against, never text shown to anyone. Every sentence that
  *     IS shown for a suggestion lives in lang/{fa,en}/suggestions.php.
+ *     AnswerOutcome.php likewise: its patterns are matched against the
+ *     bot's own replies to tell "we don't have it" from "I can't", and are
+ *     never shown; its labels live in lang/{fa,en}/bot_failures.php.
  *   - A line ending in the `// i18n:widget` marker: scattered single lines
  *     (e.g. a widget-content fallback string inside a controller) that are
  *     the same widget-language exemption but don't warrant excluding their
@@ -34,6 +37,7 @@ $exemptFiles = [
     DIRECTORY_SEPARATOR . 'Support' . DIRECTORY_SEPARATOR . 'Numbers.php',
     DIRECTORY_SEPARATOR . 'Support' . DIRECTORY_SEPARATOR . 'TextSimilarity.php',
     DIRECTORY_SEPARATOR . 'Services' . DIRECTORY_SEPARATOR . 'SuggestionEngine.php',
+    DIRECTORY_SEPARATOR . 'Support' . DIRECTORY_SEPARATOR . 'AnswerOutcome.php',
 ];
 
 $findings = [];
