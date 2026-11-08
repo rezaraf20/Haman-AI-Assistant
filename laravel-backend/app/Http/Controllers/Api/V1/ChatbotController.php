@@ -153,6 +153,12 @@ class ChatbotController extends BaseApiController {
         ]);
     }
 
+    /** See App\Support\KnowledgeSummary — the same numbers the portal's Knowledge page shows. */
+    public function knowledge(string $id): JsonResponse {
+        $chatbot = Chatbot::findOrFail($id);
+        return $this->ok(\App\Support\KnowledgeSummary::forChatbot($chatbot->id, app('current_tenant')));
+    }
+
     public function destroy(string $id): JsonResponse {
         $chatbot = Chatbot::findOrFail($id);
         $chatbot->update(['is_active'=>false,'status'=>'inactive']);

@@ -21,6 +21,34 @@ class Haman_Sync_Manager {
         }
     }
 
+    public function is_ready(): bool { return $this->isReady(); }
+
+    /** The steps a full sync runs on this site, in order — what the settings page shows progress against. */
+    public function full_sync_steps(): array {
+        $steps = [];
+        // No step the owner would watch do nothing: products only when
+        // WooCommerce is actually running on this site.
+        if (get_option('haman_sync_products','1') === '1' && class_exists('WooCommerce')) $steps[] = 'products';
+        if (!empty(Haman_Page_Sync::enabled_post_types())) {
+            $steps[] = 'pages';
+            $steps[] = 'faqs';
+        }
+        return $steps;
+    }
+
+    /** One step of run_full_sync(), for the settings page's step-by-step progress. */
+    public function run_sync_step( string $step ): array {
+        if (!$this->isReady()) return ['error' => 'Not configured'];
+        $cid = $this->chatbotId();
+        $api = $this->api();
+        return match ($step) {
+            'products' => (new Haman_Product_Sync($api))->sync_all($cid),
+            'pages'    => (new Haman_Page_Sync($api))->sync_all($cid),
+            'faqs'     => (new Haman_Faq_Sync($api))->sync_all($cid),
+            default    => ['error' => 'Unknown step'],
+        };
+    }
+
     public function run_full_sync(): array {
         if (!$this->isReady()) return ['error'=>'Not configured'];
         // The platform is authoritative for what gets synced (see

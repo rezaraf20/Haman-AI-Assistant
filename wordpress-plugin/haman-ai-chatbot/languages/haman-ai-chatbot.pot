@@ -1,0 +1,713 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Haman AI Chatbot\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"X-Domain: haman-ai-chatbot\n"
+
+#: admin/class-haman-admin.php:94
+msgid "%1$s documents and %2$s chunks removed; a fresh sync has run."
+msgstr ""
+
+#: admin/class-haman-admin.php:88
+msgid "%1$s new, %2$s updated, %3$s unchanged, %4$s failed"
+msgstr ""
+
+#: admin/class-haman-admin.php:53
+msgid "%1$s of %2$s documents"
+msgstr ""
+
+#: admin/class-haman-admin.php:54
+msgid "%s documents"
+msgstr ""
+
+#: admin/class-haman-admin.php:56 admin/partials/settings-page.php:384
+msgid "%s documents were not indexed because your plan’s document limit was reached. The bot does not answer from them; upgrading, or turning off types you don’t need, lets the next sync add them."
+msgstr ""
+
+#: admin/partials/settings-page.php:301
+msgid "(opens in a new tab)"
+msgstr ""
+
+#: includes/api/class-haman-api-client.php:137
+msgid "(unnamed)"
+msgstr ""
+
+#: admin/partials/settings-page.php:125
+msgid "API URL"
+msgstr ""
+
+#: admin/partials/settings-page.php:109
+msgid "API key"
+msgstr ""
+
+#: admin/partials/settings-page.php:84
+msgid "Active"
+msgstr ""
+
+#: admin/partials/settings-page.php:26
+msgid "Advanced"
+msgstr ""
+
+#: admin/partials/settings-page.php:25
+msgid "Appearance & texts"
+msgstr ""
+
+#: admin/class-haman-admin.php:102
+msgid "Assistant name"
+msgstr ""
+
+#: admin/partials/settings-page.php:278
+msgid "Authenticity field mapping"
+msgstr ""
+
+#: admin/partials/settings-page.php:15
+msgid "Authenticity status"
+msgstr ""
+
+#: includes/sync/class-haman-sync-manager.php:261
+msgid "Auto-cancelled by Haman AI: unpaid draft order created from chat exceeded the hold period."
+msgstr ""
+
+#: admin/class-haman-admin.php:103
+msgid "Avatar URL"
+msgstr ""
+
+#: admin/partials/settings-page.php:315
+msgid "Block for"
+msgstr ""
+
+#: admin/partials/settings-page.php:16
+msgid "Brand name"
+msgstr ""
+
+#: admin/partials/settings-page.php:401
+msgid "Cache"
+msgstr ""
+
+#: admin/partials/settings-page.php:267
+msgid "Category IDs to leave out (posts)"
+msgstr ""
+
+#: admin/partials/settings-page.php:132
+msgid "Chat widget"
+msgstr ""
+
+#: admin/class-haman-admin.php:101
+msgid "Chat window title"
+msgstr ""
+
+#: admin/partials/settings-page.php:121
+msgid "Chatbot ID"
+msgstr ""
+
+#: admin/class-haman-admin.php:50
+msgid "Chatbot suspended"
+msgstr ""
+
+#: admin/class-haman-admin.php:43 admin/partials/settings-page.php:61 admin/partials/settings-page.php:67 admin/partials/settings-page.php:76
+msgid "Checking…"
+msgstr ""
+
+#: admin/partials/settings-page.php:346 admin/partials/settings-page.php:348
+msgid "Clear and reindex"
+msgstr ""
+
+#: admin/partials/settings-page.php:402
+msgid "Clear cache"
+msgstr ""
+
+#: admin/class-haman-admin.php:93
+msgid "Cleared"
+msgstr ""
+
+#: admin/class-haman-admin.php:48 includes/api/class-haman-api-client.php:105
+msgid "Connected"
+msgstr ""
+
+#: admin/class-haman-admin.php:47 includes/api/class-haman-api-client.php:105
+msgid "Connected to “%s”"
+msgstr ""
+
+#: admin/partials/settings-page.php:23 admin/partials/settings-page.php:66
+msgid "Connection"
+msgstr ""
+
+#: admin/partials/settings-page.php:180
+msgid "Content"
+msgstr ""
+
+#: admin/class-haman-admin.php:72 admin/partials/settings-page.php:194
+msgid "Content type"
+msgstr ""
+
+#: admin/class-haman-admin.php:79
+msgid "Copied"
+msgstr ""
+
+#: admin/partials/settings-page.php:114
+msgid "Copy"
+msgstr ""
+
+#: admin/class-haman-admin.php:80
+msgid "Copy failed — select the key and copy it manually."
+msgstr ""
+
+#: admin/class-haman-admin.php:45
+msgid "Could not reach the WordPress server. Reload the page and try again."
+msgstr ""
+
+#: admin/partials/settings-page.php:19
+msgid "Country of origin"
+msgstr ""
+
+#: admin/partials/settings-page.php:287
+msgid "Custom field (meta key)"
+msgstr ""
+
+#: admin/partials/settings-page.php:225
+msgid "Custom fields"
+msgstr ""
+
+#: admin/partials/settings-page.php:321
+msgid "Delete this plugin’s settings from WordPress"
+msgstr ""
+
+#: admin/partials/settings-page.php:360
+msgid "Deleted"
+msgstr ""
+
+#: admin/partials/settings-page.php:347
+msgid "Deletes everything currently synced and rebuilds it with the settings above — for when you changed what to sync and old content is still in the index. FAQs you entered by hand are not affected."
+msgstr ""
+
+#: admin/class-haman-admin.php:71
+msgid "Documents"
+msgstr ""
+
+#: admin/class-haman-admin.php:75
+msgid "Download"
+msgstr ""
+
+#: admin/class-haman-admin.php:534
+msgid "Download the new version"
+msgstr ""
+
+#: admin/partials/settings-page.php:301
+msgid "Edit appearance and texts in the Haman panel"
+msgstr ""
+
+#: admin/partials/settings-page.php:106
+msgid "Enter the API key and Chatbot ID from your Haman panel, save, then test the connection."
+msgstr ""
+
+#: admin/class-haman-admin.php:309
+msgid "Enter the API key and Chatbot ID from your Haman panel, then save."
+msgstr ""
+
+#: admin/class-haman-admin.php:46
+msgid "Error"
+msgstr ""
+
+#: admin/class-haman-admin.php:68
+msgid "Everything is working: connected, synced and the widget is live."
+msgstr ""
+
+#: admin/class-haman-admin.php:62 admin/class-haman-admin.php:85 admin/partials/settings-page.php:366
+msgid "FAQs"
+msgstr ""
+
+#: admin/partials/settings-page.php:361
+msgid "Failed"
+msgstr ""
+
+#: admin/partials/settings-page.php:117
+msgid "From your Haman panel → API keys. It starts with hfp_."
+msgstr ""
+
+#: admin/partials/settings-page.php:44
+msgid "Haman AI Chatbot"
+msgstr ""
+
+#: admin/class-haman-admin.php:539
+msgid "Haman AI Chatbot %1$s is available — you have %2$s. Upload the new ZIP from Plugins → Add New → Upload Plugin."
+msgstr ""
+
+#: includes/api/class-haman-api-client.php:121
+msgid "Haman answered with an unexpected response (HTTP %d)."
+msgstr ""
+
+#: includes/api/class-haman-api-client.php:111
+msgid "Haman does not recognise this API key — it may have been regenerated. Copy the current key from your Haman panel."
+msgstr ""
+
+#: admin/class-haman-admin.php:78
+msgid "Hide"
+msgstr ""
+
+#: admin/partials/settings-page.php:75
+msgid "Indexed documents"
+msgstr ""
+
+#: admin/partials/settings-page.php:406
+msgid "Installed version:"
+msgstr ""
+
+#: admin/class-haman-admin.php:49
+msgid "Invalid key"
+msgstr ""
+
+#: admin/partials/settings-page.php:240
+msgid "Items"
+msgstr ""
+
+#: admin/partials/settings-page.php:155
+msgid "Kept on the Haman server, never stored on this site, so it is always the current value."
+msgstr ""
+
+#: admin/partials/settings-page.php:238
+msgid "Key"
+msgstr ""
+
+#: admin/partials/settings-page.php:290
+msgid "Key for %s"
+msgstr ""
+
+#: admin/partials/settings-page.php:71
+msgid "Last full sync"
+msgstr ""
+
+#: admin/partials/settings-page.php:164
+msgid "Last full sync:"
+msgstr ""
+
+#: admin/partials/settings-page.php:352
+msgid "Last sync results"
+msgstr ""
+
+#: admin/class-haman-admin.php:108
+msgid "Lead capture"
+msgstr ""
+
+#: admin/partials/settings-page.php:128
+msgid "Leave as it is unless Haman support asks you to change it."
+msgstr ""
+
+#: admin/partials/settings-page.php:265
+msgid "Leave out"
+msgstr ""
+
+#: admin/class-haman-admin.php:44 admin/partials/settings-page.php:165 admin/partials/settings-page.php:303
+msgid "Loading…"
+msgstr ""
+
+#: admin/partials/settings-page.php:203
+msgid "Managed separately"
+msgstr ""
+
+#: admin/partials/settings-page.php:307
+msgid "Message limits"
+msgstr ""
+
+#: admin/partials/settings-page.php:311
+msgid "Messages per visitor"
+msgstr ""
+
+#: admin/class-haman-admin.php:92
+msgid "Migrated"
+msgstr ""
+
+#: admin/partials/settings-page.php:394
+msgid "Move old local settings to Haman (once)"
+msgstr ""
+
+#: admin/partials/settings-page.php:396
+msgid "Move to Haman"
+msgstr ""
+
+#: admin/class-haman-admin.php:70
+msgid "Needs attention: %s"
+msgstr ""
+
+#: admin/class-haman-admin.php:63 admin/partials/settings-page.php:30
+msgid "Never"
+msgstr ""
+
+#: admin/partials/settings-page.php:357
+msgid "New"
+msgstr ""
+
+#: admin/class-haman-admin.php:98
+msgid "No"
+msgstr ""
+
+#: includes/api/class-haman-api-client.php:74 includes/api/class-haman-api-client.php:202
+msgid "No API key has been entered. Paste the key from your Haman panel (it starts with hfp_) and save."
+msgstr ""
+
+#: admin/partials/settings-page.php:226
+msgid "No custom field is sent unless you pick it. For each selected content type, the fields that actually exist on this site are listed with a real sample value; tick the ones the bot should know. Private fields (starting with _) are never shown or sent."
+msgstr ""
+
+#: admin/class-haman-admin.php:95
+msgid "No fields will be sent."
+msgstr ""
+
+#: admin/class-haman-admin.php:444
+msgid "No local settings were found to migrate."
+msgstr ""
+
+#: admin/class-haman-admin.php:51
+msgid "Not connected"
+msgstr ""
+
+#: admin/partials/settings-page.php:249
+msgid "Not plain text"
+msgstr ""
+
+#: admin/class-haman-admin.php:52
+msgid "Not set up"
+msgstr ""
+
+#: admin/partials/settings-page.php:86
+msgid "Not shown — not connected"
+msgstr ""
+
+#: admin/class-haman-admin.php:57
+msgid "Nothing has been synced yet. Run a full sync below."
+msgstr ""
+
+#: admin/partials/settings-page.php:411
+msgid "Nothing logged yet."
+msgstr ""
+
+#: admin/partials/settings-page.php:213
+msgid "Off by default — a blog post is rarely what a customer is asking about."
+msgstr ""
+
+#: admin/partials/settings-page.php:17
+msgid "Official distributor"
+msgstr ""
+
+#: admin/partials/settings-page.php:319
+msgid "On uninstall"
+msgstr ""
+
+#: admin/partials/settings-page.php:322
+msgid "Only WordPress-side settings are removed; nothing on the Haman server is affected."
+msgstr ""
+
+#: admin/partials/settings-page.php:395
+msgid "Only for sites that set these texts on this WordPress page with an older version of the plugin: sends them to Haman once, so they appear and can be edited in your Haman panel."
+msgstr ""
+
+#: admin/partials/settings-page.php:362
+msgid "Over limit"
+msgstr ""
+
+#: admin/partials/settings-page.php:223
+msgid "PDF files attached to products (datasheets)"
+msgstr ""
+
+#: admin/partials/settings-page.php:272
+msgid "Page IDs to leave out"
+msgstr ""
+
+#: admin/class-haman-admin.php:60
+msgid "Pages"
+msgstr ""
+
+#: admin/class-haman-admin.php:84 admin/partials/settings-page.php:366
+msgid "Pages and site content"
+msgstr ""
+
+#: admin/partials/settings-page.php:405
+msgid "Plugin version"
+msgstr ""
+
+#: admin/class-haman-admin.php:105
+msgid "Position on the page"
+msgstr ""
+
+#: admin/class-haman-admin.php:61
+msgid "Posts"
+msgstr ""
+
+#: admin/partials/settings-page.php:270
+msgid "Posts in these categories are never synced, even when posts are on."
+msgstr ""
+
+#: admin/class-haman-admin.php:104
+msgid "Primary colour"
+msgstr ""
+
+#: admin/class-haman-admin.php:59
+msgid "Product PDFs"
+msgstr ""
+
+#: admin/partials/settings-page.php:288
+msgid "Product attribute"
+msgstr ""
+
+#: admin/class-haman-admin.php:58 admin/class-haman-admin.php:83 admin/partials/settings-page.php:366
+msgid "Products"
+msgstr ""
+
+#: admin/partials/settings-page.php:196
+msgid "Published"
+msgstr ""
+
+#: admin/class-haman-admin.php:107
+msgid "Quick questions"
+msgstr ""
+
+#: admin/partials/settings-page.php:62
+msgid "Re-check"
+msgstr ""
+
+#: admin/class-haman-admin.php:82
+msgid "Reading settings from Haman"
+msgstr ""
+
+#: admin/partials/settings-page.php:409 admin/partials/settings-page.php:413
+msgid "Recent API log"
+msgstr ""
+
+#: admin/partials/settings-page.php:152
+msgid "Regenerate"
+msgstr ""
+
+#: admin/partials/settings-page.php:167 admin/partials/settings-page.php:341
+msgid "Run full sync now"
+msgstr ""
+
+#: admin/partials/settings-page.php:239
+msgid "Sample value"
+msgstr ""
+
+#: admin/partials/settings-page.php:332
+msgid "Save settings"
+msgstr ""
+
+#: admin/partials/settings-page.php:175
+msgid "See the full breakdown in your Haman panel"
+msgstr ""
+
+#: admin/partials/settings-page.php:237
+msgid "Send"
+msgstr ""
+
+#: admin/class-haman-admin.php:156 includes/api/class-haman-api-client.php:133
+msgid "Set the Chatbot ID on the Connection tab first."
+msgstr ""
+
+#: admin/partials/settings-page.php:49
+msgid "Settings saved."
+msgstr ""
+
+#: admin/partials/settings-page.php:94
+msgid "Settings sections"
+msgstr ""
+
+#: admin/class-haman-admin.php:77 admin/partials/settings-page.php:113 admin/partials/settings-page.php:151
+msgid "Show"
+msgstr ""
+
+#: admin/partials/settings-page.php:134
+msgid "Show the chat widget on this site"
+msgstr ""
+
+#: admin/partials/settings-page.php:195
+msgid "Slug"
+msgstr ""
+
+#: admin/partials/settings-page.php:60
+msgid "Status"
+msgstr ""
+
+#: admin/class-haman-admin.php:81
+msgid "Step %1$s of %2$s: %3$s"
+msgstr ""
+
+#: admin/partials/settings-page.php:253
+msgid "Structured data — cannot be sent"
+msgstr ""
+
+#: admin/partials/settings-page.php:24 admin/partials/settings-page.php:193
+msgid "Sync"
+msgstr ""
+
+#: admin/class-haman-admin.php:86 admin/partials/settings-page.php:52
+msgid "Sync finished."
+msgstr ""
+
+#: admin/partials/settings-page.php:162
+msgid "Sync status"
+msgstr ""
+
+#: admin/class-haman-admin.php:87
+msgid "Sync stopped: %s"
+msgstr ""
+
+#: admin/partials/settings-page.php:211
+msgid "Synced separately, by the WooCommerce products option above."
+msgstr ""
+
+#: admin/class-haman-admin.php:106
+msgid "System instruction"
+msgstr ""
+
+#: admin/partials/settings-page.php:138 admin/partials/settings-page.php:140
+msgid "Test connection"
+msgstr ""
+
+#: includes/api/class-haman-api-client.php:112
+msgid "The Haman account this key belongs to has a problem. Contact Haman support."
+msgstr ""
+
+#: admin/class-haman-admin.php:266
+msgid "The connection is not set up yet: enter the API key and Chatbot ID on the Connection tab and save."
+msgstr ""
+
+#: admin/class-haman-admin.php:89
+msgid "The current webhook secret will stop working immediately. Continue?"
+msgstr ""
+
+#: includes/api/class-haman-api-client.php:114
+msgid "The key is valid, but its chatbot is suspended — check its plan or trial in your Haman panel."
+msgstr ""
+
+#: includes/api/class-haman-api-client.php:110
+msgid "The request reached Haman without an API key. Save the key on this tab and try again."
+msgstr ""
+
+#: admin/partials/settings-page.php:308
+msgid "These apply on this site only, per visitor IP address."
+msgstr ""
+
+#: admin/class-haman-admin.php:96
+msgid "These fields will be sent: %s"
+msgstr ""
+
+#: admin/partials/settings-page.php:299
+msgid "These settings are managed in your Haman panel."
+msgstr ""
+
+#: admin/partials/settings-page.php:300
+msgid "They are shown here read-only and cannot be changed on this page — they are kept on Haman so they stay the same on every site the chatbot runs on."
+msgstr ""
+
+#: includes/api/class-haman-api-client.php:113
+msgid "This API key has expired. Create a new one in your Haman panel."
+msgstr ""
+
+#: admin/class-haman-admin.php:91
+msgid "This deletes everything currently synced and rebuilds it with the settings above. FAQs you entered by hand are not affected. Continue?"
+msgstr ""
+
+#: admin/class-haman-admin.php:90
+msgid "This sends your current local WordPress settings to Haman and may overwrite what is set in the Haman portal. Continue?"
+msgstr ""
+
+#: includes/api/class-haman-api-client.php:90
+msgid "This site could not reach the Haman server — a network problem, or the API URL is wrong. Details: %s"
+msgstr ""
+
+#: admin/partials/settings-page.php:232
+msgid "This type has no public custom fields."
+msgstr ""
+
+#: admin/partials/settings-page.php:88
+msgid "Turned off"
+msgstr ""
+
+#: admin/partials/settings-page.php:356
+msgid "Type"
+msgstr ""
+
+#: admin/class-haman-admin.php:55
+msgid "Unavailable until connected"
+msgstr ""
+
+#: admin/partials/settings-page.php:359
+msgid "Unchanged"
+msgstr ""
+
+#: admin/class-haman-admin.php:290
+msgid "Unknown sync step."
+msgstr ""
+
+#: admin/partials/settings-page.php:358
+msgid "Updated"
+msgstr ""
+
+#: admin/partials/settings-page.php:143
+msgid "Uses the saved key and URL — save first if you just changed them. A successful test shows the name of the connected chatbot."
+msgstr ""
+
+#: admin/class-haman-admin.php:74
+msgid "Version %s is available."
+msgstr ""
+
+#: admin/partials/settings-page.php:18
+msgid "Warranty period"
+msgstr ""
+
+#: admin/partials/settings-page.php:147
+msgid "Webhook secret"
+msgstr ""
+
+#: admin/class-haman-admin.php:100
+msgid "Welcome message"
+msgstr ""
+
+#: admin/partials/settings-page.php:178
+msgid "What to sync"
+msgstr ""
+
+#: admin/partials/settings-page.php:79
+msgid "Widget on this site"
+msgstr ""
+
+#: admin/partials/settings-page.php:181
+msgid "WooCommerce products"
+msgstr ""
+
+#: admin/class-haman-admin.php:97
+msgid "Yes"
+msgstr ""
+
+#: admin/class-haman-admin.php:114 admin/class-haman-admin.php:149 admin/class-haman-admin.php:162 admin/class-haman-admin.php:233
+msgid "You do not have permission to change these settings."
+msgstr ""
+
+#: admin/class-haman-admin.php:76
+msgid "You have the latest version."
+msgstr ""
+
+#: admin/class-haman-admin.php:64
+msgid "content has never been synced"
+msgstr ""
+
+#: admin/partials/settings-page.php:312
+msgid "messages"
+msgstr ""
+
+#: admin/partials/settings-page.php:316
+msgid "minutes"
+msgstr ""
+
+#: admin/class-haman-admin.php:65
+msgid "the chat widget is turned off on this site"
+msgstr ""
+
+#: admin/class-haman-admin.php:67
+msgid "the last sync left out %s documents (plan limit)"
+msgstr ""
+
+#: admin/partials/settings-page.php:286
+msgid "— Not mapped —"
+msgstr ""
+
+#: admin/partials/settings-page.php:279
+msgid "“Is this genuine?” is the question shoppers ask most. The bot only repeats exactly what you recorded in these fields — it never judges on its own. If your store keeps any of them in a custom field or product attribute, say which one here."
+msgstr ""

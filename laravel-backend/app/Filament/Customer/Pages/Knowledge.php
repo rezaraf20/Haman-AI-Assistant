@@ -2,10 +2,8 @@
 namespace App\Filament\Customer\Pages;
 
 use App\Models\ChatbotIndexEntry;
-use App\Models\Plan;
-use App\Support\{Jalali, Numbers};
+use App\Support\{Jalali, KnowledgeSummary, Numbers};
 use Filament\Pages\Page;
-use Illuminate\Support\Facades\DB;
 
 /**
  * What a chatbot actually knows, by kind of content: products, their PDFs,
@@ -19,8 +17,9 @@ use Illuminate\Support\Facades\DB;
  * recent sync runs had to refuse documents because of it, exactly how many,
  * so a limit is never something the merchant discovers by its absence.
  *
- * Reads documents/sync_jobs directly — one grouped query plus one for the
- * latest runs, under a single schema switch.
+ * The numbers come from App\Support\KnowledgeSummary, which the WordPress
+ * plugin's settings page reads too (GET /chatbots/{id}/knowledge), so both
+ * places always agree.
  */
 class Knowledge extends Page {
     protected static string $view = 'filament.customer.pages.knowledge';
@@ -52,56 +51,22 @@ class Knowledge extends Page {
         $chatbotId = array_key_exists((string) $this->chatbot, $chatbots) ? $this->chatbot : array_key_first($chatbots);
         $tenant = auth()->user()->tenant;
 
-        DB::statement("SET search_path TO {$tenant->schema_name}, public");
-        try {
-            $groups = DB::select("
-                SELECT source_type,
-                       metadata->>'post_type' AS post_type,
-                       MAX(metadata->>'post_type_label') AS post_type_label,
-                       COUNT(*) FILTER (WHERE status <> 'archived') AS documents,
-                       COUNT(*) FILTER (WHERE status = 'archived') AS archived,
-                       COALESCE(SUM(chunk_count) FILTER (WHERE status <> 'archived'), 0) AS chunks,
-                       MAX(last_synced_at) AS last_sync
-                FROM documents
-                WHERE chatbot_id = ?
-                GROUP BY source_type, metadata->>'post_type'
-            ", [$chatbotId]);
-
-            // The latest run of each kind — over_limit is per run (see
-            // SyncService::upsertDoc()), so only the most recent one says
-            // whether the limit is biting right now.
-            $latestRuns = DB::select("
-                SELECT DISTINCT ON (job_type) job_type, result, created_at
-                FROM sync_jobs
-                WHERE chatbot_id = ? AND job_type IN ('products', 'pages', 'faqs')
-                ORDER BY job_type, created_at DESC
-            ", [$chatbotId]);
-        } finally {
-            DB::statement('SET search_path TO public');
-        }
+        $summary = KnowledgeSummary::forChatbot($chatbotId, $tenant);
 
         $rows = [];
-        $liveTotal = 0;
-        foreach ($groups as $g) {
-            $liveTotal += (int) $g->documents;
+        foreach ($summary['kinds'] as $k) {
             $rows[] = [
-                'label'     => $this->kindLabel($g->source_type, $g->post_type, $g->post_type_label),
-                'documents' => Numbers::format((int) $g->documents),
-                'chunks'    => Numbers::format((int) $g->chunks),
-                'archived'  => (int) $g->archived,
-                'archived_f'=> Numbers::format((int) $g->archived),
-                'last_sync' => $g->last_sync ? Jalali::dateTime($g->last_sync) : null,
-                'sort'      => (int) $g->documents,
+                'label'     => $this->kindLabel($k['source_type'], $k['post_type'], $k['post_type_label']),
+                'documents' => Numbers::format($k['documents']),
+                'chunks'    => Numbers::format($k['chunks']),
+                'archived'  => $k['archived'],
+                'archived_f'=> Numbers::format($k['archived']),
+                'last_sync' => $k['last_sync'] ? Jalali::dateTime($k['last_sync']) : null,
             ];
         }
-        usort($rows, fn ($a, $b) => $b['sort'] <=> $a['sort']);
-
-        $overLimit = 0;
-        foreach ($latestRuns as $run) {
-            $overLimit += (int) (json_decode((string) $run->result, true)['over_limit'] ?? 0);
-        }
-
-        $limit = Plan::whereKey($tenant->plan_id)->value('max_documents');
+        $liveTotal = $summary['live_total'];
+        $limit = $summary['limit'];
+        $overLimit = $summary['over_limit_last_runs'];
 
         return [
             'chatbots'   => $chatbots,
@@ -118,7 +83,7 @@ class Knowledge extends Page {
         return match ($sourceType) {
             'woocommerce_product' => __('portal.knowledge_kind_products'),
             'product_attachment'  => __('portal.knowledge_kind_pdfs'),
-            'wordpress_page'      => __('chatbot.sync_settings_pages'),
+            'wordpress_page', 'page' => __('chatbot.sync_settings_pages'),
             'wordpress_post'      => __('chatbot.sync_settings_posts'),
             'faq'                 => __('portal.knowledge_kind_faqs'),
             'wordpress_cpt'       => $postTypeLabel ?: ($postType ?: __('portal.knowledge_kind_other')),

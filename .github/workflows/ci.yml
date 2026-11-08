@@ -45,6 +45,38 @@ jobs:
       - name: Python syntax check (compileall)
         run: python -m compileall -q python-ai-service
 
+  plugin-tests:
+    name: WordPress plugin tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: wordpress-plugin/haman-ai-chatbot
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install test dependencies (jsdom)
+        run: npm ci
+
+      # Widget behaviour, the settings page script, and the rule that the
+      # settings stylesheet cannot reach outside its own page.
+      - name: Plugin JS tests
+        run: npm test
+
+      # Every translatable string has a Persian translation with the same
+      # placeholders, and the shipped .mo is what the .po compiles to.
+      - name: Translations complete and compiled
+        run: python3 ../../scripts/plugin-i18n.py check
+
+      - name: Plugin PHP lint
+        run: |
+          status=0
+          while IFS= read -r -d '' f; do php -l "$f" >/dev/null || { php -l "$f"; status=1; }; done < <(find . -name '*.php' -not -path './node_modules/*' -print0)
+          exit $status
+
   python-tests:
     name: Python AI service tests
     runs-on: ubuntu-latest

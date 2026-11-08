@@ -29,6 +29,9 @@ class Haman_Loader {
         $this->add_action( 'wp_ajax_haman_check_version',             $admin, 'ajax_check_version' );
         $this->add_action( 'wp_ajax_haman_get_sync_settings',         $admin, 'ajax_get_sync_settings' );
         $this->add_action( 'wp_ajax_haman_clear_and_reindex',         $admin, 'ajax_clear_and_reindex' );
+        $this->add_action( 'wp_ajax_haman_status',                    $admin, 'ajax_status' );
+        $this->add_action( 'wp_ajax_haman_sync_step',                 $admin, 'ajax_sync_step' );
+        $this->add_action( 'admin_notices',                           $admin, 'update_notice' );
         $this->add_action( 'wp_enqueue_scripts',   $public, 'enqueue_assets' );
         // add_filter() and add_action() are the same WordPress hook
         // mechanism under the hood, so reusing this same helper is

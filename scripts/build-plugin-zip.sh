@@ -28,15 +28,49 @@ MAIN_FILE="$PLUGIN_DIR/haman-ai-chatbot.php"
 INCLUDE=(
     "haman-ai-chatbot/admin"
     "haman-ai-chatbot/includes"
+    "haman-ai-chatbot/languages"
     "haman-ai-chatbot/public"
     "haman-ai-chatbot/haman-ai-chatbot.php"
     "haman-ai-chatbot/uninstall.php"
 )
 
-if ! command -v zip >/dev/null 2>&1; then
-    echo "FAIL: 'zip' is not installed." >&2
+# Translations: the shipped .mo must be exactly what its .po compiles to,
+# and every string in the source must be translated — otherwise a Persian
+# site shows a half-English settings page.
+PY=""
+for c in python3 python; do
+    if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys' >/dev/null 2>&1; then PY="$c"; break; fi
+done
+if [ -z "$PY" ]; then
+    echo "FAIL: python3 is needed to check the plugin translations." >&2
     exit 1
 fi
+"$PY" scripts/plugin-i18n.py check
+
+# `zip` when it is installed; otherwise the same explicit list through
+# Python's zipfile (forward slashes, directories expanded, same INCLUDE).
+make_zip() {
+    if command -v zip >/dev/null 2>&1; then
+        ( cd wordpress-plugin && zip -q -r "$(basename "$OUT")" "${INCLUDE[@]}" )
+    else
+        ( cd wordpress-plugin && "$PY" - "$(basename "$OUT")" "${INCLUDE[@]}" <<'PYZIP'
+import os, sys, zipfile
+out, roots = sys.argv[1], sys.argv[2:]
+with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as z:
+    for root in roots:
+        if os.path.isfile(root):
+            z.write(root, root.replace(os.sep, '/'))
+            continue
+        for d, dirs, files in os.walk(root):
+            dirs.sort()
+            z.write(d, d.replace(os.sep, '/') + '/')
+            for f in sorted(files):
+                p = os.path.join(d, f)
+                z.write(p, p.replace(os.sep, '/'))
+PYZIP
+        )
+    fi
+}
 
 EXPECTED_VERSION=$(grep -oP 'Version:\s*\K[0-9][0-9.]*' "$MAIN_FILE" | head -1)
 if [ -z "$EXPECTED_VERSION" ]; then
@@ -45,7 +79,7 @@ if [ -z "$EXPECTED_VERSION" ]; then
 fi
 
 rm -f "$OUT"
-( cd wordpress-plugin && zip -q -r "$(basename "$OUT")" "${INCLUDE[@]/#/}" )
+make_zip
 
 echo "Built $OUT:"
 unzip -l "$OUT" | tail -1

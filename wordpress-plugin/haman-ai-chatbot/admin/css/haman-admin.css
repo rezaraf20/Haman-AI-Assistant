@@ -1,65 +1,437 @@
-.wrap h1 { color: #1B3A6B; }
+/*
+ * Haman AI settings page (wp-admin). Loaded only on this plugin's own page
+ * (Haman_Admin::enqueue_assets), and even there every selector below starts
+ * with .haman-admin — the class on this page's own .wrap — so nothing here
+ * can restyle any other part of the site owner's WordPress admin.
+ * tests/admin-css-scope.test.js fails the build if a selector escapes it.
+ *
+ * WordPress's own building blocks (nav-tab-wrapper, form-table, widefat,
+ * notices, buttons, spinner) stay as WordPress draws them; this only adds
+ * the Haman palette — the same tokens the customer portal uses — for
+ * headings, links, the primary action and status colours. Panels set their
+ * own background and text colour, so they read the same under every
+ * admin colour scheme.
+ *
+ * Direction: logical properties (inline-start/end) throughout; WordPress
+ * sets dir="rtl" on the admin for right-to-left locales.
+ */
 
-.hm-settings-wrap .hm-tab-en {
-    font-size: 11px;
-    opacity: .6;
+.haman-admin {
+    --haman-navy: #172554;
+    --haman-interactive: #4F46E5;
+    --haman-interactive-hover: #4338CA;
+    --haman-ai: #6366F1;
+    --haman-success: #0D9488;
+    --haman-success-strong: #0F766E;
+    --haman-success-soft: #F0FDFA;
+    --haman-warning: #F59E0B;
+    --haman-warning-strong: #B45309;
+    --haman-warning-soft: #FFFBEB;
+    --haman-danger: #DC2626;
+    --haman-danger-strong: #B91C1C;
+    --haman-danger-soft: #FEF2F2;
+    --haman-surface: #FFFFFF;
+    --haman-surface-subtle: #F1F5F9;
+    --haman-border: #DCDCDE;
+    --haman-text: #1D2327;
+    --haman-text-muted: #50575E;
+    max-width: 1200px;
+}
+
+/* ── Title ─────────────────────────────────────────────────────────── */
+
+.haman-admin .haman-admin__title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--haman-navy);
+}
+
+.haman-admin .haman-admin__title .dashicons {
+    width: 28px;
+    height: 28px;
+    font-size: 28px;
+    color: var(--haman-ai);
+}
+
+/* ── Status strip ──────────────────────────────────────────────────── */
+
+.haman-admin .haman-status {
+    margin: 16px 0 20px;
+    padding: 16px 20px;
+    background: var(--haman-surface);
+    color: var(--haman-text);
+    border: 1px solid var(--haman-border);
+    border-inline-start: 4px solid var(--haman-border);
+}
+
+.haman-admin .haman-status[data-overall="ok"] { border-inline-start-color: var(--haman-success); }
+.haman-admin .haman-status[data-overall="attention"] { border-inline-start-color: var(--haman-warning); }
+.haman-admin .haman-status[data-overall="error"] { border-inline-start-color: var(--haman-danger); }
+
+.haman-admin .haman-status__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 16px;
+    margin-bottom: 12px;
+}
+
+.haman-admin .haman-status__title {
+    margin: 0;
+    padding: 0;
+    font-size: 15px;
+    color: var(--haman-navy);
+}
+
+.haman-admin .haman-status__summary {
+    flex: 1 1 240px;
+    margin: 0;
+    color: var(--haman-text);
+}
+
+.haman-admin .haman-status__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.haman-admin .haman-status__item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    margin: 0;
+    padding: 12px;
+    background: var(--haman-surface-subtle);
+    border-radius: 4px;
+    min-width: 0;
+}
+
+.haman-admin .haman-status__label {
+    font-size: 12px;
+    color: var(--haman-text-muted);
+}
+
+.haman-admin .haman-status__value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--haman-text);
+    overflow-wrap: anywhere;
+}
+
+.haman-admin .haman-status__detail {
+    font-size: 12px;
+    color: var(--haman-text-muted);
+    overflow-wrap: anywhere;
+}
+
+/* A status is always colour AND words, never colour alone. */
+.haman-admin .haman-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+    border: 1px solid var(--haman-border);
+    border-radius: 3px;
+    background: var(--haman-surface);
+    color: var(--haman-text);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.6;
+}
+
+.haman-admin .haman-badge::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--haman-text-muted);
+    flex-shrink: 0;
+}
+
+.haman-admin .haman-badge[data-tone="success"] { background: var(--haman-success-soft); border-color: var(--haman-success); color: var(--haman-success-strong); }
+.haman-admin .haman-badge[data-tone="success"]::before { background: var(--haman-success); }
+.haman-admin .haman-badge[data-tone="warning"] { background: var(--haman-warning-soft); border-color: var(--haman-warning); color: var(--haman-warning-strong); }
+.haman-admin .haman-badge[data-tone="warning"]::before { background: var(--haman-warning); }
+.haman-admin .haman-badge[data-tone="danger"] { background: var(--haman-danger-soft); border-color: var(--haman-danger); color: var(--haman-danger-strong); }
+.haman-admin .haman-badge[data-tone="danger"]::before { background: var(--haman-danger); }
+
+/* ── Tabs and panels ───────────────────────────────────────────────── */
+
+.haman-admin .nav-tab-wrapper {
+    margin-bottom: 0;
+}
+
+.haman-admin .nav-tab-active,
+.haman-admin .nav-tab-active:hover,
+.haman-admin .nav-tab-active:focus {
+    background: var(--haman-surface);
+    border-bottom-color: var(--haman-surface);
+    color: var(--haman-navy);
+}
+
+.haman-admin .haman-panel {
+    padding: 4px 20px 16px;
+    background: var(--haman-surface);
+    color: var(--haman-text);
+    border: 1px solid var(--haman-border);
+    border-top: 0;
+}
+
+/* The second block of a tab (actions that sit outside the settings form). */
+.haman-admin .haman-panel--after {
+    margin-top: 16px;
+    border-top: 1px solid var(--haman-border);
+}
+
+.haman-admin .haman-panel__intro {
+    max-width: 720px;
+    margin: 16px 0 0;
+    color: var(--haman-text-muted);
+}
+
+.haman-admin .haman-panel__heading {
+    margin: 24px 0 8px;
+    padding: 0;
+    font-size: 15px;
+    color: var(--haman-navy);
+}
+
+.haman-admin .haman-panel .form-table th,
+.haman-admin .haman-panel .form-table td {
+    color: var(--haman-text);
+}
+
+.haman-admin .haman-panel .description {
+    color: var(--haman-text-muted);
+}
+
+.haman-admin .haman-measure {
+    max-width: 720px;
+}
+
+/* ── Links and the primary action ──────────────────────────────────── */
+
+.haman-admin .haman-panel a:not(.button),
+.haman-admin .haman-status a:not(.button) {
+    color: var(--haman-interactive);
+}
+
+.haman-admin .haman-panel a:not(.button):hover,
+.haman-admin .haman-panel a:not(.button):focus {
+    color: var(--haman-interactive-hover);
+}
+
+.haman-admin .button-primary {
+    background: var(--haman-interactive);
+    border-color: var(--haman-interactive);
+    color: #FFFFFF;
+}
+
+.haman-admin .button-primary:hover,
+.haman-admin .button-primary:focus {
+    background: var(--haman-interactive-hover);
+    border-color: var(--haman-interactive-hover);
+    color: #FFFFFF;
+}
+
+.haman-admin .button-primary:focus {
+    box-shadow: 0 0 0 1px var(--haman-surface), 0 0 0 3px var(--haman-interactive);
+}
+
+/* ── Secret fields (API key, webhook secret) ───────────────────────── */
+
+.haman-admin .haman-secret {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.haman-admin .haman-secret input {
+    flex: 1 1 260px;
+    max-width: 25em;
+    margin: 0;
+}
+
+.haman-admin .haman-inline-note {
+    color: var(--haman-text-muted);
+}
+
+/* ── Inline results (test connection, sync) ────────────────────────── */
+
+.haman-admin .haman-result {
+    max-width: 720px;
+    margin: 10px 0 4px;
+    padding: 8px 12px;
+    border: 1px solid var(--haman-border);
+    border-inline-start-width: 4px;
+    background: var(--haman-surface);
+    color: var(--haman-text);
+}
+
+.haman-admin .haman-result[data-tone="success"] { border-inline-start-color: var(--haman-success); background: var(--haman-success-soft); }
+.haman-admin .haman-result[data-tone="warning"] { border-inline-start-color: var(--haman-warning); background: var(--haman-warning-soft); }
+.haman-admin .haman-result[data-tone="danger"] { border-inline-start-color: var(--haman-danger); background: var(--haman-danger-soft); }
+
+.haman-admin .haman-result strong {
     display: block;
+    margin-bottom: 2px;
 }
 
-.hm-settings-wrap .hm-tab-desc {
-    max-width: 700px;
+.haman-admin .spinner {
+    float: none;
+    vertical-align: middle;
+    margin: 0 6px;
+}
+
+/* ── Sync status and knowledge breakdown ───────────────────────────── */
+
+.haman-admin .haman-sync-status {
+    max-width: 720px;
+}
+
+.haman-admin .haman-sync-run {
+    margin: 12px 0;
+}
+
+.haman-admin .haman-progress {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    margin-top: 10px;
+}
+
+.haman-admin .haman-progress progress {
+    width: 240px;
+    max-width: 100%;
+    height: 8px;
+    accent-color: var(--haman-interactive);
+}
+
+.haman-admin .haman-table-wrap {
+    max-width: 720px;
+    margin: 10px 0;
+    overflow-x: auto;
+}
+
+.haman-admin .haman-table-wrap .widefat {
+    min-width: 420px;
+}
+
+.haman-admin .widefat .num {
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+}
+
+.haman-admin .widefat thead th,
+.haman-admin .widefat thead td {
+    background: var(--haman-surface-subtle);
+    color: var(--haman-text);
+    font-weight: 600;
+}
+
+.haman-admin .widefat .check-column {
+    width: 2.2em;
+    padding-inline-start: 10px;
+}
+
+/* ── Custom field preview ──────────────────────────────────────────── */
+
+.haman-admin .haman-fieldset {
+    max-width: 720px;
+    margin: 12px 0;
+    padding: 0 12px 4px;
+    border: 1px solid var(--haman-border);
+}
+
+.haman-admin .haman-fieldset legend {
+    padding: 0 6px;
+    font-weight: 600;
+    color: var(--haman-navy);
+}
+
+/* Author display rules (flex, block) beat the browser's own [hidden] rule,
+   so anything this page hides with the attribute is hidden explicitly. */
+.haman-admin [hidden] {
+    display: none;
+}
+
+.haman-admin .hm-field-summary {
+    font-weight: 600;
+}
+
+.haman-admin .haman-mapping {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* ── Appearance tab: managed in the Haman panel ────────────────────── */
+
+.haman-admin .haman-managed {
     margin: 16px 0;
+    max-width: 720px;
 }
 
-.hm-settings-wrap .hm-tab-panel {
-    background: #fff;
-    border: 1px solid #ccd0d4;
-    border-top: none;
-    padding: 20px;
+.haman-admin .haman-readonly table th {
+    width: 30%;
+    text-align: start;
 }
 
-.hm-color-field {
-    width: 120px;
-}
+/* ── Log ───────────────────────────────────────────────────────────── */
 
-#hm-test-connection-result.hm-test-ok { color: #1a7a1a; margin-inline-start: 8px; }
-#hm-test-connection-result.hm-test-fail { color: #c00; margin-inline-start: 8px; }
-#hm-clear-cache-result { margin-inline-start: 8px; }
-
-.hm-log-box {
-    max-height: 400px;
+.haman-admin .haman-log {
+    max-height: 360px;
     overflow-y: auto;
-    background: #f6f7f7;
-    border: 1px solid #ccd0d4;
     padding: 8px;
-    font-family: monospace;
+    background: var(--haman-surface-subtle);
+    color: var(--haman-text);
+    border: 1px solid var(--haman-border);
+    font-family: Consolas, Monaco, monospace;
     font-size: 12px;
 }
 
-.hm-log-entry {
+.haman-admin .haman-log__entry {
     padding: 4px 0;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 1px solid var(--haman-border);
 }
 
-.hm-log-time {
-    color: #666;
+.haman-admin .haman-log__time {
     margin-inline-end: 10px;
+    color: var(--haman-text-muted);
 }
 
-.hm-version-check {
-    font-size: 13px;
-    color: #1a7a1a;
-}
+/* ── Narrow screens (WordPress switches to its mobile admin at 782px) ─ */
 
-.hm-version-check.hm-version-update-available {
-    color: #b45309;
-}
+@media screen and (max-width: 782px) {
+    .haman-admin .haman-panel {
+        padding: 4px 12px 12px;
+    }
 
-#hm-webhook-secret-result,
-#hm-migrate-result {
-    margin-inline-start: 8px;
-}
+    .haman-admin .haman-status {
+        padding: 12px;
+    }
 
-#hm-widget-settings-display table.widefat th {
-    padding: 8px 10px;
+    .haman-admin .haman-secret input {
+        max-width: 100%;
+    }
+
+    /* WordPress stacks form-table cells on phones, but the table itself
+       still grows to its widest content (the 420px post-type table), which
+       pushes the whole page sideways. A fixed layout holds it to the
+       screen; wide tables then scroll inside .haman-table-wrap instead. */
+    .haman-admin .haman-panel .form-table {
+        table-layout: fixed;
+        width: 100%;
+    }
+
+    .haman-admin .haman-panel .form-table td {
+        min-width: 0;
+    }
 }

@@ -1,0 +1,717 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: Haman AI Chatbot\n"
+"Language: fa_IR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"X-Domain: haman-ai-chatbot\n"
+
+#: admin/class-haman-admin.php:93
+msgid "%1$s documents and %2$s chunks removed; a fresh sync has run."
+msgstr "%1$s سند و %2$s بخش حذف شد و همگام‌سازی تازه انجام شد."
+
+#: admin/class-haman-admin.php:87
+msgid "%1$s new, %2$s updated, %3$s unchanged, %4$s failed"
+msgstr "%1$s جدید، %2$s به‌روزشده، %3$s بدون تغییر، %4$s ناموفق"
+
+#: admin/class-haman-admin.php:53
+msgid "%1$s of %2$s documents"
+msgstr "%1$s از %2$s سند"
+
+#: admin/class-haman-admin.php:54
+msgid "%s documents"
+msgstr "%s سند"
+
+#: admin/class-haman-admin.php:56 admin/partials/settings-page.php:384
+msgid "%s documents were not indexed because your plan’s document limit was reached. The bot does not answer from them; upgrading, or turning off types you don’t need, lets the next sync add them."
+msgstr "%s سند ایندکس نشد چون به سقف اسناد پلن رسیده‌اید. بات از آن‌ها جواب نمی‌دهد؛ با ارتقای پلن یا خاموش کردن نوع‌هایی که لازم ندارید، در همگام‌سازی بعدی اضافه می‌شوند."
+
+#: admin/partials/settings-page.php:301
+msgid "(opens in a new tab)"
+msgstr "(در زبانه‌ی جدید باز می‌شود)"
+
+#: includes/api/class-haman-api-client.php:137
+msgid "(unnamed)"
+msgstr "(بی‌نام)"
+
+#: admin/partials/settings-page.php:125
+msgid "API URL"
+msgstr "آدرس API"
+
+#: admin/partials/settings-page.php:109
+msgid "API key"
+msgstr "کلید API"
+
+#: admin/partials/settings-page.php:84
+msgid "Active"
+msgstr "فعال"
+
+#: admin/partials/settings-page.php:26
+msgid "Advanced"
+msgstr "پیشرفته"
+
+#: admin/partials/settings-page.php:25
+msgid "Appearance & texts"
+msgstr "ظاهر و متن‌ها"
+
+#: admin/class-haman-admin.php:101
+msgid "Assistant name"
+msgstr "نام دستیار"
+
+#: admin/partials/settings-page.php:278
+msgid "Authenticity field mapping"
+msgstr "نگاشت فیلدهای اصالت کالا"
+
+#: admin/partials/settings-page.php:15
+msgid "Authenticity status"
+msgstr "وضعیت اصالت"
+
+#: includes/sync/class-haman-sync-manager.php:261
+msgid "Auto-cancelled by Haman AI: unpaid draft order created from chat exceeded the hold period."
+msgstr "لغو خودکار توسط هامان: سفارش پرداخت‌نشده‌ای که از گفتگو ساخته شده بود از مهلت نگهداری گذشت."
+
+#: admin/class-haman-admin.php:102
+msgid "Avatar URL"
+msgstr "آدرس تصویر آواتار"
+
+#: admin/partials/settings-page.php:315
+msgid "Block for"
+msgstr "مسدود به مدت"
+
+#: admin/partials/settings-page.php:16
+msgid "Brand name"
+msgstr "نام برند"
+
+#: admin/partials/settings-page.php:401
+msgid "Cache"
+msgstr "حافظه‌ی موقت"
+
+#: admin/partials/settings-page.php:267
+msgid "Category IDs to leave out (posts)"
+msgstr "شناسه‌ی دسته‌هایی که کنار گذاشته شوند (نوشته‌ها)"
+
+#: admin/partials/settings-page.php:132
+msgid "Chat widget"
+msgstr "ویجت گفتگو"
+
+#: admin/class-haman-admin.php:100
+msgid "Chat window title"
+msgstr "عنوان پنجره‌ی گفتگو"
+
+#: admin/partials/settings-page.php:121
+msgid "Chatbot ID"
+msgstr "شناسه‌ی چت‌بات"
+
+#: admin/class-haman-admin.php:50
+msgid "Chatbot suspended"
+msgstr "چت‌بات معلق است"
+
+#: admin/class-haman-admin.php:43 admin/partials/settings-page.php:61 admin/partials/settings-page.php:67 admin/partials/settings-page.php:76
+msgid "Checking…"
+msgstr "در حال بررسی…"
+
+#: admin/partials/settings-page.php:346 admin/partials/settings-page.php:348
+msgid "Clear and reindex"
+msgstr "پاک کردن و ایندکس دوباره"
+
+#: admin/partials/settings-page.php:402
+msgid "Clear cache"
+msgstr "پاک کردن حافظه‌ی موقت"
+
+#: admin/class-haman-admin.php:92
+msgid "Cleared"
+msgstr "پاک شد"
+
+#: admin/class-haman-admin.php:48 includes/api/class-haman-api-client.php:105
+msgid "Connected"
+msgstr "متصل"
+
+#: admin/class-haman-admin.php:47 includes/api/class-haman-api-client.php:105
+msgid "Connected to “%s”"
+msgstr "متصل به «%s»"
+
+#: admin/partials/settings-page.php:23 admin/partials/settings-page.php:66
+msgid "Connection"
+msgstr "اتصال"
+
+#: admin/partials/settings-page.php:180
+msgid "Content"
+msgstr "محتوا"
+
+#: admin/class-haman-admin.php:71 admin/partials/settings-page.php:194
+msgid "Content type"
+msgstr "نوع محتوا"
+
+#: admin/class-haman-admin.php:78
+msgid "Copied"
+msgstr "کپی شد"
+
+#: admin/partials/settings-page.php:114
+msgid "Copy"
+msgstr "کپی"
+
+#: admin/class-haman-admin.php:79
+msgid "Copy failed — select the key and copy it manually."
+msgstr "کپی نشد — کلید را انتخاب کنید و دستی کپی کنید."
+
+#: admin/class-haman-admin.php:45
+msgid "Could not reach the WordPress server. Reload the page and try again."
+msgstr "ارتباط با سرور وردپرس برقرار نشد. صفحه را دوباره بارگذاری کنید و دوباره امتحان کنید."
+
+#: admin/partials/settings-page.php:19
+msgid "Country of origin"
+msgstr "کشور سازنده"
+
+#: admin/partials/settings-page.php:287
+msgid "Custom field (meta key)"
+msgstr "فیلد سفارشی (meta key)"
+
+#: admin/partials/settings-page.php:225
+msgid "Custom fields"
+msgstr "فیلدهای سفارشی"
+
+#: admin/partials/settings-page.php:321
+msgid "Delete this plugin’s settings from WordPress"
+msgstr "تنظیمات این افزونه از وردپرس پاک شود"
+
+#: admin/partials/settings-page.php:360
+msgid "Deleted"
+msgstr "حذف‌شده"
+
+#: admin/partials/settings-page.php:347
+msgid "Deletes everything currently synced and rebuilds it with the settings above — for when you changed what to sync and old content is still in the index. FAQs you entered by hand are not affected."
+msgstr "همه‌ی محتوای همگام‌شده را پاک می‌کند و با تنظیمات بالا از نو می‌سازد — برای وقتی که موارد همگام‌سازی را عوض کرده‌اید و محتوای قدیمی هنوز در ایندکس مانده است. پرسش‌های متداولی که دستی وارد کرده‌اید دست نمی‌خورند."
+
+#: admin/class-haman-admin.php:70
+msgid "Documents"
+msgstr "اسناد"
+
+#: admin/class-haman-admin.php:74
+msgid "Download"
+msgstr "دانلود"
+
+#: admin/class-haman-admin.php:533
+msgid "Download the new version"
+msgstr "دانلود نسخه‌ی جدید"
+
+#: admin/partials/settings-page.php:301
+msgid "Edit appearance and texts in the Haman panel"
+msgstr "ویرایش ظاهر و متن‌ها در پنل هامان"
+
+#: admin/partials/settings-page.php:106
+msgid "Enter the API key and Chatbot ID from your Haman panel, save, then test the connection."
+msgstr "کلید API و شناسه‌ی چت‌بات را از پنل هامان وارد کنید، ذخیره کنید و بعد اتصال را آزمایش کنید."
+
+#: admin/class-haman-admin.php:308
+msgid "Enter the API key and Chatbot ID from your Haman panel, then save."
+msgstr "کلید API و شناسه‌ی چت‌بات را از پنل هامان وارد و ذخیره کنید."
+
+#: admin/class-haman-admin.php:46
+msgid "Error"
+msgstr "خطا"
+
+#: admin/class-haman-admin.php:67
+msgid "Everything is working: connected, synced and the widget is live."
+msgstr "همه چیز درست کار می‌کند: متصل است، همگام شده و ویجت روی سایت فعال است."
+
+#: admin/class-haman-admin.php:62 admin/class-haman-admin.php:84 admin/partials/settings-page.php:366
+msgid "FAQs"
+msgstr "پرسش‌های متداول"
+
+#: admin/partials/settings-page.php:361
+msgid "Failed"
+msgstr "ناموفق"
+
+#: admin/partials/settings-page.php:117
+msgid "From your Haman panel → API keys. It starts with hfp_."
+msgstr "از پنل هامان ← کلیدهای API. با hfp_ شروع می‌شود."
+
+#: admin/partials/settings-page.php:44
+msgid "Haman AI Chatbot"
+msgstr "چت‌بات هوشمند هامان"
+
+#: admin/class-haman-admin.php:538
+msgid "Haman AI Chatbot %1$s is available — you have %2$s. Upload the new ZIP from Plugins → Add New → Upload Plugin."
+msgstr "نسخه‌ی %1$s چت‌بات هامان آماده است — نسخه‌ی نصب‌شده %2$s است. فایل ZIP جدید را از افزونه‌ها ← افزودن ← بارگذاری افزونه نصب کنید."
+
+#: includes/api/class-haman-api-client.php:121
+msgid "Haman answered with an unexpected response (HTTP %d)."
+msgstr "پاسخ هامان غیرمنتظره بود (HTTP %d)."
+
+#: includes/api/class-haman-api-client.php:111
+msgid "Haman does not recognise this API key — it may have been regenerated. Copy the current key from your Haman panel."
+msgstr "هامان این کلید API را نمی‌شناسد — شاید دوباره ساخته شده باشد. کلید فعلی را از پنل هامان کپی کنید."
+
+#: admin/class-haman-admin.php:77
+msgid "Hide"
+msgstr "پنهان"
+
+#: admin/partials/settings-page.php:75
+msgid "Indexed documents"
+msgstr "اسناد ایندکس‌شده"
+
+#: admin/partials/settings-page.php:406
+msgid "Installed version:"
+msgstr "نسخه‌ی نصب‌شده:"
+
+#: admin/class-haman-admin.php:49
+msgid "Invalid key"
+msgstr "کلید نامعتبر"
+
+#: admin/partials/settings-page.php:240
+msgid "Items"
+msgstr "تعداد"
+
+#: admin/partials/settings-page.php:155
+msgid "Kept on the Haman server, never stored on this site, so it is always the current value."
+msgstr "روی سرور هامان نگهداری می‌شود و هرگز در این سایت ذخیره نمی‌شود، پس همیشه مقدار فعلی است."
+
+#: admin/partials/settings-page.php:238
+msgid "Key"
+msgstr "کلید"
+
+#: admin/partials/settings-page.php:290
+msgid "Key for %s"
+msgstr "کلید برای %s"
+
+#: admin/partials/settings-page.php:71
+msgid "Last full sync"
+msgstr "آخرین همگام‌سازی کامل"
+
+#: admin/partials/settings-page.php:164
+msgid "Last full sync:"
+msgstr "آخرین همگام‌سازی کامل:"
+
+#: admin/partials/settings-page.php:352
+msgid "Last sync results"
+msgstr "نتیجه‌ی آخرین همگام‌سازی"
+
+#: admin/class-haman-admin.php:107
+msgid "Lead capture"
+msgstr "دریافت اطلاعات تماس"
+
+#: admin/partials/settings-page.php:128
+msgid "Leave as it is unless Haman support asks you to change it."
+msgstr "تغییرش ندهید مگر پشتیبانی هامان بخواهد."
+
+#: admin/partials/settings-page.php:265
+msgid "Leave out"
+msgstr "کنار گذاشتن"
+
+#: admin/class-haman-admin.php:44 admin/partials/settings-page.php:165 admin/partials/settings-page.php:303
+msgid "Loading…"
+msgstr "در حال بارگذاری…"
+
+#: admin/partials/settings-page.php:203
+msgid "Managed separately"
+msgstr "جداگانه مدیریت می‌شود"
+
+#: admin/partials/settings-page.php:307
+msgid "Message limits"
+msgstr "محدودیت پیام"
+
+#: admin/partials/settings-page.php:311
+msgid "Messages per visitor"
+msgstr "پیام برای هر بازدیدکننده"
+
+#: admin/class-haman-admin.php:91
+msgid "Migrated"
+msgstr "منتقل شد"
+
+#: admin/partials/settings-page.php:394
+msgid "Move old local settings to Haman (once)"
+msgstr "انتقال تنظیمات قدیمی محلی به هامان (یک بار)"
+
+#: admin/partials/settings-page.php:396
+msgid "Move to Haman"
+msgstr "انتقال به هامان"
+
+#: admin/class-haman-admin.php:69
+msgid "Needs attention: %s"
+msgstr "نیاز به رسیدگی: %s"
+
+#: admin/class-haman-admin.php:63 admin/partials/settings-page.php:30
+msgid "Never"
+msgstr "هرگز"
+
+#: admin/partials/settings-page.php:357
+msgid "New"
+msgstr "جدید"
+
+#: admin/class-haman-admin.php:97
+msgid "No"
+msgstr "خیر"
+
+#: includes/api/class-haman-api-client.php:74 includes/api/class-haman-api-client.php:202
+msgid "No API key has been entered. Paste the key from your Haman panel (it starts with hfp_) and save."
+msgstr "کلید API وارد نشده است. کلید را از پنل هامان بچسبانید (با hfp_ شروع می‌شود) و ذخیره کنید."
+
+#: admin/partials/settings-page.php:226
+msgid "No custom field is sent unless you pick it. For each selected content type, the fields that actually exist on this site are listed with a real sample value; tick the ones the bot should know. Private fields (starting with _) are never shown or sent."
+msgstr "هیچ فیلد سفارشی‌ای بدون انتخاب شما فرستاده نمی‌شود. برای هر نوع محتوای انتخاب‌شده، فیلدهایی که واقعاً در این سایت وجود دارند با یک مقدار نمونه‌ی واقعی فهرست شده‌اند؛ آن‌هایی را که بات باید بداند تیک بزنید. فیلدهای خصوصی (شروع‌شونده با _) هرگز نمایش داده یا فرستاده نمی‌شوند."
+
+#: admin/class-haman-admin.php:94
+msgid "No fields will be sent."
+msgstr "هیچ فیلدی فرستاده نمی‌شود."
+
+#: admin/class-haman-admin.php:443
+msgid "No local settings were found to migrate."
+msgstr "تنظیمات محلی‌ای برای انتقال پیدا نشد."
+
+#: admin/class-haman-admin.php:51
+msgid "Not connected"
+msgstr "متصل نیست"
+
+#: admin/partials/settings-page.php:249
+msgid "Not plain text"
+msgstr "متن ساده نیست"
+
+#: admin/class-haman-admin.php:52
+msgid "Not set up"
+msgstr "تنظیم نشده"
+
+#: admin/partials/settings-page.php:86
+msgid "Not shown — not connected"
+msgstr "نمایش داده نمی‌شود — متصل نیست"
+
+#: admin/class-haman-admin.php:57
+msgid "Nothing has been synced yet. Run a full sync below."
+msgstr "هنوز چیزی همگام نشده است. از پایین یک همگام‌سازی کامل اجرا کنید."
+
+#: admin/partials/settings-page.php:411
+msgid "Nothing logged yet."
+msgstr "هنوز چیزی ثبت نشده است."
+
+#: admin/partials/settings-page.php:213
+msgid "Off by default — a blog post is rarely what a customer is asking about."
+msgstr "به‌طور پیش‌فرض خاموش — سؤال مشتری به‌ندرت درباره‌ی یک نوشته‌ی وبلاگ است."
+
+#: admin/partials/settings-page.php:17
+msgid "Official distributor"
+msgstr "نماینده‌ی رسمی"
+
+#: admin/partials/settings-page.php:319
+msgid "On uninstall"
+msgstr "هنگام حذف افزونه"
+
+#: admin/partials/settings-page.php:322
+msgid "Only WordPress-side settings are removed; nothing on the Haman server is affected."
+msgstr "فقط تنظیمات سمت وردپرس پاک می‌شود؛ چیزی روی سرور هامان تغییر نمی‌کند."
+
+#: admin/partials/settings-page.php:395
+msgid "Only for sites that set these texts on this WordPress page with an older version of the plugin: sends them to Haman once, so they appear and can be edited in your Haman panel."
+msgstr "فقط برای سایت‌هایی که این متن‌ها را با نسخه‌ی قدیمی افزونه در همین صفحه‌ی وردپرس تنظیم کرده‌اند: یک بار به هامان فرستاده می‌شوند تا در پنل هامان دیده و ویرایش شوند."
+
+#: admin/partials/settings-page.php:362
+msgid "Over limit"
+msgstr "بیش از سقف"
+
+#: admin/partials/settings-page.php:223
+msgid "PDF files attached to products (datasheets)"
+msgstr "فایل‌های PDF پیوست محصولات (دیتاشیت)"
+
+#: admin/partials/settings-page.php:272
+msgid "Page IDs to leave out"
+msgstr "شناسه‌ی برگه‌هایی که کنار گذاشته شوند"
+
+#: admin/class-haman-admin.php:60
+msgid "Pages"
+msgstr "برگه‌ها"
+
+#: admin/class-haman-admin.php:83 admin/partials/settings-page.php:366
+msgid "Pages and site content"
+msgstr "برگه‌ها و محتوای سایت"
+
+#: admin/partials/settings-page.php:405
+msgid "Plugin version"
+msgstr "نسخه‌ی افزونه"
+
+#: admin/class-haman-admin.php:104
+msgid "Position on the page"
+msgstr "جای ویجت در صفحه"
+
+#: admin/class-haman-admin.php:61
+msgid "Posts"
+msgstr "نوشته‌ها"
+
+#: admin/partials/settings-page.php:270
+msgid "Posts in these categories are never synced, even when posts are on."
+msgstr "نوشته‌های این دسته‌ها هرگز همگام نمی‌شوند، حتی وقتی نوشته‌ها روشن باشند."
+
+#: admin/class-haman-admin.php:103
+msgid "Primary colour"
+msgstr "رنگ اصلی"
+
+#: admin/class-haman-admin.php:59
+msgid "Product PDFs"
+msgstr "PDFهای محصول"
+
+#: admin/partials/settings-page.php:288
+msgid "Product attribute"
+msgstr "ویژگی محصول"
+
+#: admin/class-haman-admin.php:58 admin/class-haman-admin.php:82 admin/partials/settings-page.php:366
+msgid "Products"
+msgstr "محصولات"
+
+#: admin/partials/settings-page.php:196
+msgid "Published"
+msgstr "منتشرشده"
+
+#: admin/class-haman-admin.php:106
+msgid "Quick questions"
+msgstr "سؤال‌های سریع"
+
+#: admin/partials/settings-page.php:62
+msgid "Re-check"
+msgstr "بررسی دوباره"
+
+#: admin/class-haman-admin.php:81
+msgid "Reading settings from Haman"
+msgstr "در حال خواندن تنظیمات از هامان"
+
+#: admin/partials/settings-page.php:409 admin/partials/settings-page.php:413
+msgid "Recent API log"
+msgstr "گزارش اخیر API"
+
+#: admin/partials/settings-page.php:152
+msgid "Regenerate"
+msgstr "ساخت دوباره"
+
+#: admin/partials/settings-page.php:167 admin/partials/settings-page.php:341
+msgid "Run full sync now"
+msgstr "اجرای همگام‌سازی کامل"
+
+#: admin/partials/settings-page.php:239
+msgid "Sample value"
+msgstr "مقدار نمونه"
+
+#: admin/partials/settings-page.php:332
+msgid "Save settings"
+msgstr "ذخیره‌ی تنظیمات"
+
+#: admin/partials/settings-page.php:175
+msgid "See the full breakdown in your Haman panel"
+msgstr "جزئیات کامل در پنل هامان"
+
+#: admin/partials/settings-page.php:237
+msgid "Send"
+msgstr "ارسال"
+
+#: admin/class-haman-admin.php:155 includes/api/class-haman-api-client.php:133
+msgid "Set the Chatbot ID on the Connection tab first."
+msgstr "اول شناسه‌ی چت‌بات را در زبانه‌ی اتصال تنظیم کنید."
+
+#: admin/partials/settings-page.php:49
+msgid "Settings saved."
+msgstr "تنظیمات ذخیره شد."
+
+#: admin/partials/settings-page.php:94
+msgid "Settings sections"
+msgstr "بخش‌های تنظیمات"
+
+#: admin/class-haman-admin.php:76 admin/partials/settings-page.php:113 admin/partials/settings-page.php:151
+msgid "Show"
+msgstr "نمایش"
+
+#: admin/partials/settings-page.php:134
+msgid "Show the chat widget on this site"
+msgstr "ویجت گفتگو در این سایت نمایش داده شود"
+
+#: admin/partials/settings-page.php:195
+msgid "Slug"
+msgstr "نامک"
+
+#: admin/partials/settings-page.php:60
+msgid "Status"
+msgstr "وضعیت"
+
+#: admin/class-haman-admin.php:80
+msgid "Step %1$s of %2$s: %3$s"
+msgstr "مرحله‌ی %1$s از %2$s: %3$s"
+
+#: admin/partials/settings-page.php:253
+msgid "Structured data — cannot be sent"
+msgstr "داده‌ی ساختاریافته — قابل ارسال نیست"
+
+#: admin/partials/settings-page.php:24 admin/partials/settings-page.php:193
+msgid "Sync"
+msgstr "همگام‌سازی"
+
+#: admin/class-haman-admin.php:85 admin/partials/settings-page.php:52
+msgid "Sync finished."
+msgstr "همگام‌سازی تمام شد."
+
+#: admin/partials/settings-page.php:162
+msgid "Sync status"
+msgstr "وضعیت همگام‌سازی"
+
+#: admin/class-haman-admin.php:86
+msgid "Sync stopped: %s"
+msgstr "همگام‌سازی متوقف شد: %s"
+
+#: admin/partials/settings-page.php:211
+msgid "Synced separately, by the WooCommerce products option above."
+msgstr "جداگانه، با گزینه‌ی محصولات ووکامرس در بالا همگام می‌شود."
+
+#: admin/class-haman-admin.php:105
+msgid "System instruction"
+msgstr "دستورالعمل سیستمی"
+
+#: admin/partials/settings-page.php:138 admin/partials/settings-page.php:140
+msgid "Test connection"
+msgstr "آزمایش اتصال"
+
+#: includes/api/class-haman-api-client.php:112
+msgid "The Haman account this key belongs to has a problem. Contact Haman support."
+msgstr "حساب هامانی که این کلید به آن تعلق دارد مشکل دارد. با پشتیبانی هامان تماس بگیرید."
+
+#: admin/class-haman-admin.php:265
+msgid "The connection is not set up yet: enter the API key and Chatbot ID on the Connection tab and save."
+msgstr "اتصال هنوز تنظیم نشده است: کلید API و شناسه‌ی چت‌بات را در زبانه‌ی اتصال وارد و ذخیره کنید."
+
+#: admin/class-haman-admin.php:88
+msgid "The current webhook secret will stop working immediately. Continue?"
+msgstr "رمز فعلی وب‌هوک بلافاصله از کار می‌افتد. ادامه می‌دهید؟"
+
+#: includes/api/class-haman-api-client.php:114
+msgid "The key is valid, but its chatbot is suspended — check its plan or trial in your Haman panel."
+msgstr "کلید معتبر است، اما چت‌بات آن معلق است — پلن یا دوره‌ی آزمایشی را در پنل هامان بررسی کنید."
+
+#: includes/api/class-haman-api-client.php:110
+msgid "The request reached Haman without an API key. Save the key on this tab and try again."
+msgstr "درخواست بدون کلید API به هامان رسید. کلید را در همین زبانه ذخیره کنید و دوباره امتحان کنید."
+
+#: admin/partials/settings-page.php:308
+msgid "These apply on this site only, per visitor IP address."
+msgstr "فقط در همین سایت و برای هر نشانی IP بازدیدکننده اعمال می‌شوند."
+
+#: admin/class-haman-admin.php:95
+msgid "These fields will be sent: %s"
+msgstr "این فیلدها فرستاده می‌شوند: %s"
+
+#: admin/partials/settings-page.php:299
+msgid "These settings are managed in your Haman panel."
+msgstr "این تنظیمات در پنل هامان مدیریت می‌شوند."
+
+#: admin/partials/settings-page.php:300
+msgid "They are shown here read-only and cannot be changed on this page — they are kept on Haman so they stay the same on every site the chatbot runs on."
+msgstr "این‌جا فقط برای مشاهده نمایش داده می‌شوند و در این صفحه قابل تغییر نیستند — روی هامان نگهداری می‌شوند تا در هر سایتی که چت‌بات روی آن اجرا می‌شود یکسان بمانند."
+
+#: includes/api/class-haman-api-client.php:113
+msgid "This API key has expired. Create a new one in your Haman panel."
+msgstr "این کلید API منقضی شده است. در پنل هامان یک کلید جدید بسازید."
+
+#: admin/class-haman-admin.php:90
+msgid "This deletes everything currently synced and rebuilds it with the settings above. FAQs you entered by hand are not affected. Continue?"
+msgstr "همه‌ی محتوای همگام‌شده پاک و با تنظیمات بالا از نو ساخته می‌شود. پرسش‌های متداولی که دستی وارد کرده‌اید دست نمی‌خورند. ادامه می‌دهید؟"
+
+#: admin/class-haman-admin.php:89
+msgid "This sends your current local WordPress settings to Haman and may overwrite what is set in the Haman portal. Continue?"
+msgstr "تنظیمات محلی فعلی وردپرس به هامان فرستاده می‌شود و ممکن است آنچه در پنل هامان تنظیم شده را بازنویسی کند. ادامه می‌دهید؟"
+
+#: includes/api/class-haman-api-client.php:90
+msgid "This site could not reach the Haman server — a network problem, or the API URL is wrong. Details: %s"
+msgstr "این سایت به سرور هامان دسترسی پیدا نکرد — مشکل شبکه، یا آدرس API اشتباه است. جزئیات: %s"
+
+#: admin/partials/settings-page.php:232
+msgid "This type has no public custom fields."
+msgstr "این نوع، فیلد سفارشی عمومی ندارد."
+
+#: admin/partials/settings-page.php:88
+msgid "Turned off"
+msgstr "خاموش"
+
+#: admin/partials/settings-page.php:356
+msgid "Type"
+msgstr "نوع"
+
+#: admin/class-haman-admin.php:55
+msgid "Unavailable until connected"
+msgstr "تا اتصال برقرار نشود در دسترس نیست"
+
+#: admin/partials/settings-page.php:359
+msgid "Unchanged"
+msgstr "بدون تغییر"
+
+#: admin/class-haman-admin.php:289
+msgid "Unknown sync step."
+msgstr "مرحله‌ی همگام‌سازی ناشناخته است."
+
+#: admin/partials/settings-page.php:358
+msgid "Updated"
+msgstr "به‌روزشده"
+
+#: admin/partials/settings-page.php:143
+msgid "Uses the saved key and URL — save first if you just changed them. A successful test shows the name of the connected chatbot."
+msgstr "از کلید و آدرس ذخیره‌شده استفاده می‌کند — اگر تازه تغییرشان داده‌اید اول ذخیره کنید. آزمایش موفق نام چت‌بات متصل را نشان می‌دهد."
+
+#: admin/class-haman-admin.php:73
+msgid "Version %s is available."
+msgstr "نسخه‌ی %s آماده است."
+
+#: admin/partials/settings-page.php:18
+msgid "Warranty period"
+msgstr "مدت گارانتی"
+
+#: admin/partials/settings-page.php:147
+msgid "Webhook secret"
+msgstr "رمز وب‌هوک"
+
+#: admin/class-haman-admin.php:99
+msgid "Welcome message"
+msgstr "پیام خوش‌آمد"
+
+#: admin/partials/settings-page.php:178
+msgid "What to sync"
+msgstr "چه چیزهایی همگام شوند"
+
+#: admin/partials/settings-page.php:79
+msgid "Widget on this site"
+msgstr "ویجت در این سایت"
+
+#: admin/partials/settings-page.php:181
+msgid "WooCommerce products"
+msgstr "محصولات ووکامرس"
+
+#: admin/class-haman-admin.php:96
+msgid "Yes"
+msgstr "بله"
+
+#: admin/class-haman-admin.php:113 admin/class-haman-admin.php:148 admin/class-haman-admin.php:161 admin/class-haman-admin.php:232
+msgid "You do not have permission to change these settings."
+msgstr "اجازه‌ی تغییر این تنظیمات را ندارید."
+
+#: admin/class-haman-admin.php:75
+msgid "You have the latest version."
+msgstr "آخرین نسخه نصب است."
+
+#: admin/class-haman-admin.php:64
+msgid "content has never been synced"
+msgstr "محتوا هنوز همگام نشده است"
+
+#: admin/partials/settings-page.php:312
+msgid "messages"
+msgstr "پیام"
+
+#: admin/partials/settings-page.php:316
+msgid "minutes"
+msgstr "دقیقه"
+
+#: admin/class-haman-admin.php:65
+msgid "the chat widget is turned off on this site"
+msgstr "ویجت گفتگو در این سایت خاموش است"
+
+#: admin/class-haman-admin.php:66
+msgid "the last sync left out %s documents (plan limit)"
+msgstr "آخرین همگام‌سازی %s سند را به‌خاطر سقف پلن کنار گذاشت"
+
+#: admin/partials/settings-page.php:286
+msgid "— Not mapped —"
+msgstr "— نگاشت نشده —"
+
+#: admin/partials/settings-page.php:279
+msgid "“Is this genuine?” is the question shoppers ask most. The bot only repeats exactly what you recorded in these fields — it never judges on its own. If your store keeps any of them in a custom field or product attribute, say which one here."
+msgstr "«این کالا اصل است؟» پرتکرارترین سؤال خریداران است. بات فقط دقیقاً همان چیزی را تکرار می‌کند که در این فیلدها ثبت کرده‌اید — هرگز خودش قضاوت نمی‌کند. اگر فروشگاه شما هر کدام از این‌ها را در یک فیلد سفارشی یا ویژگی محصول نگه می‌دارد، این‌جا مشخص کنید کدام."

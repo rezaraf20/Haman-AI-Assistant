@@ -71,7 +71,7 @@ class Haman_Api_Client {
      */
     public function test_connection(): array|WP_Error {
         if ( empty( $this->api_key ) ) {
-            return new WP_Error( 'no_key', 'کلید API وارد نشده / No API key entered' );
+            return new WP_Error( 'no_key', __( 'No API key has been entered. Paste the key from your Haman panel (it starts with hfp_) and save.', 'haman-ai-chatbot' ) );
         }
 
         $response = wp_remote_request( $this->base_url . '/connection-test', [
@@ -85,8 +85,11 @@ class Haman_Api_Client {
             // ONE case the server-side log can never cover, by definition.
             return new WP_Error(
                 'network',
-                'اتصال به سرور برقرار نشد (مشکل شبکه یا آدرس سرور اشتباه است): ' . $response->get_error_message()
-                . ' / Could not reach the server (network problem or wrong server address): ' . $response->get_error_message()
+                sprintf(
+                    /* translators: %s: the HTTP library's own error, e.g. "cURL error 6: Could not resolve host" */
+                    __( 'This site could not reach the Haman server — a network problem, or the API URL is wrong. Details: %s', 'haman-ai-chatbot' ),
+                    $response->get_error_message()
+                )
             );
         }
 
@@ -94,20 +97,28 @@ class Haman_Api_Client {
         $reason = $body['reason'] ?? null;
 
         if ( ( $body['ok'] ?? false ) === true ) {
-            $name = $body['chatbot_name'] ?? '';
-            return [ 'ok' => true, 'message' => $name
-                ? "متصل شد به «{$name}» / Connected as \"{$name}\""
-                : 'اتصال موفق / Connected successfully' ];
+            $name = (string) ( $body['chatbot_name'] ?? '' );
+            return [
+                'ok'      => true,
+                'name'    => $name,
+                /* translators: %s: the connected chatbot's name */
+                'message' => $name !== '' ? sprintf( __( 'Connected to “%s”', 'haman-ai-chatbot' ), $name ) : __( 'Connected', 'haman-ai-chatbot' ),
+            ];
         }
 
         $reason_messages = [
-            'missing_key'       => 'کلید API ارسال نشد / No API key was sent',
-            'invalid_key'       => 'کلید API نامعتبر است یا دوباره ساخته شده — کلید جدید را از پورتال کپی کنید / The API key is invalid or was regenerated — copy the current one from the portal',
-            'account_error'     => 'خطا در حساب تننت مرتبط با این کلید / An error with the tenant account behind this key',
-            'key_expired'       => 'کلید API منقضی شده است / This API key has expired',
-            'chatbot_suspended' => 'این چت‌بات غیرفعال یا معلق است — وضعیت پلن/آزمایشی را در پورتال بررسی کنید / This chatbot is suspended — check your plan/trial status in the portal',
+            'missing_key'       => __( 'The request reached Haman without an API key. Save the key on this tab and try again.', 'haman-ai-chatbot' ),
+            'invalid_key'       => __( 'Haman does not recognise this API key — it may have been regenerated. Copy the current key from your Haman panel.', 'haman-ai-chatbot' ),
+            'account_error'     => __( 'The Haman account this key belongs to has a problem. Contact Haman support.', 'haman-ai-chatbot' ),
+            'key_expired'       => __( 'This API key has expired. Create a new one in your Haman panel.', 'haman-ai-chatbot' ),
+            'chatbot_suspended' => __( 'The key is valid, but its chatbot is suspended — check its plan or trial in your Haman panel.', 'haman-ai-chatbot' ),
         ];
-        $message = $reason_messages[ $reason ] ?? ( $body['message'] ?? 'خطای نامشخص / Unknown error' );
+        $code = wp_remote_retrieve_response_code( $response );
+        $message = $reason_messages[ $reason ]
+            ?? ( isset( $body['message'] ) && is_string( $body['message'] )
+                ? $body['message']
+                /* translators: %d: HTTP status code */
+                : sprintf( __( 'Haman answered with an unexpected response (HTTP %d).', 'haman-ai-chatbot' ), $code ) );
 
         return new WP_Error( $reason ?? 'unknown', $message );
     }
@@ -119,11 +130,11 @@ class Haman_Api_Client {
     public function get_connected_chatbot_name(): string|WP_Error {
         $chatbot_id = get_option( 'haman_chatbot_id', '' );
         if ( empty( $chatbot_id ) ) {
-            return new WP_Error( 'no_chatbot_id', 'شناسه‌ی چت‌بات تنظیم نشده / No Chatbot ID configured' );
+            return new WP_Error( 'no_chatbot_id', __( 'Set the Chatbot ID on the Connection tab first.', 'haman-ai-chatbot' ) );
         }
         $r = $this->request( 'GET', "/chatbots/{$chatbot_id}" );
         if ( is_wp_error( $r ) ) return $r;
-        return $r['data']['name'] ?? '(بدون نام / unnamed)';
+        return $r['data']['name'] ?? __( '(unnamed)', 'haman-ai-chatbot' );
     }
     public function update_widget_settings( string $chatbot_id, array $settings ): array|WP_Error {
         return $this->request( 'PUT', "/chatbots/{$chatbot_id}/widget-settings", $settings );
@@ -167,6 +178,10 @@ class Haman_Api_Client {
     public function clear_index( string $chatbot_id ): array|WP_Error {
         return $this->request( 'POST', '/sync/clear', [ 'chatbot_id' => $chatbot_id ], [], self::BULK_SYNC_TIMEOUT );
     }
+    /** What this chatbot's index holds by kind (App\Support\KnowledgeSummary on the platform). */
+    public function get_knowledge( string $chatbot_id ): array|WP_Error {
+        return $this->request( 'GET', "/chatbots/{$chatbot_id}/knowledge", [], [], 15 );
+    }
     public function get_webhook_secret(): string|WP_Error {
         $r = $this->request( 'GET', '/tenant/webhook-secret' );
         if ( is_wp_error( $r ) ) return $r;
@@ -184,7 +199,7 @@ class Haman_Api_Client {
 
     private function request( string $method, string $path, array $data = [], array $extra = [], int $timeout = 30 ): array|WP_Error {
         if ( empty( $this->api_key ) ) {
-            return new WP_Error( 'no_key', 'API key not set' );
+            return new WP_Error( 'no_key', __( 'No API key has been entered. Paste the key from your Haman panel (it starts with hfp_) and save.', 'haman-ai-chatbot' ) );
         }
         $headers = array_merge( [
             'Authorization' => 'Bearer ' . $this->api_key,

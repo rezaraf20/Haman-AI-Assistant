@@ -90,6 +90,9 @@ Route::prefix('v1')->group(function () {
         Route::put('chatbots/{id}/widget-settings', [ChatbotController::class, 'updateWidgetSettings']);
         Route::get('chatbots/{id}/sync-settings', [ChatbotController::class, 'syncSettings']);
         Route::put('chatbots/{id}/sync-settings', [ChatbotController::class, 'updateSyncSettings']);
+        // What this chatbot's index holds, by kind — the plugin's settings
+        // page shows it (App\Support\KnowledgeSummary, same as the portal).
+        Route::get('chatbots/{id}/knowledge', [ChatbotController::class, 'knowledge']);
         Route::get('tenant/webhook-secret', [TenantController::class, 'webhookSecret']);
         Route::post('tenant/webhook-secret/regenerate', [TenantController::class, 'regenerateWebhookSecret']);
     });

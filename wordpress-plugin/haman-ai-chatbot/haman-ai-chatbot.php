@@ -3,7 +3,7 @@
  * Plugin Name:       Haman AI Chatbot
  * Plugin URI:        https://hamanai.com
  * Description:       AI-powered chatbot for customer support, sales, and WooCommerce recommendations.
- * Version:           2.6.0
+ * Version:           2.7.0
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            Reza Rafiei
@@ -15,7 +15,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-define( 'HAMAN_VERSION',    '2.6.0' );
+define( 'HAMAN_VERSION',    '2.7.0' );
 define( 'HAMAN_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'HAMAN_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 // The default for a fresh install. Deliberately still api.arshanweb.ir and
@@ -47,6 +47,13 @@ spl_autoload_register( function( $class ) {
 
 register_activation_hook(   __FILE__, [ 'Haman_Activator',   'activate' ] );
 register_deactivation_hook( __FILE__, [ 'Haman_Deactivator', 'deactivate' ] );
+
+// Translations ship in languages/ (English source, Persian in
+// haman-ai-chatbot-fa_IR.po/.mo), so the settings page follows the admin's
+// own language and direction. Loaded on init, as WordPress 6.7+ requires.
+add_action( 'init', function () {
+    load_plugin_textdomain( 'haman-ai-chatbot', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
+} );
 
 function haman_run() {
     ( new Haman_Loader() )->run();

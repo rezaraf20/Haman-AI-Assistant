@@ -293,6 +293,28 @@ class CustomPostTypeSyncTest extends TestCase
         $this->assertSame('archived', $this->inSchema($schema, fn () => DB::table('documents')->where('external_id', '501')->value('status')));
     }
 
+    public function test_the_plugin_reads_the_same_breakdown_and_only_for_its_own_tenant(): void
+    {
+        Bus::fake([EmbedDocumentJob::class]);
+        ['chatbotId' => $chatbotId, 'rawKey' => $rawKey] = $this->makeTenant(maxDocuments: 50);
+        $this->putJson("/api/v1/chatbots/{$chatbotId}/sync-settings", ['post_types' => ['page', 'portfolio']], $this->auth($rawKey))->assertOk();
+        $this->postJson('/api/v1/sync/pages', ['chatbot_id' => $chatbotId, 'pages' => [
+            $this->portfolioItem(701, 'A'), $this->portfolioItem(702, 'B'),
+            ['id' => 703, 'title' => 'About', 'content' => 'About us.', 'url' => 'https://agency.example.test/about', 'post_type' => 'page'],
+        ]], $this->auth($rawKey))->assertStatus(202);
+
+        $r = $this->getJson("/api/v1/chatbots/{$chatbotId}/knowledge", $this->auth($rawKey))->assertOk();
+        $r->assertJsonPath('data.live_total', 3);
+        $r->assertJsonPath('data.limit', 50);
+        $portfolio = collect($r->json('data.kinds'))->firstWhere('post_type', 'portfolio');
+        $this->assertSame(2, $portfolio['documents']);
+        $this->assertSame('نمونه کار', $portfolio['post_type_label']);
+
+        // Another tenant's key must not see this chatbot at all.
+        ['rawKey' => $otherKey] = $this->makeTenant();
+        $this->getJson("/api/v1/chatbots/{$chatbotId}/knowledge", $this->auth($otherKey))->assertNotFound();
+    }
+
     public function test_the_knowledge_page_breaks_documents_down_by_post_type(): void
     {
         Bus::fake([EmbedDocumentJob::class]);
