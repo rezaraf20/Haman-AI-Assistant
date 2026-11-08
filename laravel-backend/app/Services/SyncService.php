@@ -550,7 +550,15 @@ class SyncService {
         $chunksDeleted = $documentIds->isEmpty() ? 0 : Chunk::whereIn('document_id', $documentIds)->delete();
         $documentsDeleted = $documentIds->isEmpty() ? 0 : Document::whereIn('id', $documentIds)->delete();
 
-        return ['documents_deleted' => $documentsDeleted, 'chunks_deleted' => $chunksDeleted];
+        // The product catalogue mirror too. rag_service's SKU lookup reads
+        // `products` directly, before retrieval — so after a clear, a
+        // product that is no longer in the index (another site's, which is
+        // what shared chatbots left behind) was still being offered by
+        // part number, with that other site's link. The full sync that
+        // follows a clear writes this site's own products back.
+        $productsDeleted = Product::where('chatbot_id', $chatbotId)->delete();
+
+        return ['documents_deleted' => $documentsDeleted, 'chunks_deleted' => $chunksDeleted, 'products_deleted' => $productsDeleted];
     }
 
     private function deleteDocument(string $chatbotId, ?string $sourceType, string $externalId, ?int $wooProductId): SyncJob {

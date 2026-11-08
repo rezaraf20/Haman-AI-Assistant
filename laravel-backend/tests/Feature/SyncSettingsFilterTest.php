@@ -156,4 +156,31 @@ class SyncSettingsFilterTest extends TestCase
         $this->assertNotNull(DB::table('documents')->where('external_id', 'faq_manual_1')->first(), 'A manually-entered FAQ must survive clearing the WordPress sync.');
         DB::statement('SET search_path TO public');
     }
+
+    /**
+     * rag_service's SKU lookup reads `products` before retrieval runs, so a
+     * clear that left the catalogue mirror behind kept offering products
+     * that were no longer indexed — after a shared chatbot was split, the
+     * other site's products, with the other site's links.
+     */
+    public function test_clear_and_reindex_also_empties_the_product_catalogue_the_sku_lookup_reads(): void
+    {
+        Bus::fake([EmbedDocumentJob::class]);
+        ['schema' => $schema, 'chatbotId' => $chatbotId, 'rawKey' => $rawKey] = $this->makeTenantWithChatbot();
+        $site = ['Authorization' => "Bearer {$rawKey}", 'User-Agent' => 'WordPress/7.1.4; https://shop.example.test'];
+
+        $this->postJson('/api/v1/sync/products', ['chatbot_id' => $chatbotId, 'products' => [
+            ['id' => 7001, 'name' => 'Paint 4L', 'sku' => 'KR-4L', 'price' => '100', 'permalink' => 'https://other-site.example.test/p/7001'],
+        ]], $site)->assertStatus(202);
+        DB::statement("SET search_path TO {$schema}, public");
+        $this->assertSame(1, DB::table('products')->where('chatbot_id', $chatbotId)->where('sku_normalized', 'KR4L')->count());
+        DB::statement('SET search_path TO public');
+
+        $this->postJson('/api/v1/sync/clear', ['chatbot_id' => $chatbotId], $site)
+            ->assertOk()->assertJsonPath('data.products_deleted', 1);
+
+        DB::statement("SET search_path TO {$schema}, public");
+        $this->assertSame(0, DB::table('products')->where('chatbot_id', $chatbotId)->count(), 'nothing left for a SKU lookup to offer');
+        DB::statement('SET search_path TO public');
+    }
 }
