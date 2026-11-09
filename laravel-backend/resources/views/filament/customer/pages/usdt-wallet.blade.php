@@ -109,5 +109,5 @@
             {{ $this->table }}
         </x-filament::section>
     </div>
-    <script src="{{ asset('vendor/qrcode-generator/qrcode.js') }}?v=1.4.4"></script>
+    <script src="{{ asset('js/vendor/qrcode-generator/qrcode.js') }}?v=1.4.4"></script>
 </x-filament-panels::page>
