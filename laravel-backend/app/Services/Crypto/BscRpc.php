@@ -21,18 +21,38 @@ class BscRpc
     /** @param string[]|null $endpoints */
     public function __construct(private ?array $endpoints = null) {}
 
-    /** @return string[] */
+    /** @return string[] HTTPS only — what these endpoints answer decides whether money is credited. */
     public function endpoints(): array
     {
         $list = $this->endpoints ?? [Settings::get('crypto.bsc_rpc_primary'), Settings::get('crypto.bsc_rpc_fallback')];
         return array_values(array_unique(array_filter(array_map(fn ($u) => trim((string) $u), $list),
-            fn ($u) => str_starts_with($u, 'https://') || str_starts_with($u, 'http://'))));
+            fn ($u) => str_starts_with($u, 'https://'))));
     }
 
     /** @throws RpcUnavailable when no endpoint answers */
     public function call(string $method, array $params = []): mixed
     {
+        return $this->ask($method, $params, nullMeansAskNext: false);
+    }
+
+    /**
+     * Like call(), but a `null` result is not taken as the answer: the next
+     * endpoint is asked too. For "is this transaction / block there?" —
+     * public BSC endpoints are load-balanced pools, and a replica a few
+     * blocks behind answers null for something that very much exists. Null
+     * comes back only when every endpoint that answered said null.
+     *
+     * @throws RpcUnavailable when no endpoint answers at all
+     */
+    public function callAny(string $method, array $params = []): mixed
+    {
+        return $this->ask($method, $params, nullMeansAskNext: true);
+    }
+
+    private function ask(string $method, array $params, bool $nullMeansAskNext): mixed
+    {
         $errors = [];
+        $answered = false;
         foreach ($this->endpoints() as $url) {
             try {
                 if (!isset($this->verified[$url])) {
@@ -47,12 +67,15 @@ class BscRpc
                 if ($this->verified[$url] === false) continue;
 
                 $result = $this->raw($url, $method, $params);
+                $answered = true;
+                if ($result === null && $nullMeansAskNext) continue;
                 $this->lastEndpoint = $url;
                 return $result;
             } catch (\Throwable $e) {
                 $errors[] = self::host($url) . ': ' . $e->getMessage();
             }
         }
+        if ($answered) return null;
         throw new RpcUnavailable($errors ? implode(' | ', $errors) : 'no RPC endpoint configured');
     }
 
@@ -105,10 +128,18 @@ class BscRpc
         ]]);
     }
 
+    /** Null only when no endpoint has it — see callAny(). */
     public function receipt(string $txHash): ?array
     {
-        $r = $this->call('eth_getTransactionReceipt', [$txHash]);
+        $r = $this->callAny('eth_getTransactionReceipt', [$txHash]);
         return is_array($r) ? $r : null;
+    }
+
+    /** The canonical chain's block hash at this height (lowercase), or null when no endpoint has the block. */
+    public function blockHashAt(int $number): ?string
+    {
+        $block = $this->callAny('eth_getBlockByNumber', ['0x' . dechex($number), false]);
+        return isset($block['hash']) ? strtolower($block['hash']) : null;
     }
 
     private static function host(string $url): string

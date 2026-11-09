@@ -36,6 +36,11 @@ class UsdtPaymentsTest extends TestCase
     /** @var array<string, array|null> tx hash => receipt override */
     private array $receipts = [];
     private bool $primaryDown = false;
+    private bool $fallbackDown = false;
+    /** @var array<int, string> block number => canonical hash, when it differs from the one logs were seen in */
+    private array $canonical = [];
+    /** @var array<string, array<string, array|null>> host => tx => receipt override (a lagging replica answers null) */
+    private array $receiptsByHost = [];
     private array $calls = [];
 
     protected function setUp(): void
@@ -52,10 +57,14 @@ class UsdtPaymentsTest extends TestCase
             $host = parse_url($request->url(), PHP_URL_HOST);
             $method = $request['method'];
             $this->calls[] = "{$host} {$method}";
-            if ($host === 'primary.rpc.test' && $this->primaryDown) {
+            if (($host === 'primary.rpc.test' && $this->primaryDown) || ($host === 'fallback.rpc.test' && $this->fallbackDown)) {
                 return Http::response('bad gateway', 502);
             }
-            return Http::response(['jsonrpc' => '2.0', 'id' => 1, 'result' => $this->answer($method, $request['params'] ?? [])]);
+            $params = $request['params'] ?? [];
+            if ($method === 'eth_getTransactionReceipt' && array_key_exists($params[0], $this->receiptsByHost[$host] ?? [])) {
+                return Http::response(['jsonrpc' => '2.0', 'id' => 1, 'result' => $this->receiptsByHost[$host][$params[0]]]);
+            }
+            return Http::response(['jsonrpc' => '2.0', 'id' => 1, 'result' => $this->answer($method, $params)]);
         });
     }
 
@@ -72,7 +81,8 @@ class UsdtPaymentsTest extends TestCase
             'eth_blockNumber' => '0x' . dechex($this->head),
             'eth_getBlockByNumber' => $params[0] === 'finalized'
                 ? ['number' => '0x' . dechex($this->finalized), 'hash' => $this->blockHash($this->finalized)]
-                : ['number' => $params[0], 'timestamp' => '0x' . dechex(now()->timestamp), 'hash' => $this->blockHash(hexdec($params[0]))],
+                : ['number' => $params[0], 'timestamp' => '0x' . dechex(now()->timestamp),
+                   'hash' => $this->canonical[hexdec($params[0])] ?? $this->blockHash(hexdec($params[0]))],
             'eth_getLogs' => array_values(array_filter($this->logs, function ($l) use ($params) {
                 $f = $params[0];
                 $n = hexdec($l['blockNumber']);
@@ -229,21 +239,278 @@ class UsdtPaymentsTest extends TestCase
         $this->assertSame('pending', $deposit->fresh()->status);
     }
 
-    public function test_a_reorged_transfer_is_never_credited(): void
+    public function test_a_real_reorg_needs_a_different_canonical_hash_and_is_never_credited(): void
     {
         $tenant = $this->tenant();
         $deposit = $this->deposit($tenant);
         $this->scan();
         $tx = $this->pay(Usdt::plain($deposit->amount_micro), 999);
         $this->scan();
-        // The block it was in is replaced: the receipt now points elsewhere.
+        // Block 999 was replaced and the transaction dropped: the canonical
+        // hash at 999 is now a different one, and no node has the receipt.
+        $this->canonical[999] = '0x' . str_repeat('b', 64);
         $this->receipts[$tx] = null;
         $this->finalized = 1000;
         $this->scan();
 
-        $this->assertSame('reorged', CryptoTransfer::sole()->status);
+        $t = CryptoTransfer::sole();
+        $this->assertSame('reorged', $t->status);
+        $this->assertStringContainsString(str_repeat('b', 64), (string) $t->reorg_evidence, 'the evidence is kept');
         $this->assertSame(0, (int) $tenant->fresh()->wallet_balance_usdt);
         $this->assertSame('pending', $deposit->fresh()->status);
+        $this->assertSame(0, UsdtScanner::setAsideWithoutEvidence(), 'set aside WITH evidence — not counted');
+    }
+
+    public function test_a_receipt_no_node_has_yet_is_retried_not_written_off(): void
+    {
+        $tenant = $this->tenant();
+        $deposit = $this->deposit($tenant);
+        $this->scan();
+        $tx = $this->pay(Usdt::plain($deposit->amount_micro), 999);
+        $this->scan();
+        // Both replicas lag: null receipt, but the canonical hash at 999 is
+        // still the one the transfer was seen in — no evidence of a reorg.
+        $this->receipts[$tx] = null;
+        $this->finalized = 1000;
+        $this->scan();
+        $this->scan();
+
+        $t = CryptoTransfer::sole();
+        $this->assertSame('detected', $t->status, 'not reorged on a null receipt');
+        $this->assertSame(2, $t->verify_attempts);
+        $this->assertSame(0, (int) $tenant->fresh()->wallet_balance_usdt);
+
+        unset($this->receipts[$tx]);   // the replicas catch up
+        $this->scan();
+        $this->assertSame('credited', $t->fresh()->status);
+        $this->assertSame($deposit->amount_micro, (int) $tenant->fresh()->wallet_balance_usdt);
+    }
+
+    public function test_one_lagging_provider_does_not_decide_when_the_other_has_the_receipt(): void
+    {
+        $tenant = $this->tenant();
+        $deposit = $this->deposit($tenant);
+        $this->scan();
+        $tx = $this->pay(Usdt::plain($deposit->amount_micro), 999);
+        $this->scan();
+        $this->receiptsByHost['primary.rpc.test'][$tx] = null;   // primary's replica is behind
+        $this->finalized = 1000;
+        $this->scan();
+
+        $this->assertSame('credited', CryptoTransfer::sole()->status, 'credited in the same run, from the fallback');
+        $this->assertContains('fallback.rpc.test eth_getTransactionReceipt', $this->calls);
+    }
+
+    public function test_with_both_providers_down_nothing_is_written(): void
+    {
+        $tenant = $this->tenant();
+        $deposit = $this->deposit($tenant);
+        $this->scan();
+        $this->pay(Usdt::plain($deposit->amount_micro), 999);
+        $this->scan();
+        $before = CryptoTransfer::sole()->only(['status', 'verify_attempts', 'note']);
+        $cp = (int) \DB::table('chain_checkpoints')->value('last_scanned_block');
+
+        $this->primaryDown = $this->fallbackDown = true;
+        $this->finalized = 1000;
+        try { $this->scan(); $this->fail('should throw'); } catch (RpcUnavailable) {}
+
+        $this->assertSame($before, CryptoTransfer::sole()->only(['status', 'verify_attempts', 'note']));
+        $this->assertSame($cp, (int) \DB::table('chain_checkpoints')->value('last_scanned_block'));
+        $this->assertNotNull(\DB::table('chain_checkpoints')->value('last_error'));
+
+        $this->primaryDown = $this->fallbackDown = false;
+        $this->scan();
+        $this->assertSame('credited', CryptoTransfer::sole()->status);
+    }
+
+    /** Reorg: block 999 replaced, the same transaction mined again in block 1002 at $newLogIndex. */
+    private function remine(string $newLogIndex): void
+    {
+        $this->canonical[999] = '0x' . str_repeat('c', 64);
+        $moved = $this->logs[0];
+        $moved['blockNumber'] = '0x' . dechex(1002);
+        $moved['blockHash'] = $this->blockHash(1002);
+        $moved['logIndex'] = $newLogIndex;
+        $this->logs = [$moved];
+        $this->head = 1003;
+        $this->finalized = 1000;
+    }
+
+    public function test_re_mined_at_the_same_log_index_the_row_follows_the_transaction(): void
+    {
+        // The re-read of the tail cannot record it again — (tx, log index)
+        // already exists — so without following it, it would be lost.
+        $tenant = $this->tenant();
+        $deposit = $this->deposit($tenant);
+        $this->scan();
+        $this->pay(Usdt::plain($deposit->amount_micro), 999);
+        $this->scan();
+        $this->remine('0x3');
+        $this->scan();
+
+        $t = CryptoTransfer::sole();
+        $this->assertSame('detected', $t->status);
+        $this->assertSame(1002, $t->block_number);
+        $this->assertSame($this->blockHash(1002), $t->block_hash);
+        $this->assertNotNull($t->reorg_evidence);
+        $this->assertSame(0, (int) $tenant->fresh()->wallet_balance_usdt, 'not before 1002 is final');
+
+        $this->finalized = 1003;
+        $this->scan();
+        $this->scan();
+        $this->assertSame('credited', $t->fresh()->status);
+        $this->assertSame($deposit->amount_micro, (int) $tenant->fresh()->wallet_balance_usdt, 'credited once');
+    }
+
+    public function test_re_mined_at_another_log_index_the_new_row_is_credited_and_the_stale_one_kept_as_reorged(): void
+    {
+        $tenant = $this->tenant();
+        $deposit = $this->deposit($tenant);
+        $this->scan();
+        $this->pay(Usdt::plain($deposit->amount_micro), 999);
+        $this->scan();
+        $this->remine('0x7');
+        $this->scan();
+        $this->finalized = 1003;
+        $this->scan();
+        $this->scan();
+
+        $this->assertSame(2, CryptoTransfer::count());
+        $stale = CryptoTransfer::where('block_number', 999)->sole();
+        $live = CryptoTransfer::where('block_number', 1002)->sole();
+        $this->assertSame('reorged', $stale->status);
+        $this->assertNotNull($stale->reorg_evidence);
+        $this->assertSame('credited', $live->status);
+        $this->assertSame(7, $live->log_index);
+        $this->assertSame($deposit->amount_micro, (int) $tenant->fresh()->wallet_balance_usdt, 'credited once, from the live row');
+        $this->assertSame(0, UsdtScanner::setAsideWithoutEvidence());
+    }
+
+    public function test_never_verifiable_goes_to_review_not_reorged_and_an_admin_can_send_it_back(): void
+    {
+        $tenant = $this->tenant();
+        $deposit = $this->deposit($tenant);
+        $this->scan();
+        $tx = $this->pay(Usdt::plain($deposit->amount_micro), 999);
+        $this->scan();
+        $this->receipts[$tx] = null;
+        $this->finalized = 1000;
+        for ($i = 0; $i < UsdtScanner::MAX_VERIFY_ATTEMPTS; $i++) $this->scan();
+
+        $t = CryptoTransfer::sole();
+        $this->assertSame('stuck', $t->status);
+        $this->assertSame(1, UsdtScanner::setAsideWithoutEvidence(), 'the counter that must stay at zero');
+        $this->assertStringContainsString('1', \App\Filament\Resources\CryptoTransferResource\Pages\ListCryptoTransfers::metricsLine());
+
+        unset($this->receipts[$tx]);
+        $this->admin();
+        \Livewire\Livewire::test(\App\Filament\Resources\CryptoTransferResource\Pages\ListCryptoTransfers::class)
+            ->callTableAction('recheck', $t);
+        $this->assertSame('detected', $t->fresh()->status);
+        $this->scan();
+        $this->assertSame('credited', $t->fresh()->status);
+        $this->assertSame(0, UsdtScanner::setAsideWithoutEvidence());
+        $this->assertSame($deposit->amount_micro, (int) $tenant->fresh()->wallet_balance_usdt);
+    }
+
+    public function test_a_receipt_whose_log_is_not_a_usdt_transfer_is_not_credited(): void
+    {
+        $tenant = $this->tenant();
+        $deposit = $this->deposit($tenant);
+        $this->scan();
+        $tx = $this->pay(Usdt::plain($deposit->amount_micro), 999);
+        $this->scan();
+        $receipt = $this->receiptFor($tx);
+        $receipt['logs'][0]['topics'][0] = '0x' . str_repeat('9', 64);   // same contract, another event
+        $this->receipts[$tx] = $receipt;
+        $this->finalized = 1000;
+        $this->scan();
+
+        $this->assertSame('stuck', CryptoTransfer::sole()->status);
+        $this->assertSame(0, (int) $tenant->fresh()->wallet_balance_usdt);
+    }
+
+    public function test_only_https_rpc_endpoints_are_used(): void
+    {
+        $rpc = new BscRpc(['http://plain.rpc.test', 'https://primary.rpc.test', '  ', 'ftp://x']);
+        $this->assertSame(['https://primary.rpc.test'], $rpc->endpoints());
+    }
+
+    // ── Changing the receiving address ─────────────────────────────────
+
+    private function saveAddress(string $address)
+    {
+        $this->admin();
+        return \Livewire\Livewire::test(\App\Filament\Pages\Settings::class)
+            ->set('data.crypto__usdt_address', $address)
+            ->call('save');
+    }
+
+    public function test_the_address_cannot_change_while_a_request_is_open(): void
+    {
+        $this->deposit($this->tenant());
+        $this->saveAddress('0x9999999999999999999999999999999999999999')
+            ->assertNotified(__('usdt.address_locked_title'));
+        Settings::forget();
+        $this->assertSame(self::OURS, Settings::get('crypto.usdt_address'));
+    }
+
+    public function test_the_address_cannot_change_while_a_transfer_is_seen_but_not_final(): void
+    {
+        $tenant = $this->tenant();
+        $deposit = $this->deposit($tenant);
+        $this->scan();
+        $this->pay(Usdt::plain($deposit->amount_micro), 999);
+        $this->scan();
+        app(UsdtDeposits::class)->cancel($deposit);
+        CryptoDeposit::query()->update(['expires_at' => now()->subDays(5)]);   // the request itself no longer holds it
+
+        $b = app(UsdtDeposits::class)->addressChangeBlockers();
+        $this->assertSame(0, $b['requests']);
+        $this->assertSame(1, $b['transfers']);
+        $this->saveAddress('0x9999999999999999999999999999999999999999')->assertNotified(__('usdt.address_locked_title'));
+    }
+
+    public function test_the_address_cannot_change_while_an_expired_request_is_inside_the_grace_window_and_can_after(): void
+    {
+        $deposit = $this->deposit($this->tenant());
+        Carbon::setTestNow(now()->addHours(3));
+        app(UsdtDeposits::class)->expireOld();
+        $this->assertSame('expired', $deposit->fresh()->status);
+
+        $b = app(UsdtDeposits::class)->addressChangeBlockers();
+        $this->assertSame(1, $b['requests']);
+        $this->assertSame($deposit->expires_at->copy()->addHours(24)->toDateTimeString(), $b['free_at']->toDateTimeString());
+        $this->saveAddress('0x9999999999999999999999999999999999999999')->assertNotified(__('usdt.address_locked_title'));
+
+        Carbon::setTestNow(now()->addHours(24));                       // past the grace window
+        $this->saveAddress('0x9999999999999999999999999999999999999999')->assertNotified(__('common.settings_saved'));
+        Settings::forget();
+        $this->assertSame('0x9999999999999999999999999999999999999999', Settings::get('crypto.usdt_address'));
+    }
+
+    // ── A new request never leaves the tenant with none ────────────────
+
+    public function test_a_busy_new_request_keeps_the_previous_one(): void
+    {
+        $tenant = $this->tenant();
+        $previous = $this->deposit($tenant, '20');
+        // Every tail amount for 30 USDT is still matchable somewhere.
+        $other = $this->tenant();
+        $rows = [];
+        foreach (range(30_000_001, 30_009_999) as $amount) {
+            $rows[] = ['id' => (string) Str::uuid(), 'tenant_id' => $other->id, 'chain_id' => 56, 'token_contract' => Usdt::CONTRACT,
+                'address' => self::OURS, 'requested_micro' => 30_000_000, 'amount_micro' => $amount, 'status' => 'expired',
+                'expires_at' => now()->subHour(), 'created_at' => now(), 'updated_at' => now()];
+        }
+        foreach (array_chunk($rows, 1000) as $chunk) \DB::table('crypto_deposits')->insert($chunk);
+
+        try { $this->deposit($tenant, '30'); $this->fail('should be busy'); }
+        catch (\DomainException $e) { $this->assertSame('busy', $e->getMessage()); }
+
+        $this->assertSame('pending', $previous->fresh()->status, 'the cancel rolled back with the failed create');
+        $this->assertSame($previous->id, app(UsdtDeposits::class)->open($tenant)?->id);
     }
 
     public function test_another_token_or_another_recipient_is_not_seen_at_all(): void

@@ -5,6 +5,7 @@ use App\Models\Crypto\{CryptoDeposit, CryptoTransfer};
 use App\Models\Tenant;
 use App\Support\{Settings, Usdt};
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Top-up requests for the USDT wallet.
@@ -49,40 +50,76 @@ class UsdtDeposits
             throw new \DomainException('amount_out_of_range');
         }
 
-        // A new request replaces the tenant's previous open one.
-        CryptoDeposit::where('tenant_id', $tenant->id)->where('status', 'pending')->update(['status' => 'cancelled']);
-
         $address = self::address();
         $ttl = max(5, (int) Settings::get('crypto.usdt_deposit_ttl_minutes'));
         $graceHours = max(0, (int) Settings::get('crypto.usdt_late_grace_hours'));
 
-        // Amounts still matchable — open, or expired/cancelled but within
-        // the late-payment window — are not handed out again, so a late
-        // payment can never match two requests.
-        $taken = CryptoDeposit::where('address', $address)
-            ->where('expires_at', '>', now()->subHours($graceHours))
-            ->whereBetween('amount_micro', [$requestedMicro, $requestedMicro + 9999])
-            ->pluck('amount_micro')->map(fn ($a) => (int) $a)->all();
-        $free = array_values(array_diff(range($requestedMicro + 1, $requestedMicro + 9999), $taken));
-        if (!$free) {
-            throw new \DomainException('busy');
-        }
+        // Cancelling the previous request and creating the new one are one
+        // transaction: if no amount can be allocated (busy), the cancel rolls
+        // back and the tenant keeps the request they had, instead of ending
+        // up with none.
+        return DB::transaction(function () use ($tenant, $requestedMicro, $userId, $address, $ttl, $graceHours) {
+            CryptoDeposit::where('tenant_id', $tenant->id)->where('status', 'pending')->update(['status' => 'cancelled']);
 
-        for ($attempt = 0; $attempt < 5; $attempt++) {
-            $amount = $free[random_int(0, count($free) - 1)];
-            try {
-                return CryptoDeposit::create([
-                    'tenant_id' => $tenant->id, 'created_by' => $userId,
-                    'chain_id' => Usdt::CHAIN_ID, 'token_contract' => Usdt::CONTRACT, 'address' => $address,
-                    'requested_micro' => $requestedMicro, 'amount_micro' => $amount,
-                    'status' => 'pending', 'expires_at' => now()->addMinutes($ttl),
-                ]);
-            } catch (UniqueConstraintViolationException) {
-                $free = array_values(array_diff($free, [$amount]));   // taken by a concurrent request
-                if (!$free) break;
+            // Amounts still matchable — open, or expired/cancelled but within
+            // the late-payment window — are not handed out again, so a late
+            // payment can never match two requests.
+            $taken = CryptoDeposit::where('address', $address)
+                ->where('expires_at', '>', now()->subHours($graceHours))
+                ->whereBetween('amount_micro', [$requestedMicro, $requestedMicro + 9999])
+                ->pluck('amount_micro')->map(fn ($a) => (int) $a)->all();
+            $free = array_values(array_diff(range($requestedMicro + 1, $requestedMicro + 9999), $taken));
+
+            for ($attempt = 0; $attempt < 5 && $free; $attempt++) {
+                $amount = $free[random_int(0, count($free) - 1)];
+                try {
+                    // Its own savepoint: in Postgres a unique violation aborts
+                    // the whole transaction otherwise, and the retry could
+                    // never run.
+                    return DB::transaction(fn () => CryptoDeposit::create([
+                        'tenant_id' => $tenant->id, 'created_by' => $userId,
+                        'chain_id' => Usdt::CHAIN_ID, 'token_contract' => Usdt::CONTRACT, 'address' => $address,
+                        'requested_micro' => $requestedMicro, 'amount_micro' => $amount,
+                        'status' => 'pending', 'expires_at' => now()->addMinutes($ttl),
+                    ]));
+                } catch (UniqueConstraintViolationException) {
+                    $free = array_values(array_diff($free, [$amount]));   // taken by a concurrent request
+                }
             }
+            throw new \DomainException('busy');   // rolls the cancel back too
+        });
+    }
+
+    /**
+     * What still ties the platform to the current receiving address. The
+     * scanner reads only the current address's logs and matches on it, so
+     * changing it while any of these exist means a payment that arrives at
+     * the old wallet is never seen: no row, no credit, no trace.
+     *
+     *  - requests still matchable: pending, or expired/cancelled but inside
+     *    the late-payment grace window (match() still accepts those);
+     *  - transfers seen on chain but not settled yet (detected, or stuck in
+     *    verification).
+     *
+     * @return array{requests:int, transfers:int, free_at:?\Illuminate\Support\Carbon}
+     */
+    public function addressChangeBlockers(): array
+    {
+        $address = self::address();
+        if (!Usdt::isAddress($address)) {
+            return ['requests' => 0, 'transfers' => 0, 'free_at' => null];
         }
-        throw new \DomainException('busy');
+        $grace = max(0, (int) Settings::get('crypto.usdt_late_grace_hours'));
+        $requests = CryptoDeposit::where('address', $address)
+            ->whereIn('status', ['pending', 'expired', 'cancelled'])
+            ->where('expires_at', '>', now()->subHours($grace));
+        $lastExpiry = (clone $requests)->max('expires_at');
+
+        return [
+            'requests' => $requests->count(),
+            'transfers' => CryptoTransfer::where('to_address', $address)->whereIn('status', ['detected', 'stuck'])->count(),
+            'free_at' => $lastExpiry ? \Illuminate\Support\Carbon::parse($lastExpiry)->addHours($grace) : null,
+        ];
     }
 
     public function cancel(CryptoDeposit $deposit): void

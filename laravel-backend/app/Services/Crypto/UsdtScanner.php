@@ -49,10 +49,10 @@ class UsdtScanner
         private WalletService $wallet,
     ) {}
 
-    /** @return array{scanned_from?:int, scanned_to?:int, recorded:int, credited:int, unmatched:int, reorged:int, skipped?:string} */
+    /** @return array{scanned_from?:int, scanned_to?:int, recorded:int, credited:int, unmatched:int, reorged:int, reincluded:int, retry:int, stuck:int, skipped?:string} */
     public function scan(): array
     {
-        $result = ['recorded' => 0, 'credited' => 0, 'unmatched' => 0, 'reorged' => 0];
+        $result = ['recorded' => 0, 'credited' => 0, 'unmatched' => 0, 'reorged' => 0, 'reincluded' => 0, 'retry' => 0, 'stuck' => 0];
         $this->deposits->expireOld();
         if (!UsdtDeposits::enabled()) {
             return $result + ['skipped' => 'disabled'];
@@ -79,6 +79,11 @@ class UsdtScanner
             // Everything up to the final block within what was read is done
             // for good; the tail beyond it is read again next minute.
             $scannedFinal = $to >= $from ? min($finalized, $to) : ($cp?->last_scanned_block);
+            // Never backwards: a lagging replica can report a "finalized"
+            // block below what is already done.
+            if ($cp?->last_scanned_block !== null && $scannedFinal !== null) {
+                $scannedFinal = max((int) $cp->last_scanned_block, $scannedFinal);
+            }
 
             foreach (CryptoTransfer::where('status', 'detected')->where('block_number', '<=', $finalized)->orderBy('block_number')->get() as $transfer) {
                 $outcome = $this->finalize($transfer);
@@ -140,31 +145,149 @@ class UsdtScanner
         ]) > 0;
     }
 
-    /** @return string credited | unmatched | reorged | ignored */
+    /** Receipt not found this many runs in a row (one a minute) and still no proof either way: hand it to a human. */
+    public const MAX_VERIFY_ATTEMPTS = 30;
+
+    /**
+     * Decides what a recorded transfer whose block is now final really is.
+     *
+     * "Reorged" needs POSITIVE evidence: the canonical chain's block hash at
+     * the transfer's height differs from the hash it was seen in. The
+     * absence of evidence — no receipt from any endpoint — is not proof of
+     * anything: public BSC endpoints are load-balanced pools, and a replica
+     * a few blocks behind correctly answers null for a transaction that
+     * exists. That used to mark a real, paid transfer "reorged" for good
+     * (nothing reprocesses a reorged row), so a lagging node could make a
+     * customer's payment vanish.
+     *
+     *   canonical hash differs        → reorged (evidence stored); if the
+     *                                   transaction is in another block now,
+     *                                   the row moves there and stays
+     *                                   "detected" — its block hash is the
+     *                                   new one, so it is final-checked
+     *                                   again there
+     *   receipt present, same block   → reverted → ignored; this exact log
+     *                                   present → credit; log missing →
+     *                                   stuck (a contradiction, for a human)
+     *   no receipt, no contrary hash  → retry next run; after
+     *                                   MAX_VERIFY_ATTEMPTS → stuck (manual
+     *                                   review), never reorged
+     *
+     * @return string credited | unmatched | reorged | reincluded | ignored | retry | stuck | skipped
+     */
     public function finalize(CryptoTransfer $transfer): string
     {
+        $canonical = $this->rpc->blockHashAt($transfer->block_number);
         $receipt = $this->rpc->receipt($transfer->tx_hash);
-        if ($receipt && strtolower($receipt['blockHash'] ?? '') === $transfer->block_hash && ($receipt['status'] ?? '0x1') !== '0x1') {
+
+        if ($canonical !== null && $canonical !== $transfer->block_hash) {
+            return $this->reorged($transfer, $canonical, $receipt);
+        }
+
+        if ($receipt === null || strtolower($receipt['blockHash'] ?? '') !== $transfer->block_hash) {
+            // No proof it is gone, no proof it is there: a lagging replica,
+            // or a receipt from a node whose view disagrees with the
+            // canonical hash it just gave. Ask again next minute.
+            return $this->retry($transfer, $receipt === null ? 'no receipt from any endpoint' : 'receipt in another block, canonical hash unchanged');
+        }
+
+        if (($receipt['status'] ?? '0x1') !== '0x1') {
             $transfer->update(['status' => 'ignored', 'note' => 'transaction reverted']);
             return 'ignored';
         }
 
-        $stillThere = $receipt
-            && strtolower($receipt['blockHash'] ?? '') === $transfer->block_hash
-            && collect($receipt['logs'] ?? [])->contains(fn ($l) =>
-                (int) hexdec($l['logIndex'] ?? '0x0') === $transfer->log_index
-                && strtolower($l['address'] ?? '') === Usdt::CONTRACT
-                && Usdt::hexToDec($l['data'] ?? '0x0') === (string) $transfer->amount_base
-                && Usdt::topicToAddress($l['topics'][2] ?? '') === $transfer->to_address);
-
-        if (!$stillThere) {
-            // Not in the canonical chain any more. If the transaction was
-            // re-included elsewhere, the rescan of the tail records it anew.
-            $transfer->update(['status' => 'reorged', 'note' => 'not in the final block it was seen in']);
-            return 'reorged';
+        $log = $this->findLog($receipt, $transfer->log_index, (string) $transfer->amount_base, $transfer->to_address);
+        if (!$log) {
+            $transfer->update(['status' => 'stuck', 'note' => 'receipt in the same block does not contain this transfer — check by hand']);
+            return 'stuck';
         }
+
         $transfer->update(['finalized_at' => now()]);
         return $this->credit($transfer);
+    }
+
+    /** The USDT Transfer log in a receipt that is this transfer (contract, event signature, recipient, amount; and log index when given). */
+    private function findLog(array $receipt, ?int $logIndex, string $amountBase, string $to): ?array
+    {
+        return collect($receipt['logs'] ?? [])->first(fn ($l) =>
+            ($logIndex === null || (int) hexdec($l['logIndex'] ?? '0x0') === $logIndex)
+            && strtolower($l['address'] ?? '') === Usdt::CONTRACT
+            && strtolower($l['topics'][0] ?? '') === Usdt::TRANSFER_TOPIC
+            && Usdt::hexToDec($l['data'] ?? '0x0') === $amountBase
+            && Usdt::topicToAddress($l['topics'][2] ?? '') === $to);
+    }
+
+    private function retry(CryptoTransfer $transfer, string $why): string
+    {
+        $attempts = $transfer->verify_attempts + 1;
+        if ($attempts >= self::MAX_VERIFY_ATTEMPTS) {
+            $transfer->update(['status' => 'stuck', 'verify_attempts' => $attempts,
+                'note' => "not verifiable after {$attempts} tries ({$why}) — check by hand"]);
+            return 'stuck';
+        }
+        $transfer->update(['verify_attempts' => $attempts, 'note' => $why]);
+        return 'retry';
+    }
+
+    /**
+     * The block it was seen in is not in the canonical chain. If the
+     * transaction was mined again in another block, the row follows it there
+     * (re-reading logs could not bring it back: the (tx, log index) key
+     * already exists, and the new block may be below the checkpoint).
+     */
+    private function reorged(CryptoTransfer $transfer, string $canonical, ?array $receipt): string
+    {
+        $evidence = "block {$transfer->block_number} is now {$canonical}";
+
+        if ($receipt && !empty($receipt['blockHash']) && strtolower($receipt['blockHash']) !== $transfer->block_hash
+            && ($log = $this->findLog($receipt, null, (string) $transfer->amount_base, $transfer->to_address))) {
+            $block = (int) hexdec($receipt['blockNumber']);
+            $time = $this->blockTimes[$block] ??= (int) $this->rpc->blockTime($block);
+            try {
+                // A savepoint: in Postgres a unique violation otherwise aborts
+                // the whole surrounding transaction.
+                DB::transaction(fn () => $transfer->update([
+                    'block_number' => $block,
+                    'block_hash' => strtolower($receipt['blockHash']),
+                    'block_time' => $time ? Carbon::createFromTimestamp($time) : $transfer->block_time,
+                    'log_index' => (int) hexdec($log['logIndex']),
+                    'status' => 'detected', 'verify_attempts' => 0,
+                    'reorg_evidence' => $evidence, 'note' => "re-included in block {$block}",
+                ]));
+                return 'reincluded';
+            } catch (\Illuminate\Database\UniqueConstraintViolationException) {
+                // The re-read of the tail already recorded the new position
+                // as its own row (a different log index); that row is the
+                // live one and is verified on its own. This one is stale.
+                $transfer->refresh();
+                $transfer->update(['status' => 'reorged', 'reorg_evidence' => $evidence,
+                    'note' => "re-included in block {$block}, recorded there as its own row"]);
+                return 'reorged';
+            }
+        }
+
+        $transfer->update(['status' => 'reorged', 'reorg_evidence' => $evidence, 'note' => 'dropped by a reorganisation']);
+        return 'reorged';
+    }
+
+    /**
+     * Back to "detected" so the next scan verifies it again from scratch —
+     * for a stuck transfer (never verifiable) or a reorged one an admin
+     * wants re-checked. Nothing is credited here; only a verified, final
+     * transfer ever is.
+     */
+    public function recheck(CryptoTransfer $transfer): bool
+    {
+        return CryptoTransfer::where('id', $transfer->id)->whereIn('status', ['stuck', 'reorged'])
+            ->update(['status' => 'detected', 'verify_attempts' => 0, 'finalized_at' => null, 'note' => 'queued for re-check']) > 0;
+    }
+
+    /** Transfers set aside WITHOUT positive evidence that they are gone — should stay at zero; anything else is money not credited. */
+    public static function setAsideWithoutEvidence(): int
+    {
+        return CryptoTransfer::where('status', 'stuck')
+            ->orWhere(fn ($q) => $q->where('status', 'reorged')->whereNull('reorg_evidence'))
+            ->count();
     }
 
     /** Matches a final transfer to a request by exact amount and credits it. */

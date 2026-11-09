@@ -146,6 +146,19 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      # NotifyProviderOutageTest talks to a real Redis through the 'shared'
+      # connection on purpose — a mocked one is what kept the key-prefix bug
+      # green for months. Without this service those three tests error with
+      # "Connection refused" and the whole job is red.
+      redis:
+        image: redis:7.2-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -154,4 +167,4 @@ jobs:
 
       - name: Run tests
         run: |
-          docker run --rm --network host             -e APP_ENV=testing             -e APP_KEY=base64:aGFtbWFuLWNpLXRlc3Qta2V5LTMyLWJ5dGVzLWxvbmc=             -e APP_DEBUG=false             -e DB_CONNECTION=pgsql             -e DB_HOST=127.0.0.1             -e DB_PORT=5432             -e DB_DATABASE=haman_test             -e DB_USERNAME=haman_test             -e DB_PASSWORD=haman_test             -e CACHE_STORE=array             -e SESSION_DRIVER=array             -e QUEUE_CONNECTION=sync             -e TELESCOPE_ENABLED=false             -e AI_SERVICE_SECRET=test-secret             --entrypoint sh             haman-laravel-ci -c "vendor/bin/phpunit"
+          docker run --rm --network host             -e APP_ENV=testing             -e APP_KEY=base64:aGFtbWFuLWNpLXRlc3Qta2V5LTMyLWJ5dGVzLWxvbmc=             -e APP_DEBUG=false             -e DB_CONNECTION=pgsql             -e DB_HOST=127.0.0.1             -e DB_PORT=5432             -e DB_DATABASE=haman_test             -e DB_USERNAME=haman_test             -e DB_PASSWORD=haman_test             -e REDIS_HOST=127.0.0.1             -e CACHE_STORE=array             -e SESSION_DRIVER=array             -e QUEUE_CONNECTION=sync             -e TELESCOPE_ENABLED=false             -e AI_SERVICE_SECRET=test-secret             --entrypoint sh             haman-laravel-ci -c "vendor/bin/phpunit"

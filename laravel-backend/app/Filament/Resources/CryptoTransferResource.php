@@ -48,7 +48,8 @@ class CryptoTransferResource extends Resource {
     public static function getNavigationBadge(): ?string
     {
         if (!\App\Services\Crypto\UsdtDeposits::enabled()) return null;
-        self::$unmatchedCount ??= CryptoTransfer::where('status', 'unmatched')->count();
+        // Everything waiting for a person: no matching request, or not verifiable.
+        self::$unmatchedCount ??= CryptoTransfer::whereIn('status', ['unmatched', 'stuck'])->count();
         return self::$unmatchedCount > 0 ? (string) self::$unmatchedCount : null;
     }
 
@@ -61,7 +62,9 @@ class CryptoTransferResource extends Resource {
                         ? Usdt::format($record->amountMicro())
                         : Usdt::format($record->amountMicro()) . ' +'),
                 BadgeColumn::make('status')->label(__('common.status'))
-                    ->colors(['warning' => ['detected', 'unmatched'], 'success' => 'credited', 'gray' => ['ignored', 'reorged']])
+                    // reorged and stuck are warnings, not archive grey: either
+                    // can be a customer's payment that was not credited.
+                    ->colors(['info' => 'detected', 'warning' => ['unmatched', 'stuck'], 'danger' => 'reorged', 'success' => 'credited', 'gray' => 'ignored'])
                     ->formatStateUsing(fn (string $state) => __('usdt.tstatus_' . $state)),
                 TextColumn::make('tenant.name')->label(__('panel.tenant'))->placeholder('—'),
                 TextColumn::make('tx_hash')->label(__('usdt.tx'))
@@ -71,13 +74,29 @@ class CryptoTransferResource extends Resource {
                 TextColumn::make('from_address')->label(__('usdt.col_from'))
                     ->formatStateUsing(fn ($state) => substr($state, 0, 8) . '…' . substr($state, -6))->searchable(),
                 TextColumn::make('block_number')->label(__('usdt.col_block'))->formatStateUsing(fn ($state) => number_format((int) $state)),
-                TextColumn::make('note')->label(__('usdt.col_note'))->placeholder('—')->limit(40),
+                TextColumn::make('note')->label(__('usdt.col_note'))->placeholder('—')->limit(40)
+                    ->tooltip(fn (CryptoTransfer $record) => trim(($record->note ?? '') . ' ' . ($record->reorg_evidence ? '— ' . $record->reorg_evidence : '')) ?: null),
             ])
             ->filters([
-                SelectFilter::make('status')->label(__('common.status'))->options(collect(['unmatched', 'detected', 'credited', 'ignored', 'reorged'])
+                SelectFilter::make('status')->label(__('common.status'))->options(collect(['unmatched', 'stuck', 'reorged', 'detected', 'credited', 'ignored'])
                     ->mapWithKeys(fn ($s) => [$s => __('usdt.tstatus_' . $s)])->all()),
             ])
             ->actions([
+                // Stuck (never verifiable) or reorged: back to "detected", so
+                // the scanner verifies it again from scratch. Credits nothing
+                // by itself — only a verified, final transfer is credited.
+                Action::make('recheck')
+                    ->label(__('usdt.recheck_action'))
+                    ->icon('heroicon-o-arrow-path')
+                    ->color('warning')
+                    ->visible(fn (CryptoTransfer $record) => in_array($record->status, ['stuck', 'reorged'], true))
+                    ->requiresConfirmation()
+                    ->modalDescription(__('usdt.recheck_confirm'))
+                    ->action(function (CryptoTransfer $record) {
+                        abort_unless(PlatformAccess::allows('wallet_ledger'), 403);
+                        app(\App\Services\Crypto\UsdtScanner::class)->recheck($record);
+                        Notification::make()->title(__('usdt.rechecked'))->success()->send();
+                    }),
                 Action::make('assign')
                     ->label(__('usdt.assign_action'))
                     ->icon('heroicon-o-user-plus')

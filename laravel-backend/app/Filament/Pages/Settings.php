@@ -519,6 +519,27 @@ class Settings extends Page implements HasForms
         abort_unless(static::canAccess(), 403);
 
         $state = $this->form->getState();
+
+        // The USDT receiving address may not change while a payment to the
+        // current one can still arrive and be matched — the scanner only
+        // reads the current address, so such a payment would land in the old
+        // wallet with no trace here. Refused before anything is saved.
+        $newAddress = strtolower(trim((string) ($state[$this->fieldName('crypto.usdt_address')] ?? '')));
+        if ($newAddress !== \App\Services\Crypto\UsdtDeposits::address()) {
+            $blockers = app(\App\Services\Crypto\UsdtDeposits::class)->addressChangeBlockers();
+            if ($blockers['requests'] > 0 || $blockers['transfers'] > 0) {
+                Notification::make()
+                    ->title(__('usdt.address_locked_title'))
+                    ->body(__('usdt.address_locked_body', [
+                        'requests' => $blockers['requests'],
+                        'transfers' => $blockers['transfers'],
+                        'when' => $blockers['free_at'] ? (\App\Support\Jalali::dateTime($blockers['free_at']) ?? $blockers['free_at']->toDateTimeString()) : '—',
+                    ]))
+                    ->danger()->persistent()->send();
+                return;
+            }
+        }
+
         $before = [];
         $after = [];
 

@@ -93,4 +93,11 @@ return [
     'scanner_never' => 'The scanner has not run yet',
     'scanner_status' => 'Last scan: :when — up to block :block (:lag blocks behind the head) via :provider',
     'scanner_error' => 'Error: :error',
+    'tstatus_stuck' => 'Not verifiable — check by hand',
+    'recheck_action' => 'Re-check',
+    'recheck_confirm' => 'This transfer is verified on chain again; if it is final and valid it is matched and credited like any other payment. This button itself credits nothing.',
+    'rechecked' => 'Queued for re-check',
+    'metrics_line' => 'Last 30 days: :total final payments — :auto credited automatically, :unmatched matched no request (:pct%). Set aside without positive evidence: :aside',
+    'address_locked_title' => 'The receiving address cannot be changed yet',
+    'address_locked_body' => 'There are still :requests matchable top-up requests and :transfers unverified payments to the current address. The scanner reads only the current address, so a payment reaching the old wallet after the change would never be seen. Free from: :when (and, if there are unverified payments, once they are verified or reviewed).',
 ];
