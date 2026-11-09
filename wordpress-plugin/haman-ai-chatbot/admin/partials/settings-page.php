@@ -238,6 +238,38 @@ if (is_array($hm_cache) && !empty($hm_cache['needed'])) : ?>
         </div>
         <p><label><input type="checkbox" name="haman_sync_pdfs" value="1" <?php checked(get_option('haman_sync_pdfs', '1'), '1'); ?>> <?php esc_html_e('PDF files attached to products (datasheets)', 'haman-ai-chatbot'); ?></label></p>
     </td></tr>
+    <?php if (class_exists('WooCommerce')): $hm_attrs = Haman_Product_Attributes::available(); $hm_attr_pick = Haman_Product_Attributes::approved(); ?>
+    <tr><th scope="row"><?php esc_html_e('Product attributes', 'haman-ai-chatbot'); ?></th><td>
+        <p class="description haman-measure"><?php esc_html_e('Colour, size, material — what customers ask by. Tick the attributes the bot should know. Until you choose, it reads the ones WooCommerce already shows on the product page. Variations (each option with its own price and stock), weight and dimensions are sent with every product.', 'haman-ai-chatbot'); ?></p>
+        <input type="hidden" name="haman_product_attributes_form" value="1">
+        <?php if (empty($hm_attrs)): ?>
+            <p class="description"><?php esc_html_e('No product on this site has attributes yet.', 'haman-ai-chatbot'); ?></p>
+        <?php else: ?>
+            <div class="haman-table-wrap">
+            <table class="widefat striped">
+                <thead><tr>
+                    <td class="check-column"><span class="screen-reader-text"><?php esc_html_e('Send', 'haman-ai-chatbot'); ?></span></td>
+                    <th scope="col"><?php esc_html_e('Attribute', 'haman-ai-chatbot'); ?></th>
+                    <th scope="col"><?php esc_html_e('Sample values', 'haman-ai-chatbot'); ?></th>
+                    <th scope="col"><?php esc_html_e('On the product page', 'haman-ai-chatbot'); ?></th>
+                    <th scope="col" class="num"><?php esc_html_e('Products', 'haman-ai-chatbot'); ?></th>
+                </tr></thead>
+                <tbody>
+                <?php foreach ($hm_attrs as $key => $a): $hm_on = $hm_attr_pick === null ? $a['visible'] : in_array($key, $hm_attr_pick, true); ?>
+                    <tr>
+                        <th scope="row" class="check-column"><input type="checkbox" name="haman_product_attributes[]" value="<?php echo esc_attr($key); ?>" aria-label="<?php echo esc_attr($a['label']); ?>" <?php checked($hm_on); ?>></th>
+                        <td dir="auto"><strong><?php echo esc_html($a['label']); ?></strong></td>
+                        <td dir="auto"><?php echo esc_html(implode('، ', $a['samples'])); ?></td>
+                        <td><?php echo $a['visible'] ? esc_html__('Yes', 'haman-ai-chatbot') : esc_html__('No', 'haman-ai-chatbot'); ?></td>
+                        <td class="num"><?php echo esc_html(number_format_i18n($a['count'])); ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+            </div>
+        <?php endif; ?>
+    </td></tr>
+    <?php endif; ?>
     <tr><th scope="row"><?php esc_html_e('Custom fields', 'haman-ai-chatbot'); ?></th><td>
         <p class="description haman-measure"><?php esc_html_e('No custom field is sent unless you pick it. For each selected content type, the fields that actually exist on this site are listed with a real sample value; tick the ones the bot should know. Private fields (starting with _) are never shown or sent.', 'haman-ai-chatbot'); ?></p>
         <?php foreach ($hm_types as $slug => $info): if ($info['separate']) continue; ?>

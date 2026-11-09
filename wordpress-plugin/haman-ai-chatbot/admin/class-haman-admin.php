@@ -188,6 +188,13 @@ class Haman_Admin {
             $fields[sanitize_key($type)] = array_map('sanitize_text_field', (array) $keys);
         }
         Haman_Sync_Settings::set_custom_fields($fields);
+
+        // Product attributes: the ticked keys (possibly none). Only when the
+        // table was on the page — no WooCommerce, no table, no change.
+        if (!empty($_POST['haman_product_attributes_form'])) {
+            $picked = array_map('sanitize_text_field', (array) wp_unslash($_POST['haman_product_attributes'] ?? []));
+            Haman_Product_Attributes::set_approved(array_values(array_intersect($picked, array_keys(Haman_Product_Attributes::available()))));
+        }
         update_option('haman_sync_pdfs',     isset($_POST['haman_sync_pdfs']) ? '1' : '0');
         update_option('haman_sync_excluded_category_ids', $this->sanitize_id_list($_POST['haman_sync_excluded_category_ids'] ?? ''));
         update_option('haman_sync_excluded_page_ids',     $this->sanitize_id_list($_POST['haman_sync_excluded_page_ids'] ?? ''));

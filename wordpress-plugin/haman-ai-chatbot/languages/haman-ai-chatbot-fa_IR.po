@@ -739,3 +739,24 @@ msgstr "وگرنه بازدیدکننده‌ها تا منقضی شدن صفحه
 
 msgid "The page cache was cleared automatically (%s), so visitors get the new chatbot."
 msgstr "کش صفحه‌ها خودکار پاک شد (%s) و بازدیدکننده‌ها چت‌بات جدید را می‌بینند."
+
+msgid "Product attributes"
+msgstr "ویژگی‌های محصول"
+
+msgid "Colour, size, material — what customers ask by. Tick the attributes the bot should know. Until you choose, it reads the ones WooCommerce already shows on the product page. Variations (each option with its own price and stock), weight and dimensions are sent with every product."
+msgstr "رنگ، سایز، جنس — همان چیزهایی که مشتری با آن‌ها می‌پرسد. ویژگی‌هایی را که بات باید بداند تیک بزنید. تا وقتی انتخاب نکرده‌اید، همان‌هایی را می‌خواند که ووکامرس در صفحه‌ی محصول نشان می‌دهد. تنوع‌ها (هر گزینه با قیمت و موجودی خودش)، وزن و ابعاد همراه هر محصول فرستاده می‌شوند."
+
+msgid "No product on this site has attributes yet."
+msgstr "هنوز هیچ محصولی در این سایت ویژگی ندارد."
+
+msgid "Attribute"
+msgstr "ویژگی"
+
+msgid "Sample values"
+msgstr "نمونه‌ی مقدارها"
+
+msgid "On the product page"
+msgstr "در صفحه‌ی محصول"
+
+msgid "any"
+msgstr "هر کدام"

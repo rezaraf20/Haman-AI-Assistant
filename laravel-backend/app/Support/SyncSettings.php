@@ -51,6 +51,13 @@ class SyncSettings
         'post_types'            => ['page'],
         'custom_fields'         => [],
         'available_post_types'  => [],
+        // WooCommerce product attributes (colour, size, material …) the
+        // bot may read. null = what WooCommerce itself shows on the product
+        // page (is_visible) — the plugin applies that default; a list = the
+        // owner's own choice of attribute keys (pa_color, a custom name …).
+        'product_attributes'    => null,
+        // As the plugin last reported them: key => {label, count, visible}.
+        'available_product_attributes' => [],
         'excluded_category_ids' => [],
         'excluded_page_ids'     => [],
     ];
@@ -92,6 +99,25 @@ class SyncSettings
                 $out['available_post_types'][$slug] = [
                     'label' => mb_substr((string) ($info['label'] ?? $slug), 0, 100),
                     'count' => max(0, (int) ($info['count'] ?? 0)),
+                ];
+            }
+        }
+
+        if (array_key_exists('product_attributes', $raw)) {
+            $out['product_attributes'] = is_array($raw['product_attributes'])
+                ? array_values(array_unique(array_filter(array_map(fn ($k) => self::cleanAttributeKey((string) $k), $raw['product_attributes']))))
+                : null;
+        }
+
+        if (isset($raw['available_product_attributes']) && is_array($raw['available_product_attributes'])) {
+            foreach (array_slice($raw['available_product_attributes'], 0, 100, true) as $key => $info) {
+                $key = self::cleanAttributeKey((string) $key);
+                if ($key === null || !is_array($info)) continue;
+                $out['available_product_attributes'][$key] = [
+                    'label'   => mb_substr((string) ($info['label'] ?? $key), 0, 100),
+                    'count'   => max(0, (int) ($info['count'] ?? 0)),
+                    'visible' => (bool) ($info['visible'] ?? true),
+                    'samples' => array_values(array_slice(array_map(fn ($v) => mb_substr((string) $v, 0, 60), (array) ($info['samples'] ?? [])), 0, 6)),
                 ];
             }
         }
@@ -139,6 +165,26 @@ class SyncSettings
                 // faq and anything else this setting doesn't govern.
                 return true;
         }
+    }
+
+    /** A WooCommerce attribute key: pa_color, or a custom attribute's sanitized name (may be URL-encoded Persian). */
+    public static function cleanAttributeKey(string $key): ?string
+    {
+        $key = trim($key);
+        return ($key !== '' && mb_strlen($key) <= 200 && !preg_match('/[\s<>"\x27]/u', $key)) ? $key : null;
+    }
+
+    /**
+     * The attributes of one product the bot may read: all of them while the
+     * owner has not chosen (the plugin already sent only the ones WooCommerce
+     * shows on the product page), otherwise only the chosen keys — checked
+     * here too, so an older or misconfigured plugin cannot widen it.
+     */
+    public static function allowedProductAttributes(array $settings, array $attributes): array
+    {
+        $chosen = self::normalize($settings)['product_attributes'];
+        if ($chosen === null) return $attributes;
+        return array_values(array_filter($attributes, fn ($a) => is_array($a) && in_array((string) ($a['name'] ?? ''), $chosen, true)));
     }
 
     /** The meta keys allowed for one post type — what the owner picked, minus anything private. */

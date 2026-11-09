@@ -20,11 +20,11 @@ msgstr ""
 msgid "%s documents"
 msgstr ""
 
-#: admin/class-haman-admin.php:58 admin/partials/settings-page.php:400
+#: admin/class-haman-admin.php:58 admin/partials/settings-page.php:432
 msgid "%s documents were not indexed because your plan’s document limit was reached. The bot does not answer from them; upgrading, or turning off types you don’t need, lets the next sync add them."
 msgstr ""
 
-#: admin/partials/settings-page.php:317
+#: admin/partials/settings-page.php:349
 msgid "(opens in a new tab)"
 msgstr ""
 
@@ -56,7 +56,11 @@ msgstr ""
 msgid "Assistant name"
 msgstr ""
 
-#: admin/partials/settings-page.php:294
+#: admin/partials/settings-page.php:252
+msgid "Attribute"
+msgstr ""
+
+#: admin/partials/settings-page.php:326
 msgid "Authenticity field mapping"
 msgstr ""
 
@@ -76,7 +80,7 @@ msgstr ""
 msgid "Awaiting domain registration"
 msgstr ""
 
-#: admin/partials/settings-page.php:331
+#: admin/partials/settings-page.php:363
 msgid "Block for"
 msgstr ""
 
@@ -84,11 +88,11 @@ msgstr ""
 msgid "Brand name"
 msgstr ""
 
-#: admin/partials/settings-page.php:417
+#: admin/partials/settings-page.php:449
 msgid "Cache"
 msgstr ""
 
-#: admin/partials/settings-page.php:283
+#: admin/partials/settings-page.php:315
 msgid "Category IDs to leave out (posts)"
 msgstr ""
 
@@ -112,11 +116,11 @@ msgstr ""
 msgid "Checking…"
 msgstr ""
 
-#: admin/partials/settings-page.php:362 admin/partials/settings-page.php:364
+#: admin/partials/settings-page.php:394 admin/partials/settings-page.php:396
 msgid "Clear and reindex"
 msgstr ""
 
-#: admin/partials/settings-page.php:418
+#: admin/partials/settings-page.php:450
 msgid "Clear cache"
 msgstr ""
 
@@ -130,6 +134,10 @@ msgstr ""
 
 #: admin/partials/settings-page.php:60
 msgid "Clearing it automatically failed for: %s."
+msgstr ""
+
+#: admin/partials/settings-page.php:243
+msgid "Colour, size, material — what customers ask by. Tick the attributes the bot should know. Until you choose, it reads the ones WooCommerce already shows on the product page. Variations (each option with its own price and stock), weight and dimensions are sent with every product."
 msgstr ""
 
 #: admin/class-haman-admin.php:48 includes/api/class-haman-api-client.php:113
@@ -176,23 +184,23 @@ msgstr ""
 msgid "Country of origin"
 msgstr ""
 
-#: admin/partials/settings-page.php:303
+#: admin/partials/settings-page.php:335
 msgid "Custom field (meta key)"
 msgstr ""
 
-#: admin/partials/settings-page.php:241
+#: admin/partials/settings-page.php:273
 msgid "Custom fields"
 msgstr ""
 
-#: admin/partials/settings-page.php:337
+#: admin/partials/settings-page.php:369
 msgid "Delete this plugin’s settings from WordPress"
 msgstr ""
 
-#: admin/partials/settings-page.php:376
+#: admin/partials/settings-page.php:408
 msgid "Deleted"
 msgstr ""
 
-#: admin/partials/settings-page.php:363
+#: admin/partials/settings-page.php:395
 msgid "Deletes everything currently synced and rebuilds it with the settings above — for when you changed what to sync and old content is still in the index. FAQs you entered by hand are not affected."
 msgstr ""
 
@@ -204,11 +212,11 @@ msgstr ""
 msgid "Download"
 msgstr ""
 
-#: admin/class-haman-admin.php:543
+#: admin/class-haman-admin.php:551
 msgid "Download the new version"
 msgstr ""
 
-#: admin/partials/settings-page.php:317
+#: admin/partials/settings-page.php:349
 msgid "Edit appearance and texts in the Haman panel"
 msgstr ""
 
@@ -216,7 +224,7 @@ msgstr ""
 msgid "Enter the API key and Chatbot ID from your Haman panel, save, then test the connection."
 msgstr ""
 
-#: admin/class-haman-admin.php:311
+#: admin/class-haman-admin.php:318
 msgid "Enter the API key and Chatbot ID from your Haman panel, then save."
 msgstr ""
 
@@ -228,11 +236,11 @@ msgstr ""
 msgid "Everything is working: connected, synced and the widget is live."
 msgstr ""
 
-#: admin/class-haman-admin.php:64 admin/class-haman-admin.php:87 admin/partials/settings-page.php:382
+#: admin/class-haman-admin.php:64 admin/class-haman-admin.php:87 admin/partials/settings-page.php:414
 msgid "FAQs"
 msgstr ""
 
-#: admin/partials/settings-page.php:377
+#: admin/partials/settings-page.php:409
 msgid "Failed"
 msgstr ""
 
@@ -244,7 +252,7 @@ msgstr ""
 msgid "Haman AI Chatbot"
 msgstr ""
 
-#: admin/class-haman-admin.php:548
+#: admin/class-haman-admin.php:556
 msgid "Haman AI Chatbot %1$s is available — you have %2$s. Upload the new ZIP from Plugins → Add New → Upload Plugin."
 msgstr ""
 
@@ -264,7 +272,7 @@ msgstr ""
 msgid "Indexed documents"
 msgstr ""
 
-#: admin/partials/settings-page.php:422
+#: admin/partials/settings-page.php:454
 msgid "Installed version:"
 msgstr ""
 
@@ -272,7 +280,7 @@ msgstr ""
 msgid "Invalid key"
 msgstr ""
 
-#: admin/partials/settings-page.php:256
+#: admin/partials/settings-page.php:288
 msgid "Items"
 msgstr ""
 
@@ -280,11 +288,11 @@ msgstr ""
 msgid "Kept on the Haman server, never stored on this site, so it is always the current value."
 msgstr ""
 
-#: admin/partials/settings-page.php:254
+#: admin/partials/settings-page.php:286
 msgid "Key"
 msgstr ""
 
-#: admin/partials/settings-page.php:306
+#: admin/partials/settings-page.php:338
 msgid "Key for %s"
 msgstr ""
 
@@ -296,7 +304,7 @@ msgstr ""
 msgid "Last full sync:"
 msgstr ""
 
-#: admin/partials/settings-page.php:368
+#: admin/partials/settings-page.php:400
 msgid "Last sync results"
 msgstr ""
 
@@ -308,11 +316,11 @@ msgstr ""
 msgid "Leave as it is unless Haman support asks you to change it."
 msgstr ""
 
-#: admin/partials/settings-page.php:281
+#: admin/partials/settings-page.php:313
 msgid "Leave out"
 msgstr ""
 
-#: admin/class-haman-admin.php:44 admin/partials/settings-page.php:181 admin/partials/settings-page.php:319
+#: admin/class-haman-admin.php:44 admin/partials/settings-page.php:181 admin/partials/settings-page.php:351
 msgid "Loading…"
 msgstr ""
 
@@ -320,11 +328,11 @@ msgstr ""
 msgid "Managed separately"
 msgstr ""
 
-#: admin/partials/settings-page.php:323
+#: admin/partials/settings-page.php:355
 msgid "Message limits"
 msgstr ""
 
-#: admin/partials/settings-page.php:327
+#: admin/partials/settings-page.php:359
 msgid "Messages per visitor"
 msgstr ""
 
@@ -332,11 +340,11 @@ msgstr ""
 msgid "Migrated"
 msgstr ""
 
-#: admin/partials/settings-page.php:410
+#: admin/partials/settings-page.php:442
 msgid "Move old local settings to Haman (once)"
 msgstr ""
 
-#: admin/partials/settings-page.php:412
+#: admin/partials/settings-page.php:444
 msgid "Move to Haman"
 msgstr ""
 
@@ -348,11 +356,11 @@ msgstr ""
 msgid "Never"
 msgstr ""
 
-#: admin/partials/settings-page.php:373
+#: admin/partials/settings-page.php:405
 msgid "New"
 msgstr ""
 
-#: admin/class-haman-admin.php:100
+#: admin/class-haman-admin.php:100 admin/partials/settings-page.php:263
 msgid "No"
 msgstr ""
 
@@ -360,7 +368,7 @@ msgstr ""
 msgid "No API key has been entered. Paste the key from your Haman panel (it starts with hfp_) and save."
 msgstr ""
 
-#: admin/partials/settings-page.php:242
+#: admin/partials/settings-page.php:274
 msgid "No custom field is sent unless you pick it. For each selected content type, the fields that actually exist on this site are listed with a real sample value; tick the ones the bot should know. Private fields (starting with _) are never shown or sent."
 msgstr ""
 
@@ -368,15 +376,19 @@ msgstr ""
 msgid "No fields will be sent."
 msgstr ""
 
-#: admin/class-haman-admin.php:453
+#: admin/class-haman-admin.php:461
 msgid "No local settings were found to migrate."
+msgstr ""
+
+#: admin/partials/settings-page.php:246
+msgid "No product on this site has attributes yet."
 msgstr ""
 
 #: admin/class-haman-admin.php:53
 msgid "Not connected"
 msgstr ""
 
-#: admin/partials/settings-page.php:265
+#: admin/partials/settings-page.php:297
 msgid "Not plain text"
 msgstr ""
 
@@ -392,7 +404,7 @@ msgstr ""
 msgid "Nothing has been synced yet. Run a full sync below."
 msgstr ""
 
-#: admin/partials/settings-page.php:427
+#: admin/partials/settings-page.php:459
 msgid "Nothing logged yet."
 msgstr ""
 
@@ -404,19 +416,23 @@ msgstr ""
 msgid "Official distributor"
 msgstr ""
 
-#: admin/partials/settings-page.php:335
+#: admin/partials/settings-page.php:254
+msgid "On the product page"
+msgstr ""
+
+#: admin/partials/settings-page.php:367
 msgid "On uninstall"
 msgstr ""
 
-#: admin/partials/settings-page.php:338
+#: admin/partials/settings-page.php:370
 msgid "Only WordPress-side settings are removed; nothing on the Haman server is affected."
 msgstr ""
 
-#: admin/partials/settings-page.php:411
+#: admin/partials/settings-page.php:443
 msgid "Only for sites that set these texts on this WordPress page with an older version of the plugin: sends them to Haman once, so they appear and can be edited in your Haman panel."
 msgstr ""
 
-#: admin/partials/settings-page.php:378
+#: admin/partials/settings-page.php:410
 msgid "Over limit"
 msgstr ""
 
@@ -424,7 +440,7 @@ msgstr ""
 msgid "PDF files attached to products (datasheets)"
 msgstr ""
 
-#: admin/partials/settings-page.php:288
+#: admin/partials/settings-page.php:320
 msgid "Page IDs to leave out"
 msgstr ""
 
@@ -432,11 +448,11 @@ msgstr ""
 msgid "Pages"
 msgstr ""
 
-#: admin/class-haman-admin.php:86 admin/partials/settings-page.php:382
+#: admin/class-haman-admin.php:86 admin/partials/settings-page.php:414
 msgid "Pages and site content"
 msgstr ""
 
-#: admin/partials/settings-page.php:421
+#: admin/partials/settings-page.php:453
 msgid "Plugin version"
 msgstr ""
 
@@ -448,7 +464,7 @@ msgstr ""
 msgid "Posts"
 msgstr ""
 
-#: admin/partials/settings-page.php:286
+#: admin/partials/settings-page.php:318
 msgid "Posts in these categories are never synced, even when posts are on."
 msgstr ""
 
@@ -460,11 +476,15 @@ msgstr ""
 msgid "Product PDFs"
 msgstr ""
 
-#: admin/partials/settings-page.php:304
+#: admin/partials/settings-page.php:336
 msgid "Product attribute"
 msgstr ""
 
-#: admin/class-haman-admin.php:60 admin/class-haman-admin.php:85 admin/partials/settings-page.php:382
+#: admin/partials/settings-page.php:242
+msgid "Product attributes"
+msgstr ""
+
+#: admin/class-haman-admin.php:60 admin/class-haman-admin.php:85 admin/partials/settings-page.php:255 admin/partials/settings-page.php:414
 msgid "Products"
 msgstr ""
 
@@ -484,7 +504,7 @@ msgstr ""
 msgid "Reading settings from Haman"
 msgstr ""
 
-#: admin/partials/settings-page.php:425 admin/partials/settings-page.php:429
+#: admin/partials/settings-page.php:457 admin/partials/settings-page.php:461
 msgid "Recent API log"
 msgstr ""
 
@@ -492,15 +512,19 @@ msgstr ""
 msgid "Regenerate"
 msgstr ""
 
-#: admin/partials/settings-page.php:183 admin/partials/settings-page.php:357
+#: admin/partials/settings-page.php:183 admin/partials/settings-page.php:389
 msgid "Run full sync now"
 msgstr ""
 
-#: admin/partials/settings-page.php:255
+#: admin/partials/settings-page.php:287
 msgid "Sample value"
 msgstr ""
 
-#: admin/partials/settings-page.php:348
+#: admin/partials/settings-page.php:253
+msgid "Sample values"
+msgstr ""
+
+#: admin/partials/settings-page.php:380
 msgid "Save settings"
 msgstr ""
 
@@ -508,7 +532,7 @@ msgstr ""
 msgid "See the full breakdown in your Haman panel"
 msgstr ""
 
-#: admin/partials/settings-page.php:253
+#: admin/partials/settings-page.php:251 admin/partials/settings-page.php:285
 msgid "Send"
 msgstr ""
 
@@ -544,7 +568,7 @@ msgstr ""
 msgid "Step %1$s of %2$s: %3$s"
 msgstr ""
 
-#: admin/partials/settings-page.php:269
+#: admin/partials/settings-page.php:301
 msgid "Structured data — cannot be sent"
 msgstr ""
 
@@ -580,7 +604,7 @@ msgstr ""
 msgid "The Haman account this key belongs to has a problem. Contact Haman support."
 msgstr ""
 
-#: admin/class-haman-admin.php:268
+#: admin/class-haman-admin.php:275
 msgid "The connection is not set up yet: enter the API key and Chatbot ID on the Connection tab and save."
 msgstr ""
 
@@ -604,7 +628,7 @@ msgstr ""
 msgid "The request reached Haman without an API key. Save the key on this tab and try again."
 msgstr ""
 
-#: admin/partials/settings-page.php:324
+#: admin/partials/settings-page.php:356
 msgid "These apply on this site only, per visitor IP address."
 msgstr ""
 
@@ -612,11 +636,11 @@ msgstr ""
 msgid "These fields will be sent: %s"
 msgstr ""
 
-#: admin/partials/settings-page.php:315
+#: admin/partials/settings-page.php:347
 msgid "These settings are managed in your Haman panel."
 msgstr ""
 
-#: admin/partials/settings-page.php:316
+#: admin/partials/settings-page.php:348
 msgid "They are shown here read-only and cannot be changed on this page — they are kept on Haman so they stay the same on every site the chatbot runs on."
 msgstr ""
 
@@ -640,7 +664,7 @@ msgstr ""
 msgid "This site could not reach the Haman server — a network problem, or the API URL is wrong. Details: %s"
 msgstr ""
 
-#: admin/partials/settings-page.php:248
+#: admin/partials/settings-page.php:280
 msgid "This type has no public custom fields."
 msgstr ""
 
@@ -648,7 +672,7 @@ msgstr ""
 msgid "Turned off"
 msgstr ""
 
-#: admin/partials/settings-page.php:372
+#: admin/partials/settings-page.php:404
 msgid "Type"
 msgstr ""
 
@@ -656,15 +680,15 @@ msgstr ""
 msgid "Unavailable until connected"
 msgstr ""
 
-#: admin/partials/settings-page.php:375
+#: admin/partials/settings-page.php:407
 msgid "Unchanged"
 msgstr ""
 
-#: admin/class-haman-admin.php:292
+#: admin/class-haman-admin.php:299
 msgid "Unknown sync step."
 msgstr ""
 
-#: admin/partials/settings-page.php:374
+#: admin/partials/settings-page.php:406
 msgid "Updated"
 msgstr ""
 
@@ -704,11 +728,11 @@ msgstr ""
 msgid "WooCommerce products"
 msgstr ""
 
-#: admin/class-haman-admin.php:99
+#: admin/class-haman-admin.php:99 admin/partials/settings-page.php:263
 msgid "Yes"
 msgstr ""
 
-#: admin/class-haman-admin.php:116 admin/class-haman-admin.php:151 admin/class-haman-admin.php:164 admin/class-haman-admin.php:235
+#: admin/class-haman-admin.php:116 admin/class-haman-admin.php:151 admin/class-haman-admin.php:164 admin/class-haman-admin.php:242
 msgid "You do not have permission to change these settings."
 msgstr ""
 
@@ -716,15 +740,19 @@ msgstr ""
 msgid "You have the latest version."
 msgstr ""
 
+#: includes/sync/class-haman-product-attributes.php:117
+msgid "any"
+msgstr ""
+
 #: admin/class-haman-admin.php:66
 msgid "content has never been synced"
 msgstr ""
 
-#: admin/partials/settings-page.php:328
+#: admin/partials/settings-page.php:360
 msgid "messages"
 msgstr ""
 
-#: admin/partials/settings-page.php:332
+#: admin/partials/settings-page.php:364
 msgid "minutes"
 msgstr ""
 
@@ -736,10 +764,10 @@ msgstr ""
 msgid "the last sync left out %s documents (plan limit)"
 msgstr ""
 
-#: admin/partials/settings-page.php:302
+#: admin/partials/settings-page.php:334
 msgid "— Not mapped —"
 msgstr ""
 
-#: admin/partials/settings-page.php:295
+#: admin/partials/settings-page.php:327
 msgid "“Is this genuine?” is the question shoppers ask most. The bot only repeats exactly what you recorded in these fields — it never judges on its own. If your store keeps any of them in a custom field or product attribute, say which one here."
 msgstr ""

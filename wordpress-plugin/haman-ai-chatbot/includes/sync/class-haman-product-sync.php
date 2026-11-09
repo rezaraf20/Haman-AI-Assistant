@@ -122,6 +122,12 @@ class Haman_Product_Sync {
             'categories'=>$cats,
             'tags'=>wp_get_post_terms($p->get_id(),'product_tag',['fields'=>'names']),
             'attachments'=>$this->product_pdf_attachments($p),
+            // Colour, size, material …, the options of a variable product,
+            // weight and dimensions — see Haman_Product_Attributes.
+            'attributes' => Haman_Product_Attributes::for_product($p),
+            'variations' => Haman_Product_Attributes::variations($p),
+            'weight'     => Haman_Product_Attributes::weight($p),
+            'dimensions' => Haman_Product_Attributes::dimensions($p),
         ];
         return array_merge( $base, $this->authenticity_fields( $p ) );
     }

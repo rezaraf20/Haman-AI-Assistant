@@ -66,8 +66,13 @@ class SyncService {
         $counts = self::emptyCounts();
         $this->loadDocumentBudget($chatbotId);
         $errors = [];
+        $syncSettings = \App\Support\SyncSettings::merge(Chatbot::findOrFail($chatbotId));
         foreach ($products as $p) {
             try {
+                // Only the attributes the owner allows (SyncSettings::
+                // allowedProductAttributes) — checked here too, not only in
+                // the plugin.
+                $p['attributes'] = \App\Support\SyncSettings::allowedProductAttributes($syncSettings, (array) ($p['attributes'] ?? []));
                 $content = implode("\n", array_filter([
     'Product: '.$p['name'],
     'SKU: '.($p['sku']??''),
@@ -77,6 +82,13 @@ class SyncService {
     'Category: '.implode(', ', array_column($p['categories']??[], 'name')),
     'Tags: '.implode(', ', $p['tags']??[]),
     'Stock: '.($p['stock_status']??'instock'),
+    // Colour, size, material … — what customers ask by ("do you have it in
+    // white?"), which used to reach the bot only if a description happened
+    // to mention it. One line per attribute, in the store's own words.
+    ...self::attributeLines($p['attributes'] ?? []),
+    self::variationLine($p['variations'] ?? []),
+    !empty($p['weight']) ? 'Weight: '.$p['weight'] : '',
+    !empty($p['dimensions']) ? 'Dimensions: '.$p['dimensions'] : '',
     'Link: '.($p['permalink']??''),
     'Image: '.($p['featured_image']??''),
     // "Is this genuine?" fields — only a line if the seller actually
@@ -208,6 +220,34 @@ class SyncService {
      * able to land on an item whose only mention of "web design" is its
      * category.
      */
+    /** "رنگ: قرمز، آبی، صورتی، زرد" — one line per attribute, label in the store's words. */
+    private static function attributeLines(array $attributes): array {
+        $lines = [];
+        foreach ($attributes as $a) {
+            if (!is_array($a)) continue;
+            $values = array_values(array_filter(array_map(fn ($v) => trim(strip_tags((string) $v)), (array) ($a['values'] ?? []))));
+            if (!$values) continue;
+            $label = trim((string) ($a['label'] ?? '')) ?: (string) ($a['name'] ?? '');
+            $lines[] = $label . ': ' . implode('، ', array_slice($values, 0, 30));
+        }
+        return $lines;
+    }
+
+    /** Variations as one line: each option with its own price and stock — "سایز: M — 350000 (instock)". */
+    private static function variationLine(array $variations): string {
+        $parts = [];
+        foreach (array_slice($variations, 0, 50) as $v) {
+            if (!is_array($v)) continue;
+            $attrs = (array) ($v['attributes'] ?? []);
+            $label = implode('، ', array_map(fn ($k, $val) => "{$k}: {$val}", array_keys($attrs), array_values($attrs)));
+            if ($label === '') continue;
+            $price = isset($v['price']) && $v['price'] !== '' ? ' — ' . $v['price'] : '';
+            $stock = !empty($v['stock_status']) ? ' (' . $v['stock_status'] . ')' : '';
+            $parts[] = $label . $price . $stock;
+        }
+        return $parts ? 'Variations: ' . implode(' | ', $parts) : '';
+    }
+
     public function syncPages(string $chatbotId, array $pages, string $schema): SyncJob {
         $job = SyncJob::create(['chatbot_id'=>$chatbotId,'job_type'=>'pages','triggered_by'=>'plugin','status'=>'running','items_total'=>count($pages),'started_at'=>now()]);
         $counts = self::emptyCounts();
@@ -320,7 +360,7 @@ class SyncService {
         $before = \App\Support\SyncSettings::merge($chatbot);
         $merged = $before;
 
-        foreach (['sync_products', 'excluded_category_ids', 'excluded_page_ids', 'available_post_types'] as $key) {
+        foreach (['sync_products', 'excluded_category_ids', 'excluded_page_ids', 'available_post_types', 'product_attributes', 'available_product_attributes'] as $key) {
             if (array_key_exists($key, $changes)) $merged[$key] = $changes[$key];
         }
         if (array_key_exists('custom_fields', $changes)) {

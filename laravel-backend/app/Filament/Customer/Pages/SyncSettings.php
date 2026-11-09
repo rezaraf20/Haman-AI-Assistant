@@ -54,6 +54,8 @@ class SyncSettings extends Page implements HasForms {
     public array $postTypeOptions = [];
     /** @var array<string, list<string>> post type => approved meta keys */
     public array $approvedFields = [];
+    /** WooCommerce attributes as the plugin last reported them: key => {label, count, visible, samples}. */
+    public array $attributeOptions = [];
 
     public function mount(string $chatbot): void {
         $entry = ChatbotIndexEntry::where('chatbot_id', $chatbot)
@@ -71,12 +73,16 @@ class SyncSettings extends Page implements HasForms {
 
         $this->postTypeOptions = $this->postTypeOptionsFrom($settings);
         $this->approvedFields = $settings['custom_fields'];
+        $this->attributeOptions = $settings['available_product_attributes'];
 
         $fill = [
             'sync_products'         => $settings['sync_products'],
             'post_types'            => $settings['post_types'],
             'excluded_category_ids' => implode(', ', $settings['excluded_category_ids']),
             'excluded_page_ids'     => implode(', ', $settings['excluded_page_ids']),
+            // Not chosen yet → what WooCommerce shows on the product page.
+            'product_attributes'    => $settings['product_attributes']
+                ?? array_keys(array_filter($settings['available_product_attributes'], fn ($a) => $a['visible'])),
         ];
         foreach ($this->approvedFields as $type => $keys) {
             $fill['fields_' . $type] = $keys;
@@ -99,6 +105,17 @@ class SyncSettings extends Page implements HasForms {
                         ->helperText(__('portal.sync_post_types_help'))
                         ->options($this->postTypeOptions)
                         ->columns(2),
+                ]),
+            Section::make(__('portal.sync_product_attributes_title'))
+                ->description(__('portal.sync_product_attributes_desc'))
+                ->schema([
+                    $this->attributeOptions
+                        ? CheckboxList::make('product_attributes')->hiddenLabel()
+                            ->options(collect($this->attributeOptions)->map(fn ($a) => __('portal.sync_product_attribute_option', [
+                                'label' => $a['label'], 'samples' => implode('، ', $a['samples']), 'count' => \App\Support\Numbers::format($a['count']),
+                            ]))->all())
+                            ->columns(1)
+                        : Placeholder::make('no_product_attributes')->hiddenLabel()->content(__('portal.sync_product_attributes_none')),
                 ]),
             Section::make(__('portal.sync_custom_fields_title'))
                 ->description(__('portal.sync_custom_fields_desc'))
@@ -175,6 +192,8 @@ class SyncSettings extends Page implements HasForms {
                 'sync_products'         => (bool) $data['sync_products'],
                 'post_types'            => array_values((array) ($data['post_types'] ?? [])),
                 'custom_fields'         => $customFields,
+                // Only keys the plugin reported; untouched when it reported none.
+                ...($this->attributeOptions ? ['product_attributes' => array_values(array_intersect(array_keys($this->attributeOptions), (array) ($data['product_attributes'] ?? [])))] : []),
                 'excluded_category_ids' => $this->parseIdList($data['excluded_category_ids'] ?? null),
                 'excluded_page_ids'     => $this->parseIdList($data['excluded_page_ids'] ?? null),
             ]);

@@ -164,6 +164,9 @@ class Haman_Sync_Settings {
             'available_post_types'  => (object) $available,
             'excluded_category_ids' => self::id_list( get_option( 'haman_sync_excluded_category_ids', '' ) ),
             'excluded_page_ids'     => self::id_list( get_option( 'haman_sync_excluded_page_ids', '' ) ),
+            // null = WooCommerce's own "visible on the product page" default.
+            'product_attributes'    => Haman_Product_Attributes::approved(),
+            'available_product_attributes' => (object) ( class_exists( 'WooCommerce' ) ? Haman_Product_Attributes::available() : [] ),
         ];
     }
 
@@ -193,6 +196,9 @@ class Haman_Sync_Settings {
         if ( array_key_exists( 'sync_products', $s ) ) update_option( 'haman_sync_products', $s['sync_products'] ? '1' : '0' );
         if ( isset( $s['excluded_category_ids'] ) && is_array( $s['excluded_category_ids'] ) ) {
             update_option( 'haman_sync_excluded_category_ids', implode( ', ', array_map( 'intval', $s['excluded_category_ids'] ) ) );
+        }
+        if ( array_key_exists( 'product_attributes', $s ) ) {
+            Haman_Product_Attributes::set_approved( is_array( $s['product_attributes'] ) ? $s['product_attributes'] : null );
         }
         if ( isset( $s['excluded_page_ids'] ) && is_array( $s['excluded_page_ids'] ) ) {
             update_option( 'haman_sync_excluded_page_ids', implode( ', ', array_map( 'intval', $s['excluded_page_ids'] ) ) );

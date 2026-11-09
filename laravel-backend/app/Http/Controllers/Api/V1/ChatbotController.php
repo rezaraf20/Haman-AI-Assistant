@@ -150,6 +150,16 @@ class ChatbotController extends BaseApiController {
             'custom_fields.*'         => 'array|max:100',
             'custom_fields.*.*'       => 'string|max:191',
             'available_post_types'    => 'sometimes|array|max:100',
+            // WooCommerce attributes: the owner's choice (null = the plugin's
+            // default, what the product page shows) and what the plugin found.
+            'product_attributes'      => 'sometimes|nullable|array|max:100',
+            'product_attributes.*'    => 'string|max:200',
+            'available_product_attributes'           => 'sometimes|array|max:100',
+            'available_product_attributes.*.label'   => 'nullable|string|max:100',
+            'available_product_attributes.*.count'   => 'nullable|integer|min:0',
+            'available_product_attributes.*.visible' => 'nullable|boolean',
+            'available_product_attributes.*.samples' => 'nullable|array|max:6',
+            'available_product_attributes.*.samples.*' => 'nullable|string|max:200',
             'available_post_types.*.label' => 'nullable|string|max:100',
             'available_post_types.*.count' => 'nullable|integer|min:0',
             'excluded_category_ids'   => 'sometimes|array',

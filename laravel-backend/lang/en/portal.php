@@ -163,4 +163,8 @@ return [
     'knowledge_kind_pdfs' => 'Product PDFs',
     'knowledge_kind_faqs' => 'FAQs',
     'knowledge_kind_other' => 'Other',
+    'sync_product_attributes_title' => 'Product attributes (colour, size, material…)',
+    'sync_product_attributes_desc' => 'The attributes the bot should know. Until you choose, it reads the ones WooCommerce shows on the product page. The list comes from the WordPress plugin, from the site’s real products.',
+    'sync_product_attribute_option' => ':label — e.g. :samples (:count products)',
+    'sync_product_attributes_none' => 'The plugin has not reported any attributes yet (plugin 2.8.0+, or no product has attributes).',
 ];

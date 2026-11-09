@@ -163,4 +163,8 @@ return [
     'knowledge_kind_pdfs' => 'فایل‌های PDF محصولات',
     'knowledge_kind_faqs' => 'سوالات متداول',
     'knowledge_kind_other' => 'سایر',
+    'sync_product_attributes_title' => 'ویژگی‌های محصول (رنگ، سایز، جنس…)',
+    'sync_product_attributes_desc' => 'ویژگی‌هایی که بات باید بداند. تا وقتی انتخاب نکرده‌اید، همان‌هایی خوانده می‌شوند که ووکامرس در صفحه‌ی محصول نشان می‌دهد. فهرست را افزونه‌ی وردپرس از محصولات واقعی سایت می‌فرستد.',
+    'sync_product_attribute_option' => ':label — مثلاً :samples (:count محصول)',
+    'sync_product_attributes_none' => 'افزونه هنوز ویژگی‌ای گزارش نکرده است (افزونه‌ی ۲.۸.۰ به بعد، یا محصولی ویژگی ندارد).',
 ];
