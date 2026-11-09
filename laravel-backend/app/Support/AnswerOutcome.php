@@ -43,7 +43,8 @@ namespace App\Support;
  */
 class AnswerOutcome
 {
-    public const OURS = ['empty', 'fallback', 'misunderstood'];
+    /** Ours to fix. missed_product: said "we don't have it" about a product the shop had in stock (AnswerOutcomeRecorder + CatalogMatch). */
+    public const OURS = ['empty', 'fallback', 'misunderstood', 'missed_product'];
 
     private const MISUNDERSTOOD = [
         '/نمی[‌\s]?توانم/u',

@@ -1,7 +1,7 @@
 <?php
 namespace App\Console\Commands;
 
-use App\Support\{AnswerOutcome, AnswerOutcomeRecorder};
+use App\Support\{AnswerOutcome, AnswerOutcomeRecorder, CatalogMatch};
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -28,7 +28,8 @@ use Illuminate\Support\Str;
  */
 class ReclassifyAnswersCommand extends Command
 {
-    protected $signature = 'haman:reclassify-answers {json : path to a conversation export} {--dry-run}';
+    protected $signature = 'haman:reclassify-answers {json : path to a conversation export} {--dry-run}
+        {--catalog-chatbot= : check "we do not have it" replies against the products of this chatbot (same shop), e.g. when the exported chatbot catalogue is gone}';
     protected $description = 'Re-judge a chatbot\'s past replies (empty / fallback / misunderstood / not carried) from an export, fix is_unanswered, and record a baseline';
 
     public function handle(): int
@@ -47,8 +48,13 @@ class ReclassifyAnswersCommand extends Command
             return self::FAILURE;
         }
 
+        // "We don't have it" is checked against the shop's catalogue
+        // (CatalogMatch): an in-stock match is our miss, not her gap.
+        $catalogue = CatalogMatch::catalogue((string) ($this->option('catalog-chatbot') ?: $chatbotId));
+        $this->line('Catalogue checked against: ' . count($catalogue) . ' products');
+
         $byConversation = collect($data['messages'])->sortBy('created_at')->groupBy('conversation_id');
-        $counts = ['empty' => 0, 'fallback' => 0, 'misunderstood' => 0, 'not_carried' => 0];
+        $counts = ['empty' => 0, 'fallback' => 0, 'misunderstood' => 0, 'missed_product' => 0, 'not_carried' => 0];
         $replies = 0;
         $judged = [];
 
@@ -63,15 +69,20 @@ class ReclassifyAnswersCommand extends Command
                     'is_fallback' => (bool) ($m['is_fallback'] ?? false),
                     'is_unanswered' => (bool) ($m['is_unanswered'] ?? false),
                 ]);
-                if ($outcome['kind']) $counts[$outcome['kind']]++;
+                $kind = $outcome['kind'];
+                if ($kind === 'not_carried' && $lastQuestion) {
+                    $match = CatalogMatch::find($lastQuestion, $catalogue);
+                    if ($match && ($match['stock_status'] ?? 'instock') !== 'outofstock') $kind = 'missed_product';
+                }
+                if ($kind) $counts[$kind]++;
                 $judged[] = [$m, $outcome, $lastQuestion, $conversationId];
             }
         }
 
         $failed = array_sum($counts);
         $pct = $replies ? round(100 * $failed / $replies, 1) : 0.0;
-        $this->table(['replies', 'empty', 'fallback', 'misunderstood', 'not_carried', 'failed', 'failed %'],
-            [[$replies, $counts['empty'], $counts['fallback'], $counts['misunderstood'], $counts['not_carried'], $failed, $pct]]);
+        $this->table(['replies', 'empty', 'fallback', 'misunderstood', 'missed_product', 'not_carried', 'failed', 'failed %'],
+            [[$replies, $counts['empty'], $counts['fallback'], $counts['misunderstood'], $counts['missed_product'], $counts['not_carried'], $failed, $pct]]);
 
         if ($this->option('dry-run')) {
             $this->info('Dry run — nothing written.');
@@ -90,7 +101,7 @@ class ReclassifyAnswersCommand extends Command
             foreach ($judged as [$m, $outcome, $question, $conversationId]) {
                 $updated += DB::table('messages')->where('id', $m['id'])->update(['is_unanswered' => $outcome['unanswered']]);
                 AnswerOutcomeRecorder::record($outcome, (string) $index->tenant_id, $chatbotId, $conversationId, $m['id'],
-                    $question, $m['content'], Carbon::parse($m['created_at']), 'backfill');
+                    $question, $m['content'], Carbon::parse($m['created_at']), 'backfill', false, $catalogue);
             }
         } finally {
             DB::statement('SET search_path TO public');

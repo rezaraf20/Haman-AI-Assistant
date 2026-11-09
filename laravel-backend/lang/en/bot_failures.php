@@ -23,4 +23,12 @@ return [
     'col_replies' => 'Replies',
     'col_failed' => 'Failed',
     'col_by_kind' => 'By kind',
+    'kind_missed_product' => 'Said "we do not have it" — we did',
+    'missed_title' => 'Said "we do not have it" while the shop did',
+    'missed_desc' => 'Of every "we do not have it" reply, how many were about a product in stock in that shop’s own catalogue (names matched with the comparison feature’s digit normalisation and fuzzy matching). Measured on real customers’ questions — a better gauge of retrieval than recall on a synthetic set.',
+    'missed_line' => ':missed of :total "we do not have it" replies',
+    'all_time' => 'All time',
+    'col_missed' => 'Said no, had it',
+    'col_rate' => 'Rate',
+    'had_it' => 'In the catalogue: :product',
 ];

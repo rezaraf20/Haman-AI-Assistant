@@ -207,7 +207,8 @@ class AnswerOutcomeTest extends TestCase
         $this->reply($ctx, 'تراول ماگ دارید؟', ['response' => 'متأسفانه در حال حاضر تراول ماگ موجود نیست.']);
 
         $this->assertTrue($this->lastReplyFlag($ctx));
-        $this->assertSame(0, DB::table('bot_failures')->count());
+        $this->assertSame(0, DB::table('bot_failures')->whereIn('kind', AnswerOutcome::OURS)->count(), 'not ours');
+        $this->assertSame(['not_carried'], DB::table('bot_failures')->pluck('kind')->all(), 'kept for the "we said no while we had it" rate');
         $events = $this->gapEvents($ctx);
         $this->assertCount(1, $events);
         $this->assertSame('تراول ماگ دارید؟', $events[0]['query']);
@@ -226,7 +227,7 @@ class AnswerOutcomeTest extends TestCase
 
         $this->assertTrue($this->lastReplyFlag($ctx));
         $this->assertCount(1, $this->gapEvents($ctx));
-        $this->assertSame(0, DB::table('bot_failures')->count(), 'a retrieval gap is the shop\'s, not ours');
+        $this->assertSame(0, DB::table('bot_failures')->whereIn('kind', AnswerOutcome::OURS)->count(), 'a retrieval gap is the shop’s, not ours');
     }
 
     public function test_a_real_answer_is_not_flagged(): void
@@ -280,7 +281,7 @@ class AnswerOutcomeTest extends TestCase
 
         $flags = $this->inSchema($ctx['schema'], fn () => DB::table('messages')->where('role', 'assistant')->orderBy('created_at')->pluck('is_unanswered')->map(fn ($v) => (bool) $v)->all());
         $this->assertSame([true, true, false, true], $flags);
-        $this->assertEqualsCanonicalizing(['empty', 'fallback'], DB::table('bot_failures')->pluck('kind')->all());
+        $this->assertEqualsCanonicalizing(['empty', 'fallback'], DB::table('bot_failures')->whereIn('kind', AnswerOutcome::OURS)->pluck('kind')->all());
         $this->assertSame(['backfill'], DB::table('bot_failures')->distinct()->pluck('source')->all());
         $this->assertCount(1, $this->gapEvents($ctx));
 
@@ -288,7 +289,7 @@ class AnswerOutcomeTest extends TestCase
         $this->assertSame(4, (int) $b->replies);
         $this->assertSame(3, (int) $b->failed);
         $this->assertEquals(75.0, (float) $b->failed_pct);
-        $this->assertSame(['empty' => 1, 'fallback' => 1, 'misunderstood' => 0, 'not_carried' => 1], json_decode($b->by_kind, true));
+        $this->assertSame(['empty' => 1, 'fallback' => 1, 'misunderstood' => 0, 'missed_product' => 0, 'not_carried' => 1], json_decode($b->by_kind, true));
         unlink($path);
     }
 
