@@ -21,7 +21,7 @@ class CryptoDepositResource extends Resource {
 
     protected static ?string $model = CryptoDeposit::class;
     protected static ?string $navigationIcon = 'heroicon-o-inbox-arrow-down';
-    protected static ?int $navigationSort = 8;
+    protected static ?int $navigationSort = 10;
 
     public static function getNavigationLabel(): string { return __('usdt.admin_deposits'); }
     public static function getNavigationGroup(): ?string { return __('panel.nav_group_finance'); }

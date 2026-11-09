@@ -31,7 +31,7 @@ class CryptoTransferResource extends Resource {
 
     protected static ?string $model = CryptoTransfer::class;
     protected static ?string $navigationIcon = 'heroicon-o-currency-dollar';
-    protected static ?int $navigationSort = 7;
+    protected static ?int $navigationSort = 9;
 
     public static function getNavigationLabel(): string { return __('usdt.admin_transfers'); }
     public static function getNavigationGroup(): ?string { return __('panel.nav_group_finance'); }

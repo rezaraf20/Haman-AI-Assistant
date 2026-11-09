@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\{DB, Cache};
 // Tenant/Plan rows — one joined query, no per-tenant schema switching
 // needed, unlike FailedSyncsTable.
 class TenantsAtRiskTable extends Widget {
+    protected static ?int $sort = 6;
     // Wallet BALANCE and quota, which support needs to answer "why did my bot stop?". The wallet LEDGER stays admin-only.
     public static function canView(): bool { return PlatformAccess::allows('usage_read'); }
 

@@ -1,6 +1,8 @@
 /*
- * Customer portal (/portal) theme. Loaded by CustomerPanelProvider only —
- * the admin panel never sees this file.
+ * The theme of both panels — the customer portal (/portal) and the admin
+ * panel (/admin). Loaded by CustomerPanelProvider and AdminPanelProvider;
+ * the admin panel's :root block overrides only --brand-primary (see
+ * PortalTheme::ADMIN_TOKENS).
  *
  * No literal colours in here, by rule: every value is a var() reading the
  * :root block CustomerPanelProvider emits from App\Support\PortalTheme, or
@@ -177,6 +179,12 @@
  * tint is 4.41:1). */
 .fi-body .fi-badge.fi-color-danger {
     color: var(--danger-strong);
+}
+
+/* ── Admin panel badge (topbar, AdminPanelProvider) ─────────────── */
+
+.fi-body .hp-admin-badge {
+    margin-inline-start: 0.75rem;
 }
 
 /* ── Layout helpers ───────────────────────────────────────────────── */

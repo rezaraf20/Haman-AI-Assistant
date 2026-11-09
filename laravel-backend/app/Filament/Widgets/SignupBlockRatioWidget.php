@@ -16,12 +16,17 @@ use Illuminate\Support\Facades\Cache;
  * something is catching more than bots; see SignupRisk::blockReason().
  */
 class SignupBlockRatioWidget extends StatsOverviewWidget {
+    protected static ?int $sort = 3;
+    protected int|string|array $columnSpan = 'full';
     public static function canView(): bool { return PlatformAccess::allows('tenants_read'); }
 
     protected static ?string $pollingInterval = null;
     protected static bool $isLazy = false;
 
     private const WINDOW_DAYS = 30;
+
+    /** One column per card: Filament's default lays fewer than three stats out in thirds, leaving the rest of the row empty. */
+    protected function getColumns(): int { return 2; }
 
     protected function getStats(): array {
         $data = Cache::remember('dashboard:admin:signup-block-ratio', 300, function () {

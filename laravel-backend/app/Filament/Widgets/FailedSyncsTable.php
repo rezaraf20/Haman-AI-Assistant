@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\{DB, Cache};
 // revisit first (e.g. a public-schema failed_syncs rollup written
 // alongside AggregateAnalyticsJob).
 class FailedSyncsTable extends Widget {
+    protected static ?int $sort = 9;
     public static function canView(): bool { return PlatformAccess::allows('sync_operate'); }
 
     protected static string $view = 'filament.widgets.failed-syncs-table';

@@ -10,6 +10,7 @@ use Filament\Widgets\StatsOverviewWidget\Stat;
 use Illuminate\Support\Facades\{DB, Cache};
 
 class PlatformStatsOverview extends StatsOverviewWidget {
+    protected static ?int $sort = 1;
     // Visible to staff; the three financial stats inside are stripped
     // for anyone without 'platform_finances' — see getStats().
     public static function canView(): bool { return PlatformAccess::allows('tenants_read'); }

@@ -27,7 +27,7 @@ class UsdtWalletTransactionResource extends Resource {
 
     protected static ?string $model = UsdtWalletTransaction::class;
     protected static ?string $navigationIcon = 'heroicon-o-banknotes';
-    protected static ?int $navigationSort = 6;
+    protected static ?int $navigationSort = 8;
 
     public static function getNavigationLabel(): string { return __('usdt.admin_ledger'); }
     public static function getNavigationGroup(): ?string { return __('panel.nav_group_finance'); }

@@ -32,6 +32,7 @@ use Illuminate\Support\Facades\{DB, Cache, Log};
  * today's tenant count, the first thing to revisit if that changes.
  */
 class NeverConnectedChatbots extends Widget {
+    protected static ?int $sort = 8;
     public static function canView(): bool { return PlatformAccess::allows('chatbots_read'); }
 
     protected static string $view = 'filament.widgets.never-connected-chatbots';

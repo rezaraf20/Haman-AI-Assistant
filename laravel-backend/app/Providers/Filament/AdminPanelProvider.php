@@ -17,6 +17,7 @@ use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\ShareSessionAcrossBrandDomains;
 use App\Support\Brand;
 use Filament\View\PanelsRenderHook;
+use App\Support\PortalTheme;
 use Illuminate\Support\HtmlString;
 
 class AdminPanelProvider extends PanelProvider {
@@ -27,11 +28,20 @@ class AdminPanelProvider extends PanelProvider {
             ->path('admin')
             ->brandName(config('haman.brand.name'))
             ->brandLogo(fn () => view('partials.brand-logo', ['height' => 28]))
-            ->darkModeBrandLogo(fn () => view('partials.brand-logo', ['height' => 28, 'variant' => 'light']))
             ->brandLogoHeight('1.75rem')
             ->favicon(Brand::markUrl())
             ->login()
-            ->colors(['primary' => Brand::primaryColor()])
+            // The same design system as the customer portal
+            // (App\Support\PortalTheme + public/css/portal-theme.css): one
+            // palette, one set of components, one look. The admin panel
+            // differs only in its charcoal sidebar (PortalTheme::ADMIN_TOKENS)
+            // and the "admin panel" badge in the topbar below. The brand
+            // colour setting (Brand::primaryColor()) still sets the
+            // storefront widget's colour; it no longer recolours this panel.
+            ->colors(PortalTheme::filamentColors())
+            // Light only, as in the portal: the design has no dark token set
+            // yet, and a half-themed dark mode is worse than none.
+            ->darkMode(false)
             // Bell icon + dropdown in the topbar, backed by the notifications
             // table (see its migration). First real use: alerting the
             // platform admin when an LLM provider auto-disables itself after
@@ -65,7 +75,20 @@ class AdminPanelProvider extends PanelProvider {
             // falls through to.
             ->renderHook(
                 PanelsRenderHook::HEAD_END,
-                fn () => new HtmlString('<link rel="stylesheet" href="/css/brand.css"><style>:root{--font-family:"Roboto","Vazirmatn",sans-serif}</style>'),
+                fn () => new HtmlString(
+                    '<link rel="stylesheet" href="/css/brand.css">'
+                    . '<style>' . PortalTheme::rootCss(admin: true) . ':root{--font-family:"Roboto","Vazirmatn",sans-serif}</style>'
+                    . '<link rel="stylesheet" href="/css/portal-theme.css?v=' . PortalTheme::stylesheetVersion() . '">'
+                    // As in the portal: below lg the sidebar is a drawer, and
+                    // Filament remembers it as open — so a phone's first
+                    // visit opened onto the menu, not the page. Start closed.
+                    . "<script>try{if(matchMedia('(max-width: 1023px)').matches)localStorage.setItem('isOpen','false')}catch(e){}</script>"
+                ),
+            )
+            // Which panel this is, at a glance — the two now share a design.
+            ->renderHook(
+                PanelsRenderHook::TOPBAR_START,
+                fn () => new HtmlString('<span class="hp-badge hp-badge--neutral hp-admin-badge">' . e(__('panel.admin_badge')) . '</span>'),
             )
             // App\Filament\Pages\Dashboard (extends Filament's own) now lives
             // inside the discoverPages() directory below, so it's picked up

@@ -142,4 +142,5 @@ return [
     'rotate_webhook_secret_description' => 'secret فعلی از کار می‌افتد و افزونه تا وارد کردن مقدار تازه کار نمی‌کند. مقدار قدیم و جدید به شما نمایش داده نمی‌شود.',
     'rotate_webhook_secret_done' => 'secret تازه ساخته شد.',
     'rotate_webhook_secret_done_body' => 'مشتری باید مقدار تازه را از پنل خودش بردارد و در افزونه بگذارد.',
+    'admin_badge' => 'پنل مدیریت',
 ];

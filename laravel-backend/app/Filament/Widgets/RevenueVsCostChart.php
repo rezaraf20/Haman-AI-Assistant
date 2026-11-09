@@ -8,11 +8,12 @@ use Filament\Widgets\ChartWidget;
 use Illuminate\Support\Facades\{DB, Cache};
 
 class RevenueVsCostChart extends ChartWidget {
+    protected static ?int $sort = 5;
     // Platform revenue against platform cost — finances, so admin only.
     public static function canView(): bool { return PlatformAccess::allows('platform_finances'); }
 
     protected static ?string $pollingInterval = null;
-    protected int|string|array $columnSpan = 2;
+    protected int|string|array $columnSpan = 1;
     protected static bool $isLazy = false;
 
     public function getHeading(): string {

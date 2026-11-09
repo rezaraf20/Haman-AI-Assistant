@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\{DB, Cache, Log};
  * own schema, there's no public-schema rollup to query instead.
  */
 class TrialTenantsTable extends Widget {
+    protected static ?int $sort = 7;
     public static function canView(): bool { return PlatformAccess::allows('tenant_lifecycle'); }
 
     protected static string $view = 'filament.widgets.trial-tenants-table';

@@ -45,8 +45,7 @@ class CustomerPanelProvider extends PanelProvider {
             // Filament's theme API rather than CSS overrides, so every stock
             // component — buttons, badges, inputs, notifications — picks up
             // the same shades our own markup reads from var(--token). The
-            // admin panel keeps Brand::primaryColor() and stock grays on
-            // purpose: the two panels are meant to look different.
+            // admin panel uses the same palette (see AdminPanelProvider).
             ->colors(PortalTheme::filamentColors())
             // Light only. The navy structure colour (--brand-primary) is
             // indistinguishable from a dark-mode background, so dark mode

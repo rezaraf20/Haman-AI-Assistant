@@ -139,4 +139,5 @@ return [
     'rotate_webhook_secret_description' => 'The current secret stops working and the plugin will fail until the new value is entered. Neither the old nor the new value is shown to you.',
     'rotate_webhook_secret_done' => 'A new secret was generated.',
     'rotate_webhook_secret_done_body' => 'The customer must copy the new value from their own panel into the plugin.',
+    'admin_badge' => 'Admin panel',
 ];

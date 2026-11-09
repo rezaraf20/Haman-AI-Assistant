@@ -72,6 +72,18 @@ class PortalThemeTest extends TestCase
         $this->assertGreaterThanOrEqual($min, $ratio, sprintf('%s (%s) on %s (%s) is %.2f:1, needs %.1f:1', $fg, self::t($fg), $bg, self::t($bg), $ratio, $min));
     }
 
+    /** The admin panel's one override — its charcoal sidebar — carries the same sidebar text as the portal's navy. */
+    public function test_the_admin_sidebar_colour_keeps_its_text_readable(): void
+    {
+        $admin = PortalTheme::hex('brand-primary', admin: true);
+        $this->assertNotSame(self::t('brand-primary'), $admin, 'the two panels must stay distinguishable');
+        $this->assertGreaterThanOrEqual(4.5, self::contrast(self::t('on-brand'), $admin));
+        $this->assertGreaterThanOrEqual(4.5, self::contrast(self::t('on-brand-muted'), $admin));
+        $this->assertGreaterThanOrEqual(4.5, self::contrast(self::t('on-interactive'), self::t('interactive')));
+        $this->assertStringContainsString("--brand-primary:{$admin};", PortalTheme::rootCss(admin: true));
+        $this->assertStringContainsString('--brand-primary:' . self::t('brand-primary') . ';', PortalTheme::rootCss());
+    }
+
     /** The reason --interactive exists at all: white on --ai-accent misses AA. Kept as a test so nobody "simplifies" buttons back onto it. */
     public function test_white_on_ai_accent_is_below_aa(): void
     {

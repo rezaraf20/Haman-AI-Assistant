@@ -34,7 +34,7 @@ class ProfitMargin extends Page implements HasForms {
 
     protected static string $view = 'filament.pages.profit-margin';
     protected static ?string $navigationIcon = 'heroicon-o-banknotes';
-    protected static ?int $navigationSort = 8;
+    protected static ?int $navigationSort = 7;
 
     public static function getNavigationLabel(): string { return __('panel.profit_margin_nav'); }
     public static function getNavigationGroup(): ?string { return __('panel.nav_group_finance'); }

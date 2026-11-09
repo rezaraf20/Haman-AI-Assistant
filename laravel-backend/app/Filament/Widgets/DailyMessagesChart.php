@@ -8,10 +8,11 @@ use Filament\Widgets\ChartWidget;
 use Illuminate\Support\Facades\{DB, Cache};
 
 class DailyMessagesChart extends ChartWidget {
+    protected static ?int $sort = 4;
     public static function canView(): bool { return PlatformAccess::allows('usage_read'); }
 
     protected static ?string $pollingInterval = null;
-    protected int|string|array $columnSpan = 2;
+    protected int|string|array $columnSpan = 1;
     protected static bool $isLazy = false;
 
     public function getHeading(): string {

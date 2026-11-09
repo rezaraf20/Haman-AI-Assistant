@@ -18,9 +18,9 @@ use Filament\Support\Colors\Color;
  *    PortalThemeTest fails if a token and the Filament shade it stands for
  *    ever drift apart.
  *
- * The admin panel deliberately does not use any of this — it keeps
- * Brand::primaryColor() and Filament's stock grays, so the two panels stay
- * visibly different.
+ * Both panels use it. The admin panel overrides one token (ADMIN_TOKENS):
+ * its sidebar is charcoal rather than navy, plus a "admin panel" badge in
+ * the topbar, so staff can always tell which of the two they are in.
  *
  * Contrast (WCAG 2.x, checked by PortalThemeTest, not by eye):
  *  - Text on a white or --bg background uses --text or --text-muted, never
@@ -77,9 +77,14 @@ class PortalTheme
         'text-subtle'        => '#94A3B8',
     ];
 
-    public static function hex(string $token): string
+    /** What the admin panel changes: only the structure colour, so it is recognisably not the customer portal. */
+    public const ADMIN_TOKENS = [
+        'brand-primary' => '#0F172A',
+    ];
+
+    public static function hex(string $token, bool $admin = false): string
     {
-        return self::TOKENS[$token];
+        return ($admin ? self::ADMIN_TOKENS[$token] ?? null : null) ?? self::TOKENS[$token];
     }
 
     private static ?string $stylesheetVersion = null;
@@ -90,10 +95,10 @@ class PortalTheme
         return self::$stylesheetVersion ??= substr((string) @md5_file(public_path('css/portal-theme.css')), 0, 8);
     }
 
-    public static function rootCss(): string
+    public static function rootCss(bool $admin = false): string
     {
         $vars = '';
-        foreach (self::TOKENS as $name => $value) {
+        foreach (($admin ? array_merge(self::TOKENS, self::ADMIN_TOKENS) : self::TOKENS) as $name => $value) {
             $vars .= "--{$name}:{$value};";
         }
         return ":root{{$vars}}";

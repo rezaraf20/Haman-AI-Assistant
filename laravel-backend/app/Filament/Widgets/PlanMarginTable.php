@@ -21,6 +21,7 @@ use Filament\Widgets\Widget;
  * cost, not precise enough to bill from.
  */
 class PlanMarginTable extends Widget {
+    protected static ?int $sort = 10;
     public static function canView(): bool { return PlatformAccess::allows('pricing'); }
 
     protected static string $view = 'filament.widgets.plan-margin-table';

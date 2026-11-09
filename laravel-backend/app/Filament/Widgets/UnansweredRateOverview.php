@@ -12,11 +12,15 @@ use Illuminate\Support\Facades\{DB, Cache};
 // across the whole platform means the RAG pipeline (or a lot of tenants'
 // content) is falling short, regardless of how revenue/margin look.
 class UnansweredRateOverview extends StatsOverviewWidget {
+    protected static ?int $sort = 2;
     public static function canView(): bool { return PlatformAccess::allows('usage_read'); }
 
     protected static ?string $pollingInterval = null;
     protected int|string|array $columnSpan = 'full';
     protected static bool $isLazy = false;
+
+    /** One column per card: Filament's default lays fewer than three stats out in thirds, leaving the rest of the row empty. */
+    protected function getColumns(): int { return 1; }
 
     protected function getStats(): array {
         $row = Cache::remember('dashboard:admin:unanswered-rate', 300, function () {

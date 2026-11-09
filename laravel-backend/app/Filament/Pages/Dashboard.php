@@ -11,10 +11,15 @@ class Dashboard extends BaseDashboard {
     public static function getNavigationLabel(): string { return __('panel.dashboard_nav'); }
     public function getTitle(): string { return __('panel.dashboard_title'); }
 
+    /**
+     * Two columns on desktop: the two trend charts sit side by side; stat
+     * rows and tables span the full width. (Three columns left a third of
+     * the page empty beside each two-column chart.)
+     */
     public function getColumns(): int|array {
         return [
             'default' => 1,
-            'lg'      => 3,
+            'lg'      => 2,
         ];
     }
 }
