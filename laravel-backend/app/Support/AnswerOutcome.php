@@ -34,6 +34,10 @@ namespace App\Support;
  * the first production run flagged 50 of Shop Bot's 119 replies; about
  * half were real answers of that second kind.
  *
+ * "The price of X isn't in our list" inside an answer is a missing detail
+ * (data the shop can add), not "we don't carry it" — the stationery-bundle
+ * replies listed every item with its price and said exactly that about one.
+ *
  * A leaked "assistant:" prefix is a formatting defect, not a non-answer
  * (those replies did answer), so it is not counted here.
  */
@@ -86,6 +90,8 @@ class AnswerOutcome
             return ['unanswered' => true, 'kind' => 'fallback'];
         }
         $opening = self::openingSentence($text);
+        // A missing price is a missing detail, not a missing product.
+        $opening = preg_replace('/قیمت[^.،؛:]{0,40}?(موجود\s+نیست|ذکر\s+نشده(\s+است)?)/u', '', $opening) ?? $opening;
         foreach (self::MISUNDERSTOOD as $re) {
             if (preg_match($re, $opening)) return ['unanswered' => true, 'kind' => 'misunderstood'];
         }

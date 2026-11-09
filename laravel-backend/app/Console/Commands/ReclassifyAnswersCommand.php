@@ -19,9 +19,12 @@ use Illuminate\Support\Str;
  *     'unanswered' events (the demand-gap report), via AnswerOutcomeRecorder,
  *   - writes one answer_quality_baselines row with the measured rate.
  *
- * Idempotent: bot_failures is unique per message and an 'unanswered' event
- * is not duplicated for the same conversation and question. --dry-run
- * prints the numbers and changes nothing.
+ * A re-run REPLACES its own earlier results for the chatbot — the
+ * backfilled bot_failures rows, the 'unanswered' events it added (reason
+ * reply_says_not_carried) and the baseline from the same export — so a
+ * corrected classifier never leaves the previous judgement behind. Live
+ * rows (source 'live', and gaps the AI service logged itself) are never
+ * touched. --dry-run prints the numbers and changes nothing.
  */
 class ReclassifyAnswersCommand extends Command
 {
@@ -75,8 +78,14 @@ class ReclassifyAnswersCommand extends Command
             return self::SUCCESS;
         }
 
+        DB::table('public.bot_failures')->where('chatbot_id', $chatbotId)->where('source', 'backfill')->delete();
+        DB::table('public.answer_quality_baselines')->where('chatbot_id', $chatbotId)->where('source', Str::limit(basename($path), 120, ''))->delete();
+
         DB::statement("SET search_path TO {$index->schema_name}, public");
         try {
+            DB::table('conversation_events')->where('chatbot_id', $chatbotId)->where('event_type', 'unanswered')
+                ->whereIn('conversation_id', array_keys($byConversation->all()))
+                ->where('payload->reason', 'reply_says_not_carried')->delete();
             $updated = 0;
             foreach ($judged as [$m, $outcome, $question, $conversationId]) {
                 $updated += DB::table('messages')->where('id', $m['id'])->update(['is_unanswered' => $outcome['unanswered']]);

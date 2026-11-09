@@ -152,6 +152,10 @@ class AnswerOutcomeTest extends TestCase
  ['برای فلاسک ۸۰۰، چند مدل مختلف با حجم ۸۰۰ میلی‌لیتر در بازار وجود دارد. اما در مورد «فلاسم ۶۰۰»، جستجوی من نتیجه‌ای نداشت', 'not_carried'],
  ['بله، فلاسک ۸۰۰ میل موجود است: ۴۵۰ هزار تومان.', null],
 ];
+        // The stationery-bundle replies in full: every item with its price,
+        // and one "price isn't in the list" — an answer with a missing detail.
+        $cases[] = ['بسته لوازم تحریر خرسی که شما در نظر دارید، شامل دفترچه A6 - 24000 IRT - [مشاهده محصول](https://khonehrangi.ir/product/2173)، تراش فضانورد - قیمت آن در لیست موجود نیست و می‌توانید با فروشگاه تماس بگیرید، پاک کن و براش خرس مهربون - 15000 IRT.', null];
+        $cases[] = ['assistant: بله. اگر می‌خواهید بسته لوازم تحریر خرسی را بخرید، ما بسته‌ای را دارا هستیم که شامل دفترچه A6 خرس مهربون - 24000 IRT - [مشاهده محصول](https://khonehrangi.ir/product/2173)، تراش فضانورد - قیمت آن در لیست موجود نیست.', null];
         foreach ($cases as [$text, $want]) {
             $this->assertSame($want, AnswerOutcome::classify(['response' => $text])['kind'], $text);
         }
@@ -271,7 +275,8 @@ class AnswerOutcomeTest extends TestCase
         $this->assertSame(0, DB::table('answer_quality_baselines')->count(), 'dry run writes nothing');
 
         $this->artisan('haman:reclassify-answers', ['json' => $path])->assertSuccessful();
-        $this->artisan('haman:reclassify-answers', ['json' => $path])->assertSuccessful(); // re-run: no duplicates
+        $this->artisan('haman:reclassify-answers', ['json' => $path])->assertSuccessful(); // re-run: replaces, no duplicates
+        $this->assertSame(1, DB::table('answer_quality_baselines')->count(), 'a re-run replaces its own baseline');
 
         $flags = $this->inSchema($ctx['schema'], fn () => DB::table('messages')->where('role', 'assistant')->orderBy('created_at')->pluck('is_unanswered')->map(fn ($v) => (bool) $v)->all());
         $this->assertSame([true, true, false, true], $flags);
