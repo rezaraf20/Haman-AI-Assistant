@@ -115,6 +115,7 @@ return [
     'pricing_documents' => ':count document|:count documents',
     // TODO(business): enterprise wording, and whether its price is public or
     // "contact us".
+    'pricing_free_line' => 'Free plan: :chatbots, :documents and :messages messages a month — at no cost.',
     'pricing_enterprise_note' => 'Talk to us about larger requirements.',
     'tool_compare_title' => 'Feature comparison',
     'tool_compare_feature' => 'Feature',

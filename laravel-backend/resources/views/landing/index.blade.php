@@ -535,7 +535,14 @@
                 @endforeach
             </div>
 
-            <p class="muted center" style="margin-top:24px;font-size:.9rem">{{ __('landing.pricing_enterprise_note') }}</p>
+            @if ($freePlan ?? null)
+                <p class="muted center" style="margin-top:24px;font-size:.9rem">{{ __('landing.pricing_free_line', [
+                    'chatbots'  => trans_choice('landing.pricing_chatbots', (int) $freePlan->max_chatbots, ['count' => number_format((int) $freePlan->max_chatbots)]),
+                    'documents' => trans_choice('landing.pricing_documents', (int) $freePlan->max_documents, ['count' => number_format((int) $freePlan->max_documents)]),
+                    'messages'  => number_format((int) $freePlan->max_messages_monthly),
+                ]) }}</p>
+            @endif
+            <p class="muted center" style="margin-top:{{ ($freePlan ?? null) ? '8px' : '24px' }};font-size:.9rem">{{ __('landing.pricing_enterprise_note') }}</p>
 
             {{-- Built only from plans.allowed_tools — see LandingController
                  ::toolComparisonRows(). No hardcoded feature array here. --}}

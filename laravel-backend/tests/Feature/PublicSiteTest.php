@@ -194,6 +194,20 @@ class PublicSiteTest extends TestCase
         $this->withHeader('Accept-Language', 'en')->get('/')->assertOk()->assertSee('5 chatbots');
     }
 
+    public function test_the_free_plans_limits_are_stated_under_the_cards_from_its_own_row(): void
+    {
+        $this->publishedPlan(['max_documents' => 3000]);
+        Plan::create([
+            'name' => 'رایگان', 'name_en' => 'Free', 'slug' => 'free', 'price_monthly' => 0,
+            'max_chatbots' => 1, 'max_tokens_monthly' => 150000, 'max_documents' => 100, 'max_messages_monthly' => 100,
+            'is_active' => true, 'is_public' => false, 'sort_order' => 1,
+        ]);
+
+        $this->withHeader('Accept-Language', 'en')->get('/')->assertOk()
+            ->assertSee('Free plan: 1 chatbot, 100 documents and 100 messages a month', false)
+            ->assertSee('3,000 documents');
+    }
+
     public function test_the_pricing_never_promises_a_number_of_domains(): void
     {
         // One chatbot = one domain: even a plan row that still carries an old

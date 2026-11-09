@@ -107,6 +107,7 @@ return [
     'pricing_documents' => ':count سند',
     // TODO(business): متن نسخه‌ی سازمانی، و اینکه قیمتش عمومی باشد یا
     // «با ما تماس بگیرید».
+    'pricing_free_line' => 'پلن رایگان: :chatbots، :documents و :messages پیام در ماه — بدون هزینه.',
     'pricing_enterprise_note' => 'برای نیازهای بزرگ‌تر با ما صحبت کنید.',
     'tool_compare_title' => 'مقایسه‌ی امکانات',
     'tool_compare_feature' => 'قابلیت',

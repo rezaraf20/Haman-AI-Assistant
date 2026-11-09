@@ -49,14 +49,14 @@ class PlanSeeder extends Seeder {
             ],
             [
                 'id' => '00000000-0000-0000-0000-000000000002', 'name' => 'پرو', 'name_en' => 'Pro', 'slug' => 'pro',
-                'price_monthly' => 990000, 'max_chatbots' => 3, 'max_tokens_monthly' => 3000000, 'max_documents' => 2000,
+                'price_monthly' => 990000, 'max_chatbots' => 3, 'max_tokens_monthly' => 3000000, 'max_documents' => 3000,
                 'max_messages_monthly' => 100000, 'max_domains' => 3, 'model_tier' => 'gemini-1.5-flash',
                 'allowed_tools' => $proTools, 'can_purchase_tokens' => true, 'branding_removable' => true,
                 'quota_exceeded_behavior' => 'auto_wallet', 'is_public' => true, 'sort_order' => 2,
             ],
             [
                 'id' => '00000000-0000-0000-0000-000000000003', 'name' => 'بیزینس', 'name_en' => 'Business', 'slug' => 'business',
-                'price_monthly' => 2900000, 'max_chatbots' => 10, 'max_tokens_monthly' => 12000000, 'max_documents' => 10000,
+                'price_monthly' => 2900000, 'max_chatbots' => 10, 'max_tokens_monthly' => 12000000, 'max_documents' => 20000,
                 'max_messages_monthly' => 500000, 'max_domains' => 10, 'model_tier' => 'gemini-1.5-flash',
                 'allowed_tools' => $businessTools, 'can_purchase_tokens' => true, 'branding_removable' => true,
                 'quota_exceeded_behavior' => 'auto_wallet', 'is_public' => true, 'sort_order' => 3,

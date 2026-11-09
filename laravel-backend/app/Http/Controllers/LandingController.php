@@ -59,6 +59,9 @@ class LandingController extends Controller
             'currency'            => $currency,
             'pricingComingSoon'   => $this->pricingLooksUnconfigured($plans, $currency),
             'popularSlug'         => (string) Settings::get('pricing.popular_plan_slug'),
+            // Not a published plan (no card, no price), but what it includes
+            // is stated under the cards — from its own row, never hard-coded.
+            'freePlan'            => Plan::where('slug', 'free')->where('is_active', true)->first(),
             'chatbotTypes'        => $this->chatbotTypePrices(),
             'emailSignup'         => MailSettings::isUsable(),
             'faq'                 => $this->faq(),
