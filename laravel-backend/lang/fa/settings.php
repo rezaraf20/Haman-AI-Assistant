@@ -246,4 +246,7 @@ return [
     'backup_verified' => 'بازیابی آزمایش‌شده',
     'backup_never_verified' => 'هیچ بکاپی تا حالا بازیابی نشده. بکاپ تست‌نشده بکاپ نیست.',
     'field_limits_manual_sync_per_tenant_per_day' => 'سقف همگام‌سازی دستی روزانه (هر مشتری)',
+    'limits_billing' => 'صورت‌حساب و تمدید',
+    'field_limits_billing_invoice_lead_days' => 'صدور فاکتور تمدید چند روز پیش از پایان دوره',
+    'field_limits_billing_grace_days' => 'مهلت پرداخت پس از سررسید (روز)',
 ];

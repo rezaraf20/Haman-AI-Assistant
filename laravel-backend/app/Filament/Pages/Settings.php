@@ -331,6 +331,7 @@ class Settings extends Page implements HasForms
             'quota'     => __('settings.limits_quota'),
             'onboarding' => __('settings.limits_onboarding'),
             'lifecycle' => __('settings.limits_lifecycle'),
+            'billing'   => __('settings.limits_billing'),
         ];
 
         $sections = [];

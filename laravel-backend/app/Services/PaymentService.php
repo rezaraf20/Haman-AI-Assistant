@@ -62,28 +62,51 @@ class PaymentService {
             // Already resolved (refreshed/replayed callback) — idempotent no-op.
             return ['ok' => $txn->status === 'completed', 'message' => 'Already processed'];
         }
-        if ($status !== 'OK') {
-            $this->wallet->failPendingTransaction($txn, 'User cancelled or gateway reported failure');
-            return ['ok' => false, 'message' => 'Payment was not completed'];
-        }
 
+        // Status is NOT trusted either way. A Status=NOK used to fail the
+        // top-up outright — but the callback is public and the Authority is
+        // in the customer's own address bar, so anyone holding it could
+        // fail a payment that had in fact gone through. Zarinpal's verify
+        // answer is the only thing that decides; NOK just changes the
+        // message when verify says "not paid".
+        $outcome = $this->resolvePending($txn);
+
+        return match ($outcome) {
+            'completed' => ['ok' => true, 'message' => 'Wallet topped up successfully'],
+            'pending'   => ['ok' => false, 'pending' => true, 'message' => __('payments.verification_delayed')],
+            default     => ['ok' => false, 'message' => $status === 'OK' ? 'Payment verification failed' : 'Payment was not completed'],
+        };
+    }
+
+    /**
+     * Asks the gateway that took a pending top-up whether it was paid, and
+     * settles the row accordingly:
+     *   'completed' — paid; wallet credited (idempotent, see WalletService)
+     *   'failed'    — the gateway's definite answer is "not paid"
+     *   'pending'   — no answer (timeout, connection error): left for
+     *                 payments:reverify-pending, never failed on a guess
+     */
+    public function resolvePending(WalletTransaction $txn): string {
         // Verify against the gateway that actually took the payment, which
         // is stored on the transaction — not whichever one is configured
         // for this currency today.
         $gatewayKey = $txn->gateway ?: 'zarinpal';
         $gateway = $this->gateways->get($gatewayKey);
-        if (!$gateway) {
-            $this->wallet->failPendingTransaction($txn, "Unknown gateway [{$gatewayKey}]");
-            return ['ok' => false, 'message' => 'Payment verification failed'];
+        if (!$gateway || !$txn->gateway_authority) {
+            $this->wallet->failPendingTransaction($txn, $gateway ? 'No gateway reference' : "Unknown gateway [{$gatewayKey}]");
+            return 'failed';
         }
 
-        $result = $gateway->verifyPayment($txn->amount_toman, 'IRT', $authority);
-        if (!$result['ok']) {
-            $this->wallet->failPendingTransaction($txn, $result['message'] ?? 'Verification failed');
-            return ['ok' => false, 'message' => $result['message'] ?? 'Payment verification failed'];
+        $result = $gateway->verifyPayment($txn->amount_toman, 'IRT', $txn->gateway_authority);
+        if ($result['ok']) {
+            $done = $this->wallet->completePendingTransaction($txn, ['gateway_ref_id' => $result['ref_id']]);
+            return $done->status === 'completed' ? 'completed' : $done->status;
+        }
+        if ($result['retryable'] ?? false) {
+            return 'pending';
         }
 
-        $this->wallet->completePendingTransaction($txn, ['gateway_ref_id' => $result['ref_id']]);
-        return ['ok' => true, 'message' => 'Wallet topped up successfully'];
+        $done = $this->wallet->failPendingTransaction($txn, $result['message'] ?? 'Verification failed');
+        return $done->status === 'pending' ? 'pending' : $done->status;
     }
 }

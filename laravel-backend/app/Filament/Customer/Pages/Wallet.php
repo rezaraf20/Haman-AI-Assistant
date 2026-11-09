@@ -66,6 +66,10 @@ class Wallet extends Page implements HasForms, HasTable {
         $topup = request()->query('topup');
         if ($topup === 'success') {
             Notification::make()->title(__('wallet.payment_success'))->success()->send();
+        } elseif ($topup === 'pending') {
+            // The gateway could not be asked yet; payments:reverify-pending
+            // settles it within minutes — not a failure, and not money lost.
+            Notification::make()->title(__('wallet.payment_pending'))->body(__('payments.verification_delayed'))->info()->send();
         } elseif ($topup === 'failed') {
             Notification::make()
                 ->title(__('wallet.payment_failed'))

@@ -38,4 +38,5 @@ return [
     'type_sms_otp' => 'Verification SMS',
     'sms_otp_description' => 'Order-status verification code for :phone',
     'type_topup' => 'Top-up',
+    'payment_pending' => 'Payment is being confirmed',
 ];

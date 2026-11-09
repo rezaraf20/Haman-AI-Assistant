@@ -102,6 +102,13 @@ class TenantResource extends Resource {
             // 'trial': a tenant already past trial that gets switched back
             // to it should be able to have this set alongside the status
             // change, not in a second edit afterward.
+            // Billing (BillingService): the paid plan is paid up to this
+            // date and renews from it — empty means not billed. Setting it
+            // is how billing starts for a tenant given a paid plan by hand;
+            // EditTenant records the change like any other.
+            DateTimePicker::make('plan_paid_until')->label(__('billing.plan_paid_until'))
+                ->helperText(__('billing.plan_paid_until_help'))
+                ->native(false),
             DateTimePicker::make('trial_ends_at')->label(__('panel.trial_ends_at'))
                 ->helperText(__('panel.trial_ends_at_edit_help'))
                 ->native(false),

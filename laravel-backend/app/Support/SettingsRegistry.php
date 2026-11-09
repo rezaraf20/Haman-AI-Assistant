@@ -352,6 +352,15 @@ class SettingsRegistry
             // EnforceTrialMessageLimitCommand / ExpireOverdueChatbotsCommand
             // deactivate it. Admin-configurable rather than hardcoded so
             // pricing/growth can tune the trial without a deploy.
+            // Renewals (BillingService): how many days before a paid period
+            // ends its invoice is issued, and how many days after the due
+            // date an unpaid one is voided and the plan drops to free.
+            'limits.billing_invoice_lead_days' => [
+                'tab' => 'limits', 'group' => 'billing', 'type' => 'int', 'default' => 7,
+            ],
+            'limits.billing_grace_days' => [
+                'tab' => 'limits', 'group' => 'billing', 'type' => 'int', 'default' => 3,
+            ],
             'limits.trial_chatbot_duration_days' => [
                 'tab' => 'limits', 'group' => 'trial', 'type' => 'int', 'default' => 7,
             ],

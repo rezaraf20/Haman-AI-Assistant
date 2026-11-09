@@ -3,7 +3,8 @@ namespace App\Filament\Customer\Pages;
 
 use App\Models\TokenPackage;
 use App\Models\Tenant;
-use App\Services\WalletService;
+use App\Exceptions\InsufficientBalance;
+use App\Services\PurchaseService;
 use Filament\Pages\Page;
 use Filament\Tables\Table;
 use Filament\Tables\Contracts\HasTable;
@@ -67,36 +68,18 @@ class BuyTokens extends Page implements HasTable {
             ->defaultSort('price_toman');
     }
 
+    /** Balance check, debit and the tokens themselves are one transaction — see PurchaseService::buyTokens(). */
     private function buy(TokenPackage $package): void {
-        $tenant = Tenant::where('id', auth()->user()->tenant_id)->lockForUpdate()->first();
-
-        // The whole point of the free tier: a tenant who wants more tokens
-        // upgrades, they don't top up around the limit. Checked server-side
-        // here, not just by hiding the button, since this is the one place
-        // that actually spends money.
-        if (!($tenant->plan->can_purchase_tokens ?? true)) {
-            Notification::make()
-                ->title(__('plan.token_purchase_requires_upgrade'))
-                ->danger()
-                ->send();
+        try {
+            app(PurchaseService::class)->buyTokens(Tenant::findOrFail(auth()->user()->tenant_id), $package);
+        } catch (InsufficientBalance) {
+            Notification::make()->title(__('wallet.insufficient_balance'))->body(__('wallet.topup_first'))->danger()->send();
+            return;
+        } catch (\DomainException $e) {
+            Notification::make()->title($e->getMessage() === 'upgrade_required'
+                ? __('plan.token_purchase_requires_upgrade') : __('billing.unavailable'))->danger()->send();
             return;
         }
-
-        if ($tenant->wallet_balance_toman < $package->price_toman) {
-            Notification::make()
-                ->title(__('wallet.insufficient_balance'))
-                ->body(__('wallet.topup_first'))
-                ->danger()
-                ->send();
-            return;
-        }
-
-        app(WalletService::class)->applyCompletedTransaction(
-            $tenant, 'plan_charge', -$package->price_toman,
-            ['description' => __('plan.token_purchase_description', ['name' => $package->name, 'amount' => $package->token_amount])],
-        );
-
-        $tenant->increment('bonus_tokens', $package->token_amount);
 
         Notification::make()->title(__('plan.token_purchased_success'))->success()->send();
     }

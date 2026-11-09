@@ -27,6 +27,13 @@ Schedule::command('haman:notify-unconnected-chatbots')->hourly();
 // transition firing a few hours late has no real cost consequence.
 Schedule::command('plans:process-transitions')->dailyAt('05:00');
 Schedule::command('wallet:reconcile')->dailyAt('02:00');
+// Renewal invoices: issued ahead, charged from the wallet when due, voided
+// (plan -> free) after the grace period. Hourly so a top-up made after a
+// failed charge is picked up the same day; every step is idempotent.
+Schedule::command('billing:run')->hourly()->withoutOverlapping();
+// Zarinpal top-ups whose callback never arrived or could not be verified
+// (customer closed the tab, gateway timeout) — re-verified, not abandoned.
+Schedule::command('payments:reverify-pending')->everyTenMinutes()->withoutOverlapping();
 // Feeds analytics_daily (per-tenant) + platform_daily_stats (public) — the
 // admin/customer dashboard widgets read from these instead of aggregating
 // raw messages/conversations on every page load. Runs after midnight since

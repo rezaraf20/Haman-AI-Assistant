@@ -20,7 +20,7 @@ class PaymentController extends Controller {
             : ['ok' => false, 'message' => 'Missing Authority'];
 
         return redirect()->to(
-            '/portal/wallet?topup=' . ($result['ok'] ? 'success' : 'failed')
+            '/portal/wallet?topup=' . ($result['ok'] ? 'success' : (($result['pending'] ?? false) ? 'pending' : 'failed'))
             . '&message=' . urlencode($result['message'])
         );
     }

@@ -2,7 +2,8 @@
 namespace App\Filament\Customer\Pages;
 
 use App\Models\{Plan, Tenant};
-use App\Services\WalletService;
+use App\Exceptions\InsufficientBalance;
+use App\Services\BillingService;
 use App\Support\Money;
 use Filament\Pages\Page;
 use Filament\Tables\Table;
@@ -20,8 +21,10 @@ use Filament\Notifications\Notification;
  * Tenant.plan_id ever changes outside an admin editing TenantResource
  * directly, or ProcessPlanTransitionsCommand applying a scheduled change.
  *
- * Upgrade: charged immediately, prorated by days left in the current quota
- * period, and takes effect immediately — Chatbot::effectiveTools() and
+ * Upgrade: charged immediately, prorated by what is left of the current
+ * period, paid until that period's end (tenants.plan_paid_until), after
+ * which BillingService invoices and charges each month; takes effect
+ * immediately — Chatbot::effectiveTools() and
  * QuotaService both read plan_id live, so nothing else has to change for
  * the new tools/limits to apply on the very next request.
  * usage_tokens_current is deliberately left untouched: the new plan's
@@ -78,7 +81,7 @@ class ChangePlan extends Page implements HasTable {
                     ->color(fn (Plan $record) => $this->isUpgrade($record) ? 'success' : 'gray')
                     ->requiresConfirmation()
                     ->modalDescription(fn (Plan $record) => $this->isUpgrade($record)
-                        ? __('plan.upgrade_confirm', ['price' => Money::forCurrentTenant((int) round($this->prorateDifference($record)))])
+                        ? __('plan.upgrade_confirm', ['price' => Money::forCurrentTenant($this->prorateDifference($record))])
                         : __('plan.downgrade_confirm', ['name' => $record->display_name]))
                     ->action(fn (Plan $record) => $this->isUpgrade($record) ? $this->upgrade($record) : $this->scheduleDowngrade($record)),
             ])
@@ -86,51 +89,40 @@ class ChangePlan extends Page implements HasTable {
     }
 
     private function isUpgrade(Plan $target): bool {
-        return $target->price_monthly > $this->getCurrentPlan()->price_monthly;
+        return app(BillingService::class)->isUpgrade($this->getCurrentPlan(), $target);
     }
 
-    /** The portion of the price difference left to pay for the rest of this quota period — never negative (a downgrade schedules instead of refunding, see scheduleDowngrade()). */
-    private function prorateDifference(Plan $target): float {
-        $tenant = auth()->user()->tenant;
-        $current = $this->getCurrentPlan();
-        $cycleStart = $tenant->quota_period_started_at ?? $tenant->created_at ?? now();
-        $cycleEnd = $cycleStart->copy()->addMonthNoOverflow();
-        $totalDays = max(1, $cycleStart->diffInDays($cycleEnd));
-        $daysRemaining = max(0, min($totalDays, now()->diffInDays($cycleEnd, false)));
-        $fraction = $daysRemaining / $totalDays;
-        return max(0, ($target->price_monthly - $current->price_monthly) * $fraction);
+    /** What the upgrade will charge now — the same integer BillingService::upgradePlan() debits. */
+    private function prorateDifference(Plan $target): int {
+        $tenant = Tenant::findOrFail(auth()->user()->tenant_id);
+        return app(BillingService::class)->prorate($tenant, Plan::findOrFail($tenant->plan_id), $target);
+    }
+
+    public function getPaidUntil(): ?\Carbon\CarbonInterface {
+        return Tenant::find(auth()->user()->tenant_id)?->plan_paid_until;
     }
 
     private function upgrade(Plan $target): void {
-        $tenant = Tenant::where('id', auth()->user()->tenant_id)->lockForUpdate()->first();
-        $charge = (int) round($this->prorateDifference($target));
-
-        if ($charge > 0 && $tenant->wallet_balance_toman < $charge) {
+        try {
+            app(BillingService::class)->upgradePlan(Tenant::findOrFail(auth()->user()->tenant_id), $target);
+        } catch (InsufficientBalance) {
             Notification::make()->title(__('wallet.insufficient_balance'))->body(__('wallet.topup_first'))->danger()->send();
             return;
+        } catch (\DomainException) {
+            Notification::make()->title(__('billing.unavailable'))->danger()->send();
+            return;
         }
-
-        if ($charge > 0) {
-            app(WalletService::class)->applyCompletedTransaction(
-                $tenant, 'plan_charge', -$charge,
-                ['description' => __('plan.upgrade_charge_description', ['name' => $target->display_name])],
-            );
-        }
-
-        // Any previously scheduled downgrade no longer applies — an
-        // upgrade supersedes it outright rather than leaving a stale
-        // pending downgrade to fire later and undo this.
-        $tenant->update(['plan_id' => $target->id, 'pending_plan_id' => null, 'pending_plan_effective_at' => null]);
 
         Notification::make()->title(__('plan.upgrade_success', ['name' => $target->display_name]))->success()->send();
     }
 
     private function scheduleDowngrade(Plan $target): void {
-        $tenant = auth()->user()->tenant;
-        $cycleStart = $tenant->quota_period_started_at ?? $tenant->created_at ?? now();
-        $effectiveAt = $cycleStart->copy()->addMonthNoOverflow();
-
-        $tenant->update(['pending_plan_id' => $target->id, 'pending_plan_effective_at' => $effectiveAt]);
+        try {
+            $effectiveAt = app(BillingService::class)->scheduleDowngrade(Tenant::findOrFail(auth()->user()->tenant_id), $target);
+        } catch (\DomainException) {
+            Notification::make()->title(__('billing.unavailable'))->danger()->send();
+            return;
+        }
 
         Notification::make()
             ->title(__('plan.downgrade_scheduled', ['name' => $target->display_name, 'date' => $effectiveAt->toDateString()]))

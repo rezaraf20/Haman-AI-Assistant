@@ -246,4 +246,7 @@ return [
     'backup_verified' => 'Restore tested',
     'backup_never_verified' => 'No backup has ever been restored. An untested backup is not a backup.',
     'field_limits_manual_sync_per_tenant_per_day' => 'Manual syncs per customer per day',
+    'limits_billing' => 'Billing & renewals',
+    'field_limits_billing_invoice_lead_days' => 'Issue the renewal invoice this many days before the period ends',
+    'field_limits_billing_grace_days' => 'Grace period after the due date (days)',
 ];

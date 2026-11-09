@@ -38,13 +38,17 @@ class ZarinpalGateway implements PaymentGateway
             return ['ok' => false, 'message' => __('payments.gateway_not_configured', ['gateway' => 'Zarinpal'])];
         }
 
-        $response = Http::timeout(20)->post("{$this->apiBase()}/request.json", [
-            'merchant_id'  => $this->merchantId(),
-            // Zarinpal's Amount is in Rial, not Toman. Do not remove this ×10.
-            'amount'       => $amount * 10,
-            'callback_url' => $callbackUrl,
-            'description'  => $description,
-        ]);
+        try {
+            $response = Http::timeout(20)->post("{$this->apiBase()}/request.json", [
+                'merchant_id'  => $this->merchantId(),
+                // Zarinpal's Amount is in Rial, not Toman. Do not remove this ×10.
+                'amount'       => $amount * 10,
+                'callback_url' => $callbackUrl,
+                'description'  => $description,
+            ]);
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'message' => 'Zarinpal unreachable: ' . $e->getMessage()];
+        }
 
         $body = $response->json();
         if (($body['data']['code'] ?? null) !== 100) {
@@ -66,19 +70,31 @@ class ZarinpalGateway implements PaymentGateway
             return ['ok' => false, 'message' => __('payments.gateway_not_configured', ['gateway' => 'Zarinpal'])];
         }
 
-        $response = Http::timeout(20)->post("{$this->apiBase()}/verify.json", [
-            'merchant_id' => $this->merchantId(),
-            'amount'      => $amount * 10,   // Rial, matching requestPayment.
-            'authority'   => $reference,
-        ]);
+        // A timeout, a connection error or a non-JSON 5xx says nothing about
+        // whether the customer paid — 'retryable' tells the caller to leave
+        // the top-up pending for payments:reverify-pending rather than fail
+        // a payment that may well have gone through.
+        try {
+            $response = Http::timeout(20)->post("{$this->apiBase()}/verify.json", [
+                'merchant_id' => $this->merchantId(),
+                'amount'      => $amount * 10,   // Rial, matching requestPayment.
+                'authority'   => $reference,
+            ]);
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'retryable' => true, 'message' => 'Zarinpal unreachable: ' . $e->getMessage()];
+        }
 
         $body = $response->json();
-        $code = $body['data']['code'] ?? null;
+        $code = $body['data']['code'] ?? $body['errors']['code'] ?? null;
+        if ($code === null) {
+            return ['ok' => false, 'retryable' => true, 'message' => "Zarinpal verify gave no answer (HTTP {$response->status()})"];
+        }
 
         // 100 = verified now, 101 = already verified. The second is success:
         // idempotency at Zarinpal's end, on top of our own DB-level check.
+        // Any other code is Zarinpal's definite answer that it is not paid.
         if ($code !== 100 && $code !== 101) {
-            return ['ok' => false, 'message' => $body['errors']['message'] ?? $body['data']['message'] ?? 'Zarinpal verify failed'];
+            return ['ok' => false, 'retryable' => false, 'message' => $body['errors']['message'] ?? $body['data']['message'] ?? 'Zarinpal verify failed'];
         }
 
         return ['ok' => true, 'ref_id' => (string) ($body['data']['ref_id'] ?? '')];

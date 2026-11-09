@@ -23,7 +23,7 @@ class WalletTransactionResource extends Resource {
     public static function canViewAny(): bool { return PlatformAccess::allows('wallet_ledger'); }
     public static function canView($record): bool { return PlatformAccess::allows('wallet_ledger'); }
     public static function canCreate(): bool { return PlatformAccess::allows('wallet_ledger'); }
-    public static function canDeleteAny(): bool { return PlatformAccess::allows('wallet_ledger'); }
+    public static function canDeleteAny(): bool { return false; }
     public static function shouldRegisterNavigation(): bool { return PlatformAccess::allows('wallet_ledger'); }
 
     protected static ?string $model = WalletTransaction::class;

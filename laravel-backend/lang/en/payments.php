@@ -5,4 +5,5 @@ return [
     'no_gateway_for_currency' => 'No gateway is configured for :currency.',
     'not_paid' => 'The payment was not completed.',
     'amount_mismatch' => 'The amount paid does not match the amount owed.',
+    'verification_delayed' => 'The payment is still being confirmed with the gateway; your wallet will update within a few minutes. If you were charged, nothing is lost.',
 ];

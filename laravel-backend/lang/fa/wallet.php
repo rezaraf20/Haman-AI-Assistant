@@ -35,4 +35,5 @@ return [
     'type_sms_otp' => 'پیامک کد تأیید',
     'sms_otp_description' => 'کد تأیید پیگیری سفارش برای :phone',
     'type_topup' => 'شارژ',
+    'payment_pending' => 'پرداخت در حال تأیید است',
 ];

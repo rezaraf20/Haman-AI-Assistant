@@ -14,6 +14,9 @@ class ExpireOverdueChatbotsCommand extends Command {
             ->where('expires_at', '<', now())
             ->get();
         foreach ($overdue as $entry) {
+            // Its renewal invoice is open and still inside the grace
+            // period: billing:run is charging it, so it keeps running.
+            if (\App\Services\BillingService::inGrace((string) $entry->chatbot_id)) continue;
             $tenantService->setChatbotActive($entry->chatbot_id, false, 'expired');
             $this->line("Suspended {$entry->chatbot_id} ({$entry->name}) — expired {$entry->expires_at}");
         }

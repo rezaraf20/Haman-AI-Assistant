@@ -3,7 +3,8 @@ namespace App\Filament\Customer\Pages;
 
 use App\Models\ChatbotIndexEntry;
 use App\Models\Tenant\SyncJob;
-use App\Services\WalletService;
+use App\Exceptions\{InsufficientBalance, InvoiceNotOpen};
+use App\Services\PurchaseService;
 use Filament\Pages\Page;
 use Filament\Tables\Table;
 use Filament\Tables\Contracts\HasTable;
@@ -269,31 +270,17 @@ class MyChatbots extends Page implements HasTable {
         }
     }
 
+    /** Pays the open renewal invoice if there is one, otherwise adds a month — one transaction either way (PurchaseService::renewChatbot()). */
     private function renew(ChatbotIndexEntry $record): void {
-        $tenant = auth()->user()->tenant;
-        $price  = $record->monthly_price_toman;
-
-        if ($tenant->wallet_balance_toman < $price) {
-            Notification::make()
-                ->title(__('wallet.insufficient_balance'))
-                ->body(__('wallet.topup_first'))
-                ->danger()
-                ->send();
+        try {
+            app(PurchaseService::class)->renewChatbot(\App\Models\Tenant::findOrFail(auth()->user()->tenant_id), $record);
+        } catch (InsufficientBalance) {
+            Notification::make()->title(__('wallet.insufficient_balance'))->body(__('wallet.topup_first'))->danger()->send();
+            return;
+        } catch (\DomainException|InvoiceNotOpen) {
+            Notification::make()->title(__('billing.unavailable'))->danger()->send();
             return;
         }
-
-        app(WalletService::class)->applyCompletedTransaction(
-            $tenant,
-            'plan_charge',
-            -$price,
-            ['description' => __('chatbot.renewal_description', ['name' => $record->name])],
-        );
-
-        $base = ($record->expires_at && $record->expires_at->isFuture()) ? $record->expires_at : now();
-        $record->update([
-            'expires_at' => $base->copy()->addMonth(),
-            'is_active'  => true,
-        ]);
 
         Notification::make()->title(__('chatbot.renewed_success'))->success()->send();
     }

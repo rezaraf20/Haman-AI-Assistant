@@ -6,8 +6,8 @@ use App\Traits\HasUuid;
 
 class Tenant extends Model {
     use HasUuid, SoftDeletes;
-    protected $fillable = ['slug','name','email','phone','country','timezone','language','schema_name','plan_id','pending_plan_id','pending_plan_effective_at','status','trial_ends_at','trial_reminder_3d_sent_at','trial_reminder_1d_sent_at','quota_period_started_at','usage_tokens_current','usage_messages_current','bonus_tokens','wallet_balance_toman','settings','last_active_at','admin_seen_at','provisioned_at','signup_risk','pending_deletion_at','pending_deletion_snapshot'];
-    protected $casts = ['trial_ends_at'=>'datetime','trial_reminder_3d_sent_at'=>'datetime','trial_reminder_1d_sent_at'=>'datetime','quota_period_started_at'=>'datetime','pending_plan_effective_at'=>'datetime','settings'=>'array','last_active_at'=>'datetime','admin_seen_at'=>'datetime','provisioned_at'=>'datetime','signup_risk'=>'array','pending_deletion_at'=>'datetime','pending_deletion_snapshot'=>'array'];
+    protected $fillable = ['slug','name','email','phone','country','timezone','language','schema_name','plan_id','pending_plan_id','pending_plan_effective_at','plan_paid_until','status','trial_ends_at','trial_reminder_3d_sent_at','trial_reminder_1d_sent_at','quota_period_started_at','usage_tokens_current','usage_messages_current','bonus_tokens','wallet_balance_toman','settings','last_active_at','admin_seen_at','provisioned_at','signup_risk','pending_deletion_at','pending_deletion_snapshot'];
+    protected $casts = ['trial_ends_at'=>'datetime','trial_reminder_3d_sent_at'=>'datetime','trial_reminder_1d_sent_at'=>'datetime','quota_period_started_at'=>'datetime','pending_plan_effective_at'=>'datetime','plan_paid_until'=>'datetime','settings'=>'array','last_active_at'=>'datetime','admin_seen_at'=>'datetime','provisioned_at'=>'datetime','signup_risk'=>'array','pending_deletion_at'=>'datetime','pending_deletion_snapshot'=>'array'];
     public function plan()         { return $this->belongsTo(Plan::class); }
     public function pendingPlan()  { return $this->belongsTo(Plan::class, 'pending_plan_id'); }
     public function users()        { return $this->hasMany(User::class); }

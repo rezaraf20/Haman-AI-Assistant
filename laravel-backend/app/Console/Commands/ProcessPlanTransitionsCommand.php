@@ -81,7 +81,7 @@ class ProcessPlanTransitionsCommand extends Command {
             // so access narrows on the very next request, no separate
             // "disable tools" write needed and nothing to undo on a later
             // upgrade.
-            $tenant->update(['plan_id' => $freePlanId, 'status' => 'active']);
+            $tenant->update(['plan_id' => $freePlanId, 'status' => 'active', 'plan_paid_until' => null]);
             $this->notifyTenant($tenant, __('plan.trial_ended_subject'), __('plan.trial_ended_body'));
             $this->line("Downgraded trial to free: {$tenant->id} ({$tenant->email})");
         }
@@ -96,10 +96,14 @@ class ProcessPlanTransitionsCommand extends Command {
             ->get();
 
         foreach ($due as $tenant) {
+            $target = Plan::find($tenant->pending_plan_id);
             $tenant->update([
                 'plan_id' => $tenant->pending_plan_id,
                 'pending_plan_id' => null,
                 'pending_plan_effective_at' => null,
+                // Nothing left to bill on a free plan; a paid one keeps the
+                // date its renewal (billing:run) has already extended.
+                ...(($target && (int) $target->price_monthly <= 0) ? ['plan_paid_until' => null] : []),
             ]);
             $this->line("Applied scheduled downgrade: {$tenant->id} ({$tenant->email}) -> plan {$tenant->plan_id}");
         }

@@ -3,17 +3,14 @@ namespace App\Filament\Customer\Pages;
 
 use App\Models\ChatbotTypePrice;
 use App\Models\Tenant;
-use App\Models\ApiKey;
-use App\Models\Tenant\Chatbot;
-use App\Services\WalletService;
+use App\Exceptions\InsufficientBalance;
+use App\Services\PurchaseService;
 use Filament\Pages\Page;
 use Filament\Forms\Form;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Components\{TextInput, Select};
 use Filament\Notifications\Notification;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use App\Support\DomainNormalizer;
 use App\Support\Money;
 
@@ -77,84 +74,29 @@ class BuyChatbot extends Page implements HasForms {
         return Money::forCurrentTenant($this->getSelectedPrice());
     }
 
+    /** Debit, chatbot, index row and plugin key are one transaction — see PurchaseService::buyChatbot(). */
     public function purchase(): void {
         $state = $this->form->getState();
-        $priceRow = ChatbotTypePrice::where('type', $state['type'])->active()->first();
 
-        if (!$priceRow) {
-            Notification::make()->title(__('chatbot.type_unavailable'))->danger()->send();
+        try {
+            [, $plaintext] = app(PurchaseService::class)->buyChatbot(
+                Tenant::findOrFail(auth()->user()->tenant_id),
+                (string) $state['type'], (string) $state['name'], (string) $state['primary_domain'], auth()->id(),
+            );
+        } catch (InsufficientBalance) {
+            Notification::make()->title(__('wallet.insufficient_balance'))->body(__('wallet.topup_first'))->danger()->send();
+            return;
+        } catch (\DomainException $e) {
+            match ($e->getMessage()) {
+                'chatbot_limit' => Notification::make()
+                    ->title(__('plan.chatbot_limit_reached'))
+                    ->body(__('plan.chatbot_limit_reached_body', ['limit' => Tenant::find(auth()->user()->tenant_id)?->plan?->max_chatbots]))
+                    ->danger()->send(),
+                'type_unavailable' => Notification::make()->title(__('chatbot.type_unavailable'))->danger()->send(),
+                default => Notification::make()->title(__('billing.unavailable'))->danger()->send(),
+            };
             return;
         }
-
-        $tenant = Tenant::where('id', auth()->user()->tenant_id)->lockForUpdate()->first();
-        $price  = $priceRow->price_toman;
-
-        DB::statement("SET search_path TO {$tenant->schema_name}, public");
-        $currentChatbots = Chatbot::count();
-        DB::statement('SET search_path TO public');
-
-        if (!app(\App\Services\QuotaService::class)->canCreateChatbot($tenant, $currentChatbots)) {
-            Notification::make()
-                ->title(__('plan.chatbot_limit_reached'))
-                ->body(__('plan.chatbot_limit_reached_body', ['limit' => $tenant->plan->max_chatbots]))
-                ->danger()
-                ->send();
-            return;
-        }
-
-        if ($tenant->wallet_balance_toman < $price) {
-            Notification::make()
-                ->title(__('wallet.insufficient_balance'))
-                ->body(__('wallet.topup_first'))
-                ->danger()
-                ->send();
-            return;
-        }
-
-        // Debit first — if chatbot creation below throws, the wallet transaction
-        // ledger still accurately reflects what was charged; a failed chatbot
-        // create is a bug to fix, not something that should silently also lose
-        // the payment record.
-        app(WalletService::class)->applyCompletedTransaction(
-            $tenant, 'plan_charge', -$price,
-            ['description' => __('chatbot.purchase_description', ['name' => $state['name'], 'type' => $priceRow->name])],
-        );
-
-        DB::statement("SET search_path TO {$tenant->schema_name}, public");
-        $chatbot = Chatbot::create([
-            'id'                  => (string) Str::uuid(),
-            'name'                => $state['name'],
-            'type'                => $state['type'],
-            'status'              => 'active',
-            'is_active'           => true,
-            'embedding_model'     => 'models/text-embedding-004',
-            'llm_model'           => 'gemini-1.5-flash',
-            'temperature'         => 0.3,
-            'retrieval_top_k'     => 8,
-            'retrieval_threshold' => 0.60,
-            'memory_window'       => 6,
-            'language'            => 'fa',
-            'response_language'   => 'fa',
-        ]);
-        DB::statement("SET search_path TO public");
-
-        DB::table('chatbot_index')->insert([
-            'chatbot_id'           => $chatbot->id,
-            'tenant_id'            => $tenant->id,
-            'schema_name'          => $tenant->schema_name,
-            'is_active'            => true,
-            'name'                 => $state['name'],
-            'primary_domain'       => $state['primary_domain'],
-            'expires_at'           => now()->addMonth(),
-            'monthly_price_toman'  => $price,
-        ]);
-
-        [, $plaintext] = ApiKey::generate(
-            tenantId: $tenant->id,
-            chatbotId: $chatbot->id,
-            name: __('chatbot.wp_plugin_key_name', ['name' => $state['name']]),
-            createdBy: auth()->id(),
-        );
 
         $this->newApiKey      = $plaintext;
         $this->newChatbotName = $state['name'];
