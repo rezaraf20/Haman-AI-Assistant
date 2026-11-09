@@ -77,6 +77,10 @@ COPY public/og/ public/og/
 COPY public/brand/ public/brand/
 COPY public/fonts/ public/fonts/
 COPY public/css/ public/css/
+# public/js/vendor/ — third-party browser libraries served from this site
+# rather than a CDN (the USDT wallet page's QR code generator). public/js/
+# itself is filled by filament:assets below; this subfolder is ours.
+COPY public/js/vendor/ public/js/vendor/
 COPY public/favicon.ico public/favicon.ico
 COPY public/apple-touch-icon.png public/apple-touch-icon.png
 # tests/ + phpunit.xml: without these the image only ever carries Laravel's
