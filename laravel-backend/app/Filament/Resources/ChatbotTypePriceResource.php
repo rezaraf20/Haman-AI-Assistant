@@ -54,6 +54,7 @@ class ChatbotTypePriceResource extends Resource {
             ]),
             TextInput::make('price_toman')->label(__('plan.price_toman'))->numeric()->required()
                 ->helperText(__('plan.chatbot_price_help')),
+            \App\Filament\Forms\UsdtPriceInput::make('price_usdt'),
             Toggle::make('is_active')->label(__('plan.self_purchasable'))->default(true),
         ]);
     }
@@ -66,6 +67,8 @@ class ChatbotTypePriceResource extends Resource {
                 TextColumn::make('name')->label(__('common.name')),
                 TextColumn::make('price_toman')->label(__('plan.price'))
                     ->formatStateUsing(fn (int $state) => Money::toman($state)),
+                TextColumn::make('price_usdt')->label(__('usdt.price_col'))->placeholder('—')
+                    ->formatStateUsing(fn ($state) => $state === null ? null : \App\Support\Usdt::format((int) $state)),
                 IconColumn::make('is_active')->label(__('common.active'))->boolean(),
             ])
             ->actions([EditAction::make()->label(__('common.edit')), DeleteAction::make()->label(__('common.delete'))])

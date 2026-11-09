@@ -52,6 +52,9 @@ class BuyTokens extends Page implements HasTable {
                     ->formatStateUsing(fn (int $state) => \App\Support\Numbers::format($state)),
                 TextColumn::make('price_toman')->label(__('plan.price'))
                     ->formatStateUsing(fn (int $state) => Money::forCurrentTenant($state)),
+                TextColumn::make('price_usdt')->label(__('usdt.price_col'))->placeholder('—')
+                    ->formatStateUsing(fn ($state) => $state === null ? null : \App\Support\Usdt::format((int) $state))
+                    ->visible(fn () => \App\Services\Crypto\UsdtDeposits::enabled()),
             ])
             ->actions([
                 Action::make('buy')
@@ -64,16 +67,29 @@ class BuyTokens extends Page implements HasTable {
                         'amount' => \App\Support\Numbers::format($record->token_amount),
                     ]))
                     ->action(fn (TokenPackage $record) => $this->buy($record)),
+                // From the USDT wallet, at the package's own USDT price.
+                Action::make('buy_usdt')
+                    ->label(__('usdt.buy_with_usdt'))
+                    ->icon('heroicon-o-currency-dollar')
+                    ->color('gray')
+                    ->visible(fn (TokenPackage $record) => $record->price_usdt !== null && \App\Services\Crypto\UsdtDeposits::enabled())
+                    ->requiresConfirmation()
+                    ->modalDescription(fn (TokenPackage $record) => __('plan.buy_confirm_description', [
+                        'price' => \App\Support\Usdt::format((int) $record->price_usdt),
+                        'amount' => \App\Support\Numbers::format($record->token_amount),
+                    ]))
+                    ->action(fn (TokenPackage $record) => $this->buy($record, 'USDT')),
             ])
             ->defaultSort('price_toman');
     }
 
     /** Balance check, debit and the tokens themselves are one transaction — see PurchaseService::buyTokens(). */
-    private function buy(TokenPackage $package): void {
+    private function buy(TokenPackage $package, string $currency = 'IRT'): void {
         try {
-            app(PurchaseService::class)->buyTokens(Tenant::findOrFail(auth()->user()->tenant_id), $package);
+            app(PurchaseService::class)->buyTokens(Tenant::findOrFail(auth()->user()->tenant_id), $package, $currency);
         } catch (InsufficientBalance) {
-            Notification::make()->title(__('wallet.insufficient_balance'))->body(__('wallet.topup_first'))->danger()->send();
+            Notification::make()->title(__('wallet.insufficient_balance'))
+                ->body($currency === 'USDT' ? __('usdt.topup_first') : __('wallet.topup_first'))->danger()->send();
             return;
         } catch (\DomainException $e) {
             Notification::make()->title($e->getMessage() === 'upgrade_required'

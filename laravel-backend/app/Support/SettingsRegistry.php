@@ -82,6 +82,46 @@ class SettingsRegistry
                 'options' => ['zarinpal', 'stripe', 'paddle'], 'default' => 'stripe',
             ],
 
+            // USDT on BNB Smart Chain (BEP20) into the tenant's USDT wallet
+            // (App\Services\Crypto). Off until the owner enters the address
+            // of their own wallet and switches it on. No private key is
+            // ever entered here — only the public receiving address.
+            'crypto.usdt_enabled' => [
+                'tab' => 'payments', 'group' => 'usdt', 'type' => 'bool', 'default' => false,
+            ],
+            'crypto.usdt_address' => [
+                'tab' => 'payments', 'group' => 'usdt', 'type' => 'string', 'default' => null,
+            ],
+            // eth_getLogs must be allowed: BNB Chain's own bsc-dataseed
+            // endpoints refuse it ("limit exceeded", checked 2026-11-10);
+            // publicnode serves it. A provider URL with an API key in it is
+            // fine here — this tab is admin-only.
+            'crypto.bsc_rpc_primary' => [
+                'tab' => 'payments', 'group' => 'usdt', 'type' => 'string', 'default' => 'https://bsc-rpc.publicnode.com',
+            ],
+            'crypto.bsc_rpc_fallback' => [
+                'tab' => 'payments', 'group' => 'usdt', 'type' => 'string', 'default' => null,
+            ],
+            'crypto.usdt_deposit_ttl_minutes' => [
+                'tab' => 'payments', 'group' => 'usdt', 'type' => 'int', 'default' => 60,
+            ],
+            'crypto.usdt_min_deposit' => [
+                'tab' => 'payments', 'group' => 'usdt', 'type' => 'int', 'default' => 5,
+            ],
+            'crypto.usdt_max_deposit' => [
+                'tab' => 'payments', 'group' => 'usdt', 'type' => 'int', 'default' => 10000,
+            ],
+            // A payment that lands after its request expired is still
+            // credited automatically up to this long after; later than
+            // that it waits for an admin.
+            'crypto.usdt_late_grace_hours' => [
+                'tab' => 'payments', 'group' => 'usdt', 'type' => 'int', 'default' => 24,
+            ],
+            // Only used if the RPC does not answer the "finalized" block tag.
+            'crypto.bsc_finality_depth' => [
+                'tab' => 'payments', 'group' => 'usdt', 'type' => 'int', 'default' => 15,
+            ],
+
             'payments.fx.mode' => [
                 'tab' => 'payments', 'group' => 'fx', 'type' => 'select',
                 'options' => ['manual', 'source'], 'default' => 'manual',
@@ -538,6 +578,7 @@ class SettingsRegistry
     {
         return match ($group) {
             'zarinpal'    => ['payments.zarinpal.merchant_id'],
+            'usdt'        => ['crypto.usdt_address'],
             'stripe'      => ['payments.stripe.secret_key'],
             'paddle'      => ['payments.paddle.api_key', 'payments.paddle.vendor_id'],
             'email'       => ['mail.host', 'mail.from_address'],

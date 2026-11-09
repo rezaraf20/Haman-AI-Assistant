@@ -26,6 +26,11 @@ namespace App\Support;
  * yet", not as a display bug to paper over.
  */
 class Money {
+    /** An amount in a wallet currency's own minor unit — whole Toman for IRT, micro-USDT for USDT. No conversion. */
+    public static function of(int $amount, string $currency): string {
+        return strtoupper($currency) === 'USDT' ? Usdt::format($amount) : self::toman($amount);
+    }
+
     public static function toman(int $amountToman): string {
         return self::format($amountToman, 'toman');
     }

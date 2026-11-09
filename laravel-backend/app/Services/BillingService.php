@@ -61,10 +61,29 @@ class BillingService
         return $end;
     }
 
-    /** Price difference for what is left of the current period, in whole Toman, integer arithmetic only. Never negative. */
-    public function prorate(Tenant $tenant, Plan $current, Plan $target): int
+    /**
+     * A plan's monthly price in one wallet currency's minor unit — whole
+     * Toman, or micro-USDT. Null when the plan is not sold in that currency.
+     * A free plan costs 0 in every currency.
+     */
+    public static function priceOf(Plan $plan, string $currency): ?int
     {
-        $diff = (int) $target->price_monthly - (int) $current->price_monthly;
+        if ((int) $plan->price_monthly <= 0) return 0;
+        return WalletService::currency($currency) === 'USDT'
+            ? ($plan->price_monthly_usdt === null ? null : (int) $plan->price_monthly_usdt)
+            : (int) $plan->price_monthly;
+    }
+
+    /** Whether an upgrade to $target can be paid in $currency: both plans must have a price in it. */
+    public function canUpgradeIn(Plan $current, Plan $target, string $currency): bool
+    {
+        return self::priceOf($target, $currency) !== null && self::priceOf($current, $currency) !== null;
+    }
+
+    /** Price difference for what is left of the current period, in the currency's minor unit, integer arithmetic only. Never negative. */
+    public function prorate(Tenant $tenant, Plan $current, Plan $target, string $currency = 'IRT'): int
+    {
+        $diff = (int) self::priceOf($target, $currency) - (int) self::priceOf($current, $currency);
         if ($diff <= 0) return 0;
 
         $end = $this->currentPeriodEnd($tenant);
@@ -85,8 +104,9 @@ class BillingService
      * @throws InsufficientBalance
      * @throws \DomainException when the target is not a plan the customer can pick, or not an upgrade
      */
-    public function upgradePlan(Tenant $tenant, Plan $target): int
+    public function upgradePlan(Tenant $tenant, Plan $target, string $currency = 'IRT'): int
     {
+        $currency = WalletService::currency($currency);
         if (!$target->is_active || !$target->is_public) {
             throw new \DomainException('plan_not_available');
         }
@@ -94,18 +114,23 @@ class BillingService
         if (!$this->isUpgrade($current, $target)) {
             throw new \DomainException('not_an_upgrade');
         }
+        if (!$this->canUpgradeIn($current, $target, $currency)) {
+            throw new \DomainException('not_sold_in_currency');
+        }
 
-        $charge = $this->prorate($tenant, $current, $target);
+        $charge = $this->prorate($tenant, $current, $target, $currency);
         $periodEnd = $this->currentPeriodEnd($tenant);
 
-        $grant = function (Tenant $locked) use ($target, $periodEnd) {
+        $grant = function (Tenant $locked) use ($target, $periodEnd, $currency) {
             // An upgrade supersedes any scheduled downgrade, and is paid
-            // from now to the end of this period.
+            // from now to the end of this period — renewals then come from
+            // the wallet it was paid with.
             $locked->update([
                 'plan_id' => $target->id,
                 'pending_plan_id' => null,
                 'pending_plan_effective_at' => null,
                 'plan_paid_until' => $periodEnd,
+                'billing_currency' => $currency,
             ]);
             // An invoice already issued for the next period is at the old
             // price — void it; the next run issues one at the new price.
@@ -116,7 +141,7 @@ class BillingService
             $this->wallet->debit($tenant, $charge, 'plan_charge', [
                 'description' => __('plan.upgrade_charge_description', ['name' => $target->display_name]),
                 'metadata' => ['plan_id' => $target->id, 'period_end' => $periodEnd->toIso8601String()],
-            ], $grant);
+            ], $grant, $currency);
         } else {
             DB::transaction(fn () => $grant(Tenant::where('id', $tenant->id)->lockForUpdate()->firstOrFail()));
         }
@@ -139,6 +164,23 @@ class BillingService
         });
 
         return $effectiveAt;
+    }
+
+    /**
+     * Which wallet the tenant's renewals are charged from. An open plan
+     * invoice in the other currency is voided; the next run reissues it.
+     */
+    public function setBillingCurrency(Tenant $tenant, string $currency): void
+    {
+        $currency = WalletService::currency($currency);
+        DB::transaction(function () use ($tenant, $currency) {
+            $locked = Tenant::where('id', $tenant->id)->lockForUpdate()->firstOrFail();
+            if ($locked->billing_currency === $currency) return;
+            $locked->update(['billing_currency' => $currency]);
+            Invoice::where('tenant_id', $locked->id)->where('purpose', Invoice::PLAN)->where('status', 'open')
+                ->where('currency', '!=', $currency)
+                ->update(['status' => 'void', 'voided_at' => now(), 'void_reason' => 'currency_changed']);
+        });
     }
 
     private function voidOpenPlanInvoices(Tenant $tenant, string $reason): void
@@ -186,8 +228,11 @@ class BillingService
                 : $tenant->plan;
             if (!$plan || (int) $plan->price_monthly <= 0) continue;
 
+            // Billed from the wallet the tenant chose; a plan with no USDT
+            // price falls back to Toman rather than going unbilled.
+            $currency = $tenant->billing_currency === 'USDT' && self::priceOf($plan, 'USDT') !== null ? 'USDT' : 'IRT';
             $invoice = $this->issue($tenant, Invoice::PLAN, (string) $tenant->id, $plan->id, $plan->display_name,
-                (int) $plan->price_monthly, $start, $start->copy()->addMonthNoOverflow());
+                $currency, (int) self::priceOf($plan, $currency), $start, $start->copy()->addMonthNoOverflow());
             if ($invoice) $count++;
         }
         return $count;
@@ -197,7 +242,7 @@ class BillingService
     {
         $count = 0;
         $entries = ChatbotIndexEntry::query()
-            ->where('monthly_price_toman', '>', 0)
+            ->where(fn ($q) => $q->where('monthly_price_toman', '>', 0)->orWhere('monthly_price_usdt', '>', 0))
             ->whereNotNull('expires_at')
             ->where('expires_at', '<=', now()->addDays($this->leadDays()))
             // A chatbot that lapsed long ago is not billed back into life.
@@ -208,8 +253,13 @@ class BillingService
         foreach ($entries as $entry) {
             $tenant = Tenant::find($entry->tenant_id);
             $start = $entry->expires_at->copy();
+            // In the currency it was bought with.
+            [$currency, $amount] = $entry->billing_currency === 'USDT' && (int) $entry->monthly_price_usdt > 0
+                ? ['USDT', (int) $entry->monthly_price_usdt]
+                : ['IRT', (int) $entry->monthly_price_toman];
+            if ($amount <= 0) continue;
             $invoice = $this->issue($tenant, Invoice::CHATBOT, (string) $entry->chatbot_id, null, (string) $entry->name,
-                (int) $entry->monthly_price_toman, $start, $start->copy()->addMonthNoOverflow());
+                $currency, $amount, $start, $start->copy()->addMonthNoOverflow());
             if ($invoice) $count++;
         }
         return $count;
@@ -217,7 +267,7 @@ class BillingService
 
     /** Idempotent: the partial unique index allows one live invoice per subject per period, so a second run issues nothing. */
     private function issue(Tenant $tenant, string $purpose, string $subjectId, ?string $planId, string $description,
-                           int $amount, CarbonInterface $start, CarbonInterface $end): ?Invoice
+                           string $currency, int $amount, CarbonInterface $start, CarbonInterface $end): ?Invoice
     {
         $exists = Invoice::where('purpose', $purpose)->where('subject_id', $subjectId)
             ->where('period_start', $start)->where('status', '!=', 'void')->exists();
@@ -226,7 +276,7 @@ class BillingService
         try {
             $invoice = Invoice::create([
                 'tenant_id' => $tenant->id, 'purpose' => $purpose, 'subject_id' => $subjectId, 'plan_id' => $planId,
-                'description' => $description, 'currency' => 'IRT', 'amount' => $amount,
+                'description' => $description, 'currency' => $currency, 'amount' => $amount,
                 'period_start' => $start, 'period_end' => $end, 'status' => 'open',
                 'issued_at' => now(), 'due_at' => $start,
             ]);
@@ -285,7 +335,8 @@ class BillingService
             if ($locked->status !== 'open') {
                 throw new InvoiceNotOpen(); // rolls the debit back
             }
-            $locked->update(['status' => 'paid', 'paid_at' => now(), 'wallet_transaction_id' => $txn->id,
+            $ledgerColumn = $locked->currency === 'USDT' ? 'usdt_wallet_transaction_id' : 'wallet_transaction_id';
+            $locked->update(['status' => 'paid', 'paid_at' => now(), $ledgerColumn => $txn->id,
                 'attempts' => $locked->attempts + 1, 'last_attempt_at' => now(), 'last_failure' => null]);
 
             if ($locked->purpose === Invoice::PLAN) {
@@ -293,7 +344,7 @@ class BillingService
             } else {
                 $this->extendChatbot($locked);
             }
-        });
+        }, $invoice->currency);   // charged from the wallet of the invoice's own currency
 
         $this->notify(Tenant::find($invoice->tenant_id), 'paid', $invoice->fresh());
     }
@@ -385,7 +436,7 @@ class BillingService
             $params = [
                 'number' => $invoice->number,
                 'name'   => $invoice->description,
-                'amount' => Money::toman((int) $invoice->amount),
+                'amount' => Money::of((int) $invoice->amount, $invoice->currency),
                 'date'   => Jalali::date($invoice->due_at) ?? $invoice->due_at->toDateString(),
                 'grace'  => $this->graceDays(),
             ];

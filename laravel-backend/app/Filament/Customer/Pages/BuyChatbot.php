@@ -52,6 +52,16 @@ class BuyChatbot extends Page implements HasForms {
                 })
                 ->dehydrateStateUsing(fn ($state) => DomainNormalizer::normalize($state))
                 ->helperText(__('chatbot.domain_locked_help')),
+            // Paid from — and renewed from — the Toman or the USDT wallet.
+            // Offered only when this type has a USDT price.
+            Select::make('currency')
+                ->label(__('usdt.pay_from'))
+                ->options(['IRT' => __('usdt.wallet_irt'), 'USDT' => __('usdt.wallet_usdt')])
+                ->default('IRT')
+                ->required()
+                ->live()
+                ->visible(fn (\Filament\Forms\Get $get) => \App\Services\Crypto\UsdtDeposits::enabled()
+                    && ChatbotTypePrice::where('type', $get('type'))->whereNotNull('price_usdt')->exists()),
         ])->statePath('data');
     }
 
@@ -61,16 +71,27 @@ class BuyChatbot extends Page implements HasForms {
         return ChatbotTypePrice::where('type', $type)->value('price_toman') ?? 0;
     }
 
+    public function paysInUsdt(): bool {
+        return ($this->data['currency'] ?? 'IRT') === 'USDT';
+    }
+
     public function getWalletBalance(): int {
         return (int) (auth()->user()->tenant->wallet_balance_toman ?? 0);
     }
 
     /** Formatted in the tenant's own currency — getWalletBalance()/getSelectedPrice() stay raw Toman for the actual purchase-affordability comparison in purchase() below. */
     public function getWalletBalanceDisplay(): string {
+        if ($this->paysInUsdt()) {
+            return \App\Support\Usdt::format((int) Tenant::findOrFail(auth()->user()->tenant_id)->wallet_balance_usdt);
+        }
         return Money::forCurrentTenant($this->getWalletBalance());
     }
 
     public function getSelectedPriceDisplay(): string {
+        if ($this->paysInUsdt()) {
+            $usdt = ChatbotTypePrice::where('type', $this->data['type'] ?? null)->value('price_usdt');
+            return $usdt === null ? '—' : \App\Support\Usdt::format((int) $usdt);
+        }
         return Money::forCurrentTenant($this->getSelectedPrice());
     }
 
@@ -82,9 +103,11 @@ class BuyChatbot extends Page implements HasForms {
             [, $plaintext] = app(PurchaseService::class)->buyChatbot(
                 Tenant::findOrFail(auth()->user()->tenant_id),
                 (string) $state['type'], (string) $state['name'], (string) $state['primary_domain'], auth()->id(),
+                (string) ($state['currency'] ?? 'IRT'),
             );
         } catch (InsufficientBalance) {
-            Notification::make()->title(__('wallet.insufficient_balance'))->body(__('wallet.topup_first'))->danger()->send();
+            Notification::make()->title(__('wallet.insufficient_balance'))
+                ->body(($state['currency'] ?? 'IRT') === 'USDT' ? __('usdt.topup_first') : __('wallet.topup_first'))->danger()->send();
             return;
         } catch (\DomainException $e) {
             match ($e->getMessage()) {

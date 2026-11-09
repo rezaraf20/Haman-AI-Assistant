@@ -44,7 +44,8 @@ class InvoiceResource extends Resource {
                 TextColumn::make('tenant.name')->label(__('panel.tenant'))->searchable(),
                 TextColumn::make('description')->label(__('billing.col_item'))
                     ->formatStateUsing(fn (Invoice $record) => __('billing.purpose_' . $record->purpose, ['name' => $record->description])),
-                TextColumn::make('amount')->label(__('billing.col_amount'))->formatStateUsing(fn (int $state) => number_format($state)),
+                TextColumn::make('amount')->label(__('billing.col_amount'))
+                    ->formatStateUsing(fn (Invoice $record) => \App\Support\Money::of((int) $record->amount, $record->currency)),
                 TextColumn::make('due_at')->label(__('billing.col_due'))->formatStateUsing(fn ($state) => Jalali::dateTime($state))->sortable(),
                 BadgeColumn::make('status')->label(__('common.status'))
                     ->colors(['warning' => 'open', 'success' => 'paid', 'gray' => 'void'])

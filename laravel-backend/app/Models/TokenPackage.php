@@ -5,7 +5,7 @@ use App\Traits\HasUuid;
 
 class TokenPackage extends Model {
     use HasUuid;
-    protected $fillable = ['name', 'name_en', 'chatbot_type', 'token_amount', 'bonus_percent', 'price_toman', 'is_active', 'sort_order'];
+    protected $fillable = ['name', 'name_en', 'chatbot_type', 'token_amount', 'bonus_percent', 'price_toman', 'price_usdt', 'is_active', 'sort_order'];
     protected $casts = ['is_active' => 'boolean', 'bonus_percent' => 'float'];
     public function scopeActive($q) { return $q->where('is_active', true); }
 

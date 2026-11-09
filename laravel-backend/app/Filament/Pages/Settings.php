@@ -191,6 +191,17 @@ class Settings extends Page implements HasForms
                 $this->field('payments.paddle.webhook_secret'),
                 $this->field('payments.paddle.sandbox'),
             ]),
+            $this->group('usdt', __('settings.usdt'), __('settings.usdt_desc'), [
+                $this->field('crypto.usdt_enabled'),
+                $this->field('crypto.usdt_address'),
+                $this->field('crypto.bsc_rpc_primary'),
+                $this->field('crypto.bsc_rpc_fallback'),
+                $this->field('crypto.usdt_deposit_ttl_minutes'),
+                $this->field('crypto.usdt_late_grace_hours'),
+                $this->field('crypto.usdt_min_deposit'),
+                $this->field('crypto.usdt_max_deposit'),
+                $this->field('crypto.bsc_finality_depth'),
+            ]),
             Section::make(__('settings.routing'))
                 ->description(__('settings.routing_desc'))
                 ->schema([

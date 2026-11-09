@@ -84,9 +84,8 @@ class MyChatbots extends Page implements HasTable {
                     ->placeholder(__('common.unlimited'))
                     ->color(fn ($record) => $record->expires_at && $record->expires_at->isPast() ? 'danger' : null),
                 TextColumn::make('monthly_price_toman')->label(__('chatbot.monthly_renewal_cost'))
-                    ->formatStateUsing(fn (int $state) => $state > 0
-                        ? Money::forCurrentTenant($state)
-                        : __('chatbot.contact_support')),
+                    // In the currency it renews in (the one it was bought with).
+                    ->formatStateUsing(fn (ChatbotIndexEntry $record) => self::renewalCost($record) ?? __('chatbot.contact_support')),
                 // Widget requests refused because the page was not on this
                 // chatbot's domain (App\Support\DomainRejections) — so a
                 // silent widget on some other site has a visible reason.
@@ -164,10 +163,10 @@ class MyChatbots extends Page implements HasTable {
                     ->label(__('chatbot.renew_action'))
                     ->icon('heroicon-o-arrow-path')
                     ->color('success')
-                    ->visible(fn (ChatbotIndexEntry $record) => $record->monthly_price_toman > 0)
+                    ->visible(fn (ChatbotIndexEntry $record) => self::renewalCost($record) !== null)
                     ->requiresConfirmation()
                     ->modalDescription(fn (ChatbotIndexEntry $record) => __('chatbot.renew_confirm_description', [
-                        'amount' => Money::forCurrentTenant($record->monthly_price_toman),
+                        'amount' => self::renewalCost($record),
                     ]))
                     ->action(fn (ChatbotIndexEntry $record) => $this->renew($record)),
                 // A trial chatbot (monthly_price_toman = 0, since it was
@@ -270,12 +269,21 @@ class MyChatbots extends Page implements HasTable {
         }
     }
 
+    /** One month of this chatbot, formatted in the currency it renews in; null when it is not a paid chatbot. */
+    public static function renewalCost(ChatbotIndexEntry $record): ?string {
+        if ($record->billing_currency === 'USDT' && (int) $record->monthly_price_usdt > 0) {
+            return \App\Support\Usdt::format((int) $record->monthly_price_usdt);
+        }
+        return (int) $record->monthly_price_toman > 0 ? Money::forCurrentTenant((int) $record->monthly_price_toman) : null;
+    }
+
     /** Pays the open renewal invoice if there is one, otherwise adds a month — one transaction either way (PurchaseService::renewChatbot()). */
     private function renew(ChatbotIndexEntry $record): void {
         try {
             app(PurchaseService::class)->renewChatbot(\App\Models\Tenant::findOrFail(auth()->user()->tenant_id), $record);
         } catch (InsufficientBalance) {
-            Notification::make()->title(__('wallet.insufficient_balance'))->body(__('wallet.topup_first'))->danger()->send();
+            Notification::make()->title(__('wallet.insufficient_balance'))
+                ->body($record->billing_currency === 'USDT' ? __('usdt.topup_first') : __('wallet.topup_first'))->danger()->send();
             return;
         } catch (\DomainException|InvoiceNotOpen) {
             Notification::make()->title(__('billing.unavailable'))->danger()->send();

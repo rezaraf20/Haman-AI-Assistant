@@ -23,7 +23,7 @@ class Invoice extends Model
     protected $fillable = [
         'tenant_id', 'purpose', 'subject_id', 'plan_id', 'description', 'currency', 'amount',
         'period_start', 'period_end', 'status', 'issued_at', 'due_at', 'paid_at', 'voided_at',
-        'void_reason', 'wallet_transaction_id', 'attempts', 'last_attempt_at', 'last_failure',
+        'void_reason', 'wallet_transaction_id', 'usdt_wallet_transaction_id', 'attempts', 'last_attempt_at', 'last_failure',
     ];
 
     protected $casts = [

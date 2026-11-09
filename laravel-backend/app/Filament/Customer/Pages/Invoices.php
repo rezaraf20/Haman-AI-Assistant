@@ -45,7 +45,10 @@ class Invoices extends Page implements HasTable
                 TextColumn::make('period_start')->label(__('billing.col_period'))
                     ->formatStateUsing(fn (Invoice $record) => (Jalali::date($record->period_start) ?? $record->period_start->toDateString())
                         . ' – ' . (Jalali::date($record->period_end) ?? $record->period_end->toDateString())),
-                TextColumn::make('amount')->label(__('billing.col_amount'))->formatStateUsing(fn (int $state) => Money::forCurrentTenant($state)),
+                TextColumn::make('amount')->label(__('billing.col_amount'))
+                    ->formatStateUsing(fn (Invoice $record) => $record->currency === 'USDT'
+                        ? \App\Support\Usdt::format((int) $record->amount)
+                        : Money::forCurrentTenant((int) $record->amount)),
                 TextColumn::make('due_at')->label(__('billing.col_due'))->formatStateUsing(fn ($state) => Jalali::date($state)),
                 BadgeColumn::make('status')->label(__('common.status'))
                     ->colors(['warning' => 'open', 'success' => 'paid', 'gray' => 'void'])
@@ -60,10 +63,39 @@ class Invoices extends Page implements HasTable
                     ->color('success')
                     ->visible(fn (Invoice $record) => $record->status === 'open')
                     ->requiresConfirmation()
-                    ->modalDescription(fn (Invoice $record) => __('billing.pay_confirm', ['amount' => Money::forCurrentTenant((int) $record->amount)]))
+                    ->modalDescription(fn (Invoice $record) => __('billing.pay_confirm', ['amount' => $record->currency === 'USDT'
+                        ? \App\Support\Usdt::format((int) $record->amount)
+                        : Money::forCurrentTenant((int) $record->amount)]))
                     ->action(fn (Invoice $record) => $this->pay($record)),
             ])
+            ->headerActions([
+                // Which wallet plan renewals are charged from. Shown once
+                // the USDT wallet exists for this platform.
+                Action::make('renewal_wallet')
+                    ->label(fn () => __('usdt.renewal_wallet_current', ['wallet' => __('usdt.wallet_' . strtolower($this->billingCurrency()))]))
+                    ->icon('heroicon-o-arrows-right-left')
+                    ->color('gray')
+                    ->visible(fn () => \App\Services\Crypto\UsdtDeposits::enabled())
+                    ->form([
+                        \Filament\Forms\Components\Radio::make('currency')
+                            ->label(__('usdt.renewal_wallet'))
+                            ->options(['IRT' => __('usdt.wallet_irt'), 'USDT' => __('usdt.wallet_usdt')])
+                            ->default(fn () => $this->billingCurrency())
+                            ->helperText(__('usdt.renewal_wallet_help'))
+                            ->required(),
+                    ])
+                    ->action(function (array $data) {
+                        app(BillingService::class)->setBillingCurrency(
+                            \App\Models\Tenant::findOrFail(auth()->user()->tenant_id), (string) $data['currency']);
+                        Notification::make()->title(__('usdt.renewal_wallet_saved'))->success()->send();
+                    }),
+            ])
             ->defaultSort('issued_at', 'desc');
+    }
+
+    public function billingCurrency(): string
+    {
+        return \App\Models\Tenant::find(auth()->user()->tenant_id)?->billing_currency === 'USDT' ? 'USDT' : 'IRT';
     }
 
     private function pay(Invoice $invoice): void
@@ -75,7 +107,8 @@ class Invoices extends Page implements HasTable
         try {
             app(BillingService::class)->payInvoice($invoice);
         } catch (InsufficientBalance) {
-            Notification::make()->title(__('wallet.insufficient_balance'))->body(__('wallet.topup_first'))->danger()->send();
+            Notification::make()->title(__('wallet.insufficient_balance'))
+                ->body($invoice->currency === 'USDT' ? __('usdt.topup_first') : __('wallet.topup_first'))->danger()->send();
             return;
         } catch (InvoiceNotOpen) {
             Notification::make()->title(__('billing.invoice_not_open'))->warning()->send();

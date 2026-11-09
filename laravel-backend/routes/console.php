@@ -34,6 +34,10 @@ Schedule::command('billing:run')->hourly()->withoutOverlapping();
 // Zarinpal top-ups whose callback never arrived or could not be verified
 // (customer closed the tab, gateway timeout) — re-verified, not abandoned.
 Schedule::command('payments:reverify-pending')->everyTenMinutes()->withoutOverlapping();
+// USDT (BEP20) payments into tenants' USDT wallets — read every minute,
+// credited only once their block is final. Does nothing until the owner
+// sets a receiving address and switches it on (Settings → Payments).
+Schedule::command('crypto:scan')->everyMinute()->withoutOverlapping(10);
 // Feeds analytics_daily (per-tenant) + platform_daily_stats (public) — the
 // admin/customer dashboard widgets read from these instead of aggregating
 // raw messages/conversations on every page load. Runs after midnight since

@@ -42,4 +42,5 @@ return [
     'notice_unpaid_body' => 'Your wallet balance did not cover :name (:amount). Please top up within :grace days; the charge is retried automatically.',
     'notice_expired_subject' => 'Invoice #:number voided',
     'notice_expired_body' => 'The invoice for :name was not paid in time and has been voided. If it was a plan renewal, your plan has returned to free; you can upgrade again from the Change plan page.',
+    'status_void_currency_changed' => 'Void (renewal wallet changed)',
 ];

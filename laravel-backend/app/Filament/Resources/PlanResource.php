@@ -79,6 +79,7 @@ class PlanResource extends Resource
                     // falling back sensibly.
                     TextInput::make('price_yearly')->label(__('plans.price_yearly'))
                         ->numeric()->minValue(0)->default(0),
+                    \App\Filament\Forms\UsdtPriceInput::make('price_monthly_usdt'),
                 ])->columns(2),
 
             Section::make(__('plans.section_limits'))->schema([
@@ -177,6 +178,8 @@ class PlanResource extends Resource
                     ->icon(fn (Plan $record) => $record->looksLikeDefaultPrice() ? 'heroicon-o-exclamation-triangle' : null)
                     ->iconColor('warning')
                     ->tooltip(fn (Plan $record) => $record->looksLikeDefaultPrice() ? __('plans.price_looks_default') : null),
+                Tables\Columns\TextColumn::make('price_monthly_usdt')->label(__('usdt.price_col'))->placeholder('—')
+                    ->formatStateUsing(fn ($state) => $state === null ? null : \App\Support\Usdt::format((int) $state)),
                 Tables\Columns\TextColumn::make('max_chatbots')->label(__('plans.max_chatbots')),
                 Tables\Columns\TextColumn::make('max_tokens_monthly')->label(__('plans.max_tokens'))
                     ->formatStateUsing(fn ($state) => number_format((int) $state)),

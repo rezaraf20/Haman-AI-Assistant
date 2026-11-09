@@ -30,13 +30,23 @@ class PurchaseService
         private QuotaService $quota,
     ) {}
 
-    /** @throws InsufficientBalance|\DomainException */
-    public function buyTokens(Tenant $tenant, TokenPackage $package): void
+    /**
+     * Paid from the Toman or the USDT wallet, at that currency's own price
+     * (no conversion; a package without a USDT price is not sold in USDT).
+     *
+     * @throws InsufficientBalance|\DomainException
+     */
+    public function buyTokens(Tenant $tenant, TokenPackage $package, string $currency = 'IRT'): void
     {
+        $currency = WalletService::currency($currency);
         $package = TokenPackage::query()->active()->whereKey($package->getKey())->first()
             ?? throw new \DomainException('package_unavailable');
+        $price = $currency === 'USDT' ? $package->price_usdt : $package->price_toman;
+        if ($price === null || (int) $price <= 0) {
+            throw new \DomainException('not_sold_in_currency');
+        }
 
-        $this->wallet->debit($tenant, (int) $package->price_toman, 'plan_charge', [
+        $this->wallet->debit($tenant, (int) $price, 'plan_charge', [
             'description' => __('plan.token_purchase_description', ['name' => $package->name, 'amount' => $package->token_amount]),
             'metadata' => ['token_package_id' => $package->getKey()],
         ], function (Tenant $locked) use ($package) {
@@ -46,7 +56,7 @@ class PurchaseService
                 throw new \DomainException('upgrade_required');
             }
             Tenant::where('id', $locked->id)->increment('bonus_tokens', (int) $package->token_amount);
-        });
+        }, $currency);
     }
 
     /**
@@ -61,7 +71,9 @@ class PurchaseService
         if ((string) $entry->tenant_id !== (string) $tenant->id) {
             throw new \DomainException('not_yours');
         }
-        $price = (int) $entry->monthly_price_toman;
+        // Renewed in the currency it was bought with.
+        $currency = $entry->billing_currency === 'USDT' ? 'USDT' : 'IRT';
+        $price = (int) ($currency === 'USDT' ? $entry->monthly_price_usdt : $entry->monthly_price_toman);
         if ($price <= 0) {
             throw new \DomainException('not_renewable');
         }
@@ -86,7 +98,7 @@ class PurchaseService
             if (!$locked->is_active && $locked->disabled_reason === 'expired') {
                 $this->tenants->setChatbotActive($locked->chatbot_id, true);
             }
-        });
+        }, $currency);
     }
 
     /**
@@ -96,14 +108,18 @@ class PurchaseService
      * @return array{0: Chatbot, 1: string} the chatbot and its plaintext API key (shown once)
      * @throws InsufficientBalance|\DomainException
      */
-    public function buyChatbot(Tenant $tenant, string $type, string $name, string $domain, ?string $createdBy): array
+    public function buyChatbot(Tenant $tenant, string $type, string $name, string $domain, ?string $createdBy, string $currency = 'IRT'): array
     {
+        $currency = WalletService::currency($currency);
         $priceRow = ChatbotTypePrice::where('type', $type)->active()->first()
             ?? throw new \DomainException('type_unavailable');
-        $price = (int) $priceRow->price_toman;
+        if ($currency === 'USDT' && $priceRow->price_usdt === null) {
+            throw new \DomainException('not_sold_in_currency');
+        }
+        $price = (int) ($currency === 'USDT' ? $priceRow->price_usdt : $priceRow->price_toman);
 
         $result = null;
-        $grant = function (Tenant $locked) use ($priceRow, $price, $name, $domain, $createdBy, &$result) {
+        $grant = function (Tenant $locked) use ($priceRow, $price, $currency, $name, $domain, $createdBy, &$result) {
             $schema = $locked->schema_name;
             try {
                 DB::statement("SET search_path TO {$schema}, public");
@@ -140,7 +156,11 @@ class PurchaseService
                 'name'                => $name,
                 'primary_domain'      => $domain,
                 'expires_at'          => now()->addMonth(),
-                'monthly_price_toman' => $price,
+                // Both prices kept, so the monthly cost is shown and renewed
+                // in the currency it was bought with (billing_currency).
+                'monthly_price_toman' => (int) $priceRow->price_toman,
+                'monthly_price_usdt'  => $priceRow->price_usdt === null ? null : (int) $priceRow->price_usdt,
+                'billing_currency'    => $currency,
             ]);
 
             [, $plaintext] = ApiKey::generate(
@@ -157,7 +177,7 @@ class PurchaseService
             'metadata' => ['chatbot_type' => $priceRow->type],
         ];
         if ($price > 0) {
-            $this->wallet->debit($tenant, $price, 'plan_charge', $attrs, $grant);
+            $this->wallet->debit($tenant, $price, 'plan_charge', $attrs, $grant, $currency);
         } else {
             DB::transaction(fn () => $grant(Tenant::where('id', $tenant->id)->lockForUpdate()->firstOrFail()));
         }

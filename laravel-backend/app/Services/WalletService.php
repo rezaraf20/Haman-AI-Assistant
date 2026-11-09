@@ -2,7 +2,7 @@
 namespace App\Services;
 
 use App\Models\Tenant;
-use App\Models\WalletTransaction;
+use App\Models\{UsdtWalletTransaction, WalletTransaction};
 use App\Exceptions\InsufficientBalance;
 use Illuminate\Support\Facades\DB;
 
@@ -24,31 +24,26 @@ class WalletService {
      * applyCompletedTransaction(), which never re-checked it — two parallel
      * purchases could both succeed against one balance.
      *
-     * @param int $amountToman positive; stored as a negative ledger amount
-     * @param callable|null $grant fn(Tenant $lockedTenant, WalletTransaction $txn): void
+     * Two wallets, never mixed: IRT (whole Toman, wallet_transactions) and
+     * USDT (micro-USDT, usdt_wallet_transactions). $currency picks which;
+     * there is no conversion between them anywhere.
+     *
+     * @param int $amount positive, in the currency's minor unit; stored as a negative ledger amount
+     * @param callable|null $grant fn(Tenant $lockedTenant, WalletTransaction|UsdtWalletTransaction $txn): void
      * @throws InsufficientBalance
      */
-    public function debit(Tenant|string $tenant, int $amountToman, string $type, array $attrs = [], ?callable $grant = null): WalletTransaction {
-        if ($amountToman <= 0) {
+    public function debit(Tenant|string $tenant, int $amount, string $type, array $attrs = [], ?callable $grant = null, string $currency = 'IRT'): WalletTransaction|UsdtWalletTransaction {
+        if ($amount <= 0) {
             throw new \InvalidArgumentException('A debit amount must be positive.');
         }
+        $currency = self::currency($currency);
         $tenantId = $tenant instanceof Tenant ? $tenant->id : $tenant;
 
-        return DB::transaction(function () use ($tenantId, $amountToman, $type, $attrs, $grant) {
+        return DB::transaction(function () use ($tenantId, $amount, $type, $attrs, $grant, $currency) {
             $locked = Tenant::where('id', $tenantId)->lockForUpdate()->firstOrFail();
-            if ($locked->wallet_balance_toman < $amountToman) {
-                throw new InsufficientBalance((int) $locked->wallet_balance_toman, $amountToman);
-            }
-            $newBalance = $locked->wallet_balance_toman - $amountToman;
-
-            $txn = WalletTransaction::create(array_merge([
-                'tenant_id'           => $locked->id,
-                'type'                => $type,
-                'amount_toman'        => -$amountToman,
-                'balance_after_toman' => $newBalance,
-                'status'              => 'completed',
-            ], $attrs));
-            $locked->update(['wallet_balance_toman' => $newBalance]);
+            $txn = $currency === 'USDT'
+                ? $this->writeUsdt($locked, -$amount, $type, $attrs, allowNegative: false)
+                : $this->writeToman($locked, -$amount, $type, $attrs);
 
             if ($grant) {
                 $grant($locked, $txn);
@@ -56,6 +51,69 @@ class WalletService {
 
             return $txn;
         });
+    }
+
+    /** IRT ledger row + cached balance, on an already-locked tenant; refuses to go below zero. */
+    private function writeToman(Tenant $locked, int $signed, string $type, array $attrs): WalletTransaction
+    {
+        $newBalance = (int) $locked->wallet_balance_toman + $signed;
+        if ($signed < 0 && $newBalance < 0) {
+            throw new InsufficientBalance((int) $locked->wallet_balance_toman, -$signed);
+        }
+        $txn = WalletTransaction::create(array_merge([
+            'tenant_id'           => $locked->id,
+            'type'                => $type,
+            'amount_toman'        => $signed,
+            'balance_after_toman' => $newBalance,
+            'status'              => 'completed',
+        ], $attrs));
+        $locked->update(['wallet_balance_toman' => $newBalance]);
+        return $txn;
+    }
+
+    /** USDT ledger row + cached balance, on an already-locked tenant. */
+    private function writeUsdt(Tenant $locked, int $signedMicro, string $type, array $attrs, bool $allowNegative): UsdtWalletTransaction
+    {
+        $newBalance = (int) $locked->wallet_balance_usdt + $signedMicro;
+        if ($signedMicro < 0 && $newBalance < 0 && !$allowNegative) {
+            throw new InsufficientBalance((int) $locked->wallet_balance_usdt, -$signedMicro);
+        }
+        $txn = UsdtWalletTransaction::create(array_merge([
+            'tenant_id'           => $locked->id,
+            'type'                => $type,
+            'amount_micro'        => $signedMicro,
+            'balance_after_micro' => $newBalance,
+        ], $attrs));
+        $locked->update(['wallet_balance_usdt' => $newBalance]);
+        return $txn;
+    }
+
+    /**
+     * A credit (deposit, refund) or an admin adjustment to the USDT wallet.
+     * A deposit passes crypto_transfer_id in $attrs — unique on the ledger,
+     * so one on-chain transfer can never be credited twice.
+     */
+    public function applyUsdt(Tenant|string $tenant, int $signedMicro, string $type, array $attrs = [], bool $allowNegative = false): UsdtWalletTransaction
+    {
+        $tenantId = $tenant instanceof Tenant ? $tenant->id : $tenant;
+        return DB::transaction(function () use ($tenantId, $signedMicro, $type, $attrs, $allowNegative) {
+            $locked = Tenant::where('id', $tenantId)->lockForUpdate()->firstOrFail();
+            return $this->writeUsdt($locked, $signedMicro, $type, $attrs, $allowNegative);
+        });
+    }
+
+    public function balance(Tenant $tenant, string $currency): int
+    {
+        return self::currency($currency) === 'USDT' ? (int) $tenant->wallet_balance_usdt : (int) $tenant->wallet_balance_toman;
+    }
+
+    public static function currency(string $currency): string
+    {
+        $currency = strtoupper($currency);
+        if (!in_array($currency, ['IRT', 'USDT'], true)) {
+            throw new \InvalidArgumentException("Unknown wallet currency [{$currency}]");
+        }
+        return $currency;
     }
 
     /**
@@ -153,7 +211,12 @@ class WalletService {
             if ($drift !== 0) {
                 $locked->update(['wallet_balance_toman' => $sum]);
             }
-            return ['tenant_id' => $locked->id, 'ledger_sum' => $sum, 'drift' => $drift];
+            $usdtSum = (int) UsdtWalletTransaction::where('tenant_id', $locked->id)->sum('amount_micro');
+            $usdtDrift = $usdtSum - (int) $locked->wallet_balance_usdt;
+            if ($usdtDrift !== 0) {
+                $locked->update(['wallet_balance_usdt' => $usdtSum]);
+            }
+            return ['tenant_id' => $locked->id, 'ledger_sum' => $sum, 'drift' => $drift, 'usdt_drift' => $usdtDrift];
         });
     }
 }

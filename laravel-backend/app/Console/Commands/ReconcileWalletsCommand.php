@@ -16,6 +16,10 @@ class ReconcileWalletsCommand extends Command {
                 $drifted++;
                 $this->warn("Drift for {$tenant->email}: cached vs ledger differed by {$result['drift']} Toman — corrected.");
             }
+            if ($result['usdt_drift'] !== 0) {
+                $drifted++;
+                $this->warn("USDT drift for {$tenant->email}: cached vs ledger differed by {$result['usdt_drift']} micro-USDT — corrected.");
+            }
         }
         $this->info("Reconciled all tenants. {$drifted} had drift.");
     }

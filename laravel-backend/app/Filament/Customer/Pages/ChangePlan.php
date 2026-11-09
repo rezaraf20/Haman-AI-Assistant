@@ -49,7 +49,7 @@ class ChangePlan extends Page implements HasTable {
     public function getSubheading(): ?string { return __('portal.page_change_plan'); }
 
     public function getCurrentPlan(): Plan {
-        return auth()->user()->tenant->plan;
+        return Plan::findOrFail(Tenant::findOrFail(auth()->user()->tenant_id)->plan_id);
     }
 
     public function getPendingPlan(): ?Plan {
@@ -70,6 +70,9 @@ class ChangePlan extends Page implements HasTable {
                 TextColumn::make('display_name')->label(__('common.name')),
                 TextColumn::make('price_monthly')->label(__('plans.price_monthly'))
                     ->formatStateUsing(fn (Plan $record) => Money::forCurrentTenant((int) $record->price_monthly)),
+                TextColumn::make('price_monthly_usdt')->label(__('usdt.price_col'))->placeholder('—')
+                    ->formatStateUsing(fn ($state) => $state === null ? null : \App\Support\Usdt::format((int) $state))
+                    ->visible(fn () => \App\Services\Crypto\UsdtDeposits::enabled()),
                 TextColumn::make('max_tokens_monthly')->label(__('plans.max_tokens'))
                     ->formatStateUsing(fn (int $state) => \App\Support\Numbers::format($state)),
                 TextColumn::make('max_chatbots')->label(__('plans.max_chatbots')),
@@ -84,6 +87,18 @@ class ChangePlan extends Page implements HasTable {
                         ? __('plan.upgrade_confirm', ['price' => Money::forCurrentTenant($this->prorateDifference($record))])
                         : __('plan.downgrade_confirm', ['name' => $record->display_name]))
                     ->action(fn (Plan $record) => $this->isUpgrade($record) ? $this->upgrade($record) : $this->scheduleDowngrade($record)),
+                // The same upgrade paid from the USDT wallet, at USDT prices;
+                // renewals then come from the USDT wallet too.
+                Action::make('upgrade_usdt')
+                    ->label(__('usdt.upgrade_with_usdt'))
+                    ->icon('heroicon-o-currency-dollar')
+                    ->color('gray')
+                    ->visible(fn (Plan $record) => \App\Services\Crypto\UsdtDeposits::enabled()
+                        && $record->id !== $this->getCurrentPlan()->id && $this->isUpgrade($record)
+                        && app(BillingService::class)->canUpgradeIn($this->getCurrentPlan(), $record, 'USDT'))
+                    ->requiresConfirmation()
+                    ->modalDescription(fn (Plan $record) => __('plan.upgrade_confirm', ['price' => \App\Support\Usdt::format($this->prorateDifference($record, 'USDT'))]))
+                    ->action(fn (Plan $record) => $this->upgrade($record, 'USDT')),
             ])
             ->defaultSort('sort_order');
     }
@@ -93,20 +108,21 @@ class ChangePlan extends Page implements HasTable {
     }
 
     /** What the upgrade will charge now — the same integer BillingService::upgradePlan() debits. */
-    private function prorateDifference(Plan $target): int {
+    private function prorateDifference(Plan $target, string $currency = 'IRT'): int {
         $tenant = Tenant::findOrFail(auth()->user()->tenant_id);
-        return app(BillingService::class)->prorate($tenant, Plan::findOrFail($tenant->plan_id), $target);
+        return app(BillingService::class)->prorate($tenant, Plan::findOrFail($tenant->plan_id), $target, $currency);
     }
 
     public function getPaidUntil(): ?\Carbon\CarbonInterface {
         return Tenant::find(auth()->user()->tenant_id)?->plan_paid_until;
     }
 
-    private function upgrade(Plan $target): void {
+    private function upgrade(Plan $target, string $currency = 'IRT'): void {
         try {
-            app(BillingService::class)->upgradePlan(Tenant::findOrFail(auth()->user()->tenant_id), $target);
+            app(BillingService::class)->upgradePlan(Tenant::findOrFail(auth()->user()->tenant_id), $target, $currency);
         } catch (InsufficientBalance) {
-            Notification::make()->title(__('wallet.insufficient_balance'))->body(__('wallet.topup_first'))->danger()->send();
+            Notification::make()->title(__('wallet.insufficient_balance'))
+                ->body($currency === 'USDT' ? __('usdt.topup_first') : __('wallet.topup_first'))->danger()->send();
             return;
         } catch (\DomainException) {
             Notification::make()->title(__('billing.unavailable'))->danger()->send();
