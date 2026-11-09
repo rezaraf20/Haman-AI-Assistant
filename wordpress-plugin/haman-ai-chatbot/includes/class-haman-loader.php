@@ -32,6 +32,12 @@ class Haman_Loader {
         $this->add_action( 'wp_ajax_haman_status',                    $admin, 'ajax_status' );
         $this->add_action( 'wp_ajax_haman_sync_step',                 $admin, 'ajax_sync_step' );
         $this->add_action( 'admin_notices',                           $admin, 'update_notice' );
+        // The widget's chatbot id lives in every cached page: when the id or
+        // the key changes, clear the page cache (Haman_Page_Cache).
+        foreach ( [ 'haman_chatbot_id', 'haman_api_key' ] as $option ) {
+            add_action( "update_option_{$option}", [ 'Haman_Page_Cache', 'on_identity_changed' ] );
+            add_action( "add_option_{$option}",    [ 'Haman_Page_Cache', 'on_identity_changed' ] );
+        }
         $this->add_action( 'wp_enqueue_scripts',   $public, 'enqueue_assets' );
         // add_filter() and add_action() are the same WordPress hook
         // mechanism under the hood, so reusing this same helper is

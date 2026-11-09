@@ -48,6 +48,22 @@ $hm_knowledge_url = $hm_portal_base . '/portal/knowledge';
 <?php if (isset($_GET['saved'])): ?>
     <div class="notice notice-success is-dismissible"><p><?php esc_html_e('Settings saved.', 'haman-ai-chatbot'); ?></p></div>
 <?php endif; ?>
+<?php
+// After the Chatbot ID or API key changed: which page cache was cleared, or
+// that the owner has to (Haman_Page_Cache). Cleared by a connection test
+// that finds the live page serving the right chatbot.
+$hm_cache = get_option(Haman_Page_Cache::NOTICE_OPTION, []);
+if (is_array($hm_cache) && !empty($hm_cache['needed'])) : ?>
+    <div class="notice notice-warning" id="hm-cache-notice"><p><strong><?php esc_html_e('Clear the site’s cache so the change takes effect.', 'haman-ai-chatbot'); ?></strong>
+        <?php if (!empty($hm_cache['failed'])) : ?><?php echo esc_html(sprintf(
+            /* translators: %s: cache plugin names, e.g. "WP Rocket" */
+            __('Clearing it automatically failed for: %s.', 'haman-ai-chatbot'), implode(', ', $hm_cache['failed']))); ?><?php endif; ?>
+        <?php esc_html_e('Visitors may otherwise keep seeing the previous chatbot until the cached pages expire.', 'haman-ai-chatbot'); ?></p></div>
+<?php elseif (is_array($hm_cache) && !empty($hm_cache['purged']) && (time() - (int) ($hm_cache['at'] ?? 0)) < DAY_IN_SECONDS) : ?>
+    <div class="notice notice-info is-dismissible"><p><?php echo esc_html(sprintf(
+        /* translators: %s: cache plugin names, e.g. "WP Rocket" */
+        __('The page cache was cleared automatically (%s), so visitors get the new chatbot.', 'haman-ai-chatbot'), implode(', ', $hm_cache['purged']))); ?></p></div>
+<?php endif; ?>
 <?php if (isset($_GET['synced'])): ?>
     <div class="notice notice-success is-dismissible"><p><?php esc_html_e('Sync finished.', 'haman-ai-chatbot'); ?></p></div>
 <?php endif; ?>

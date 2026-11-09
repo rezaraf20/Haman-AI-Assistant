@@ -49,6 +49,7 @@ class Haman_Admin {
             'stateInvalidKey'   => __('Invalid key', 'haman-ai-chatbot'),
             'stateSuspended'    => __('Chatbot suspended', 'haman-ai-chatbot'),
             'stateAwaitingDomain' => __('Awaiting domain registration', 'haman-ai-chatbot'),
+            'livePageMismatch'  => __('The live site still shows another chatbot — a cached copy of the page. Clear the site’s cache so the change takes effect.', 'haman-ai-chatbot'),
             'stateDisconnected' => __('Not connected', 'haman-ai-chatbot'),
             'stateNotSet'       => __('Not set up', 'haman-ai-chatbot'),
             'documentsTotal'    => __('%1$s of %2$s documents', 'haman-ai-chatbot'),
@@ -367,7 +368,12 @@ class Haman_Admin {
             ]);
         }
         self::log('Connection test succeeded: ' . $result['message']);
-        wp_send_json_success(['message' => $result['message'], 'name' => $result['name'] ?? '']);
+        // Connected is half the answer: does the live page serve THIS chatbot,
+        // or a cached copy of the previous one? (Haman_Page_Cache)
+        $live = Haman_Page_Cache::check_and_repair();
+        if (!empty($live['purged'])) self::log('Live page served another chatbot; cleared ' . implode(', ', $live['purged']) . ' — now: ' . $live['state']);
+        if ($live['state'] === 'mismatch') self::log('Live page serves chatbot ' . $live['found'] . ', settings say ' . $live['expected'] . ' — page cache not cleared');
+        wp_send_json_success(['message' => $result['message'], 'name' => $result['name'] ?? '', 'live_page' => $live]);
     }
 
     public function ajax_clear_cache(): void {

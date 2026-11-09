@@ -210,3 +210,29 @@ test('status strip: a chatbot awaiting its domain is named as such, in amber, wi
     assert.match(d.getElementById('hm-status-connection-detail').textContent, /Register this site/);
     assert.equal(d.getElementById('hm-status').getAttribute('data-overall'), 'attention');
 });
+
+test('test connection: connected, but the live page serves another chatbot → amber, says to clear the cache', async () => {
+    const { d } = boot({
+        haman_status: CONNECTED,
+        haman_check_version: { success: true, data: {} },
+        haman_test_connection: { success: true, data: { message: 'Connected to “Ali bot”', live_page: { state: 'mismatch', found: '57c6c8d1-2060-421b-8b6a-8a6c1da53d2a', expected: 'f6ed3b62-ce54-4237-8c23-3bb32b1ae165' } } },
+    });
+    await settle();
+    d.getElementById('hm-test-connection').click();
+    await settle();
+    const box = d.getElementById('hm-test-connection-result');
+    assert.equal(box.getAttribute('data-tone'), 'warning');
+    assert.match(box.textContent, /livePageMismatch/);
+});
+
+test('test connection: live page serves the right chatbot → plain success', async () => {
+    const { d } = boot({
+        haman_status: CONNECTED,
+        haman_check_version: { success: true, data: {} },
+        haman_test_connection: { success: true, data: { message: 'Connected to “Ali bot”', live_page: { state: 'ok' } } },
+    });
+    await settle();
+    d.getElementById('hm-test-connection').click();
+    await settle();
+    assert.equal(d.getElementById('hm-test-connection-result').getAttribute('data-tone'), 'success');
+});

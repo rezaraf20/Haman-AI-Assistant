@@ -73,8 +73,10 @@ jobs:
 
       # Batching respects both the request-size limit and the platform's
       # item count (the latter read from the platform, not hard-coded).
-      - name: Plugin PHP tests (sync batcher)
-        run: php tests/php/sync-batcher-test.php
+      - name: Plugin PHP tests (sync batcher, page cache)
+        run: |
+          php tests/php/sync-batcher-test.php
+          php tests/php/page-cache-test.php
 
       - name: Plugin PHP lint
         run: |

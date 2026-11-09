@@ -209,7 +209,13 @@
 
             ajaxPost('haman_test_connection').then(function (data) {
                 if (data.success) {
-                    showResult(resultEl, 'success', T.stateConnected, data.data.message);
+                    var live = data.data.live_page || {};
+                    if (live.state === 'mismatch') {
+                        // Connected, but visitors get a cached page with another chatbot.
+                        showResult(resultEl, 'warning', T.stateConnected, data.data.message + ' — ' + T.livePageMismatch);
+                    } else {
+                        showResult(resultEl, 'success', T.stateConnected, data.data.message);
+                    }
                 } else {
                     var state = (data.data && data.data.state) || 'disconnected';
                     var conn = CONNECTION[state] || CONNECTION.disconnected;

@@ -724,3 +724,18 @@ msgstr "این کلید API به هیچ چت‌باتی وصل نیست و دی�
 
 msgid "Connected, but this chatbot has no registered domain yet, so its chat widget does not answer. Register this site’s domain in your Haman panel (My chatbots → Register domain)."
 msgstr "متصل است، اما این چت‌بات هنوز دامنه‌ی ثبت‌شده ندارد و ویجت گفتگویش پاسخ نمی‌دهد. دامنه‌ی این سایت را در پنل هامان ثبت کنید (چت‌بات‌های من ← ثبت دامنه)."
+
+msgid "The live site still shows another chatbot — a cached copy of the page. Clear the site’s cache so the change takes effect."
+msgstr "سایت زنده هنوز چت‌بات دیگری را نشان می‌دهد — یک نسخه‌ی کش‌شده‌ی صفحه. کش سایت را پاک کنید تا تغییر اعمال شود."
+
+msgid "Clear the site’s cache so the change takes effect."
+msgstr "کش سایت را پاک کنید تا تغییر اعمال شود."
+
+msgid "Clearing it automatically failed for: %s."
+msgstr "پاک کردن خودکار برای این‌ها انجام نشد: %s."
+
+msgid "Visitors may otherwise keep seeing the previous chatbot until the cached pages expire."
+msgstr "وگرنه بازدیدکننده‌ها تا منقضی شدن صفحه‌های کش‌شده ممکن است همچنان چت‌بات قبلی را ببینند."
+
+msgid "The page cache was cleared automatically (%s), so visitors get the new chatbot."
+msgstr "کش صفحه‌ها خودکار پاک شد (%s) و بازدیدکننده‌ها چت‌بات جدید را می‌بینند."
