@@ -51,4 +51,26 @@ return [
     'field_contact_address' => 'Address',
     'field_contact_phone' => 'Phone',
     'field_contact_email' => 'Email',
+
+    // ── 2026-11 landing redesign: every section, images, validation ─────
+    'tab_header_footer' => 'Menu & footer',
+    'tab_about' => 'What it is',
+    'tab_demo' => 'Demo',
+    'tab_why' => 'Why Haman',
+    'tab_pricing' => 'Pricing',
+    'tab_signup' => 'Signup form',
+
+    'default_hint' => 'Default: :value',
+    'marker_hint' => 'To colour part of a heading, put it between [[ and ]] — e.g. A [[conversation]]. HTML is not accepted.',
+    'empty_hint' => 'Leave empty to restore the default text.',
+    'error_too_long' => 'At most :max characters.',
+    'error_marker' => 'Every [[ needs a matching ]].',
+    'error_placeholder' => 'This text must keep :names — the real number is written in its place.',
+    'error_unsafe_svg' => 'This SVG contains script or active content and cannot be used.',
+
+    'image_hero' => 'Hero image',
+    'image_demo' => 'Demo section image',
+    'image_why' => '“Why” section image',
+    'image_help' => 'jpg, png, webp or svg, up to :kb KB. Suggested ratio :ratio. Leave empty to show the default image — the page never shows an empty frame.',
+    'image_default' => 'Current image: the default',
 ];

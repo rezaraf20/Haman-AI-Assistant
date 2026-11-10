@@ -3,6 +3,8 @@ namespace App\Support;
 
 use App\Models\PlatformSetting;
 use Illuminate\Support\Facades\Lang;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\HtmlString;
 
 /**
  * Landing-page and legal-page copy, editable from the admin panel's "Site
@@ -44,27 +46,130 @@ class LandingContent
     public const LOCALES = ['fa', 'en'];
 
     /**
-     * Exactly the four sections asked for: headline/subtitle, features,
-     * how-it-works (the three-step "integrations" block), final CTA. The
-     * rest of landing.php — nav labels, the live conversation demo tabs,
-     * pricing/signup copy, footer boilerplate — is UI chrome, not marketing
-     * copy, and stays code-only.
+     * Every line of lang/{fa,en}/landing.php is editable from the panel,
+     * grouped the way the page itself is laid out (one admin tab per
+     * section). The only lines NOT here are faq_q1..7/faq_a1..7: the FAQ is
+     * a variable-length list (faq() below), and those numbered keys are only
+     * its built-in default. LandingContentKeysTest holds LANDING_KEYS, the
+     * lang files and SECTIONS to each other, so a key added to landing.php
+     * and forgotten here fails a test instead of silently being code-only.
      */
+    public const SECTIONS = [
+        'header_footer' => [
+            'brand', 'nav_features', 'nav_how', 'nav_pricing', 'nav_faq', 'nav_login', 'nav_cta',
+            'nav_lang_fa', 'nav_lang_en', 'footer_tagline', 'footer_login', 'footer_rights',
+        ],
+        'hero' => [
+            'tagline', 'hero_title', 'hero_subtitle', 'hero_cta', 'hero_cta_secondary', 'hero_note',
+            'hero_demo_customer', 'hero_demo_bot_intro', 'hero_demo_product_name', 'hero_demo_product_price',
+            'hero_demo_product_stock', 'hero_demo_add_to_cart', 'image_hero_alt',
+        ],
+        'about' => [
+            'about_eyebrow', 'about_title', 'about_body1', 'about_body2', 'panel_q', 'panel_a',
+            'p1', 'p1p', 'p2', 'p2p', 'p3', 'p3p',
+        ],
+        'features' => [
+            'features_eyebrow', 'features_title', 'features_subtitle',
+            'feature1_title', 'feature1_body', 'feature2_title', 'feature2_body',
+            'feature3_title', 'feature3_body', 'feature4_title', 'feature4_body',
+            'feature5_title', 'feature5_body', 'feature6_title', 'feature6_body',
+        ],
+        'demo' => [
+            'demo_title', 'demo_head', 'demo_sub',
+            'demo_tab_sales', 'demo_sales_customer', 'demo_sales_bot',
+            'demo_tab_compare', 'demo_compare_customer', 'demo_compare_bot',
+            'demo_tab_gap', 'demo_gap_note', 'image_demo_alt',
+        ],
+        'why' => ['why_eyebrow', 'why_title', 'why1', 'why2', 'why3', 'why4', 'image_why_alt'],
+        'how_it_works' => [
+            'how_eyebrow', 'integrations_title', 'integrations_subtitle', 'integrations_wp', 'integrations_woo',
+            'integrations_step1_title', 'integrations_step1_body',
+            'integrations_step2_title', 'integrations_step2_body',
+            'integrations_step3_title', 'integrations_step3_body',
+        ],
+        'pricing' => [
+            'pricing_eyebrow', 'pricing_title', 'pricing_subtitle', 'pricing_per_month', 'pricing_cta',
+            'pricing_empty', 'pricing_coming_soon', 'pricing_popular',
+            'pricing_chatbots', 'pricing_tokens', 'pricing_documents', 'pricing_free_line', 'pricing_enterprise_note',
+            'tool_compare_title', 'tool_compare_feature', 'tool_compare_yes', 'tool_compare_no',
+            'types_title', 'types_subtitle',
+        ],
+        'signup' => [
+            'signup_title', 'signup_subtitle', 'signup_name', 'signup_email', 'signup_country',
+            'signup_country_placeholder', 'signup_country_help', 'signup_password', 'signup_password_confirm',
+            'signup_submit', 'signup_phone_alternative', 'signup_email_disabled', 'signup_have_account',
+        ],
+        'faq' => ['faq_title', 'faq_head'],
+        'final_cta' => ['final_cta_title', 'final_cta_subtitle', 'final_cta_button', 'cta_plans'],
+    ];
+
+    /** SECTIONS, flattened — the one list applyOverrides()/set() accept. */
     public const LANDING_KEYS = [
-        'hero_title', 'hero_subtitle',
-        'features_title', 'features_subtitle',
-        'feature1_title', 'feature1_body',
-        'feature2_title', 'feature2_body',
-        'feature3_title', 'feature3_body',
-        'feature4_title', 'feature4_body',
-        'feature5_title', 'feature5_body',
-        'feature6_title', 'feature6_body',
-        'integrations_title', 'integrations_subtitle',
+        'brand', 'nav_features', 'nav_how', 'nav_pricing', 'nav_faq', 'nav_login', 'nav_cta',
+        'nav_lang_fa', 'nav_lang_en', 'footer_tagline', 'footer_login', 'footer_rights',
+        'tagline', 'hero_title', 'hero_subtitle', 'hero_cta', 'hero_cta_secondary', 'hero_note',
+        'hero_demo_customer', 'hero_demo_bot_intro', 'hero_demo_product_name', 'hero_demo_product_price',
+        'hero_demo_product_stock', 'hero_demo_add_to_cart', 'image_hero_alt',
+        'about_eyebrow', 'about_title', 'about_body1', 'about_body2', 'panel_q', 'panel_a',
+        'p1', 'p1p', 'p2', 'p2p', 'p3', 'p3p',
+        'features_eyebrow', 'features_title', 'features_subtitle',
+        'feature1_title', 'feature1_body', 'feature2_title', 'feature2_body',
+        'feature3_title', 'feature3_body', 'feature4_title', 'feature4_body',
+        'feature5_title', 'feature5_body', 'feature6_title', 'feature6_body',
+        'demo_title', 'demo_head', 'demo_sub',
+        'demo_tab_sales', 'demo_sales_customer', 'demo_sales_bot',
+        'demo_tab_compare', 'demo_compare_customer', 'demo_compare_bot',
+        'demo_tab_gap', 'demo_gap_note', 'image_demo_alt',
+        'why_eyebrow', 'why_title', 'why1', 'why2', 'why3', 'why4', 'image_why_alt',
+        'how_eyebrow', 'integrations_title', 'integrations_subtitle', 'integrations_wp', 'integrations_woo',
         'integrations_step1_title', 'integrations_step1_body',
         'integrations_step2_title', 'integrations_step2_body',
         'integrations_step3_title', 'integrations_step3_body',
-        'final_cta_title', 'final_cta_subtitle', 'final_cta_button',
+        'pricing_eyebrow', 'pricing_title', 'pricing_subtitle', 'pricing_per_month', 'pricing_cta',
+        'pricing_empty', 'pricing_coming_soon', 'pricing_popular',
+        'pricing_chatbots', 'pricing_tokens', 'pricing_documents', 'pricing_free_line', 'pricing_enterprise_note',
+        'tool_compare_title', 'tool_compare_feature', 'tool_compare_yes', 'tool_compare_no',
+        'types_title', 'types_subtitle',
+        'signup_title', 'signup_subtitle', 'signup_name', 'signup_email', 'signup_country',
+        'signup_country_placeholder', 'signup_country_help', 'signup_password', 'signup_password_confirm',
+        'signup_submit', 'signup_phone_alternative', 'signup_email_disabled', 'signup_have_account',
+        'faq_title', 'faq_head',
+        'final_cta_title', 'final_cta_subtitle', 'final_cta_button', 'cta_plans',
     ];
+
+    /**
+     * Headings that may carry the [[...]] emphasis marker (rendered as
+     * <span class="hl">). Everywhere else a marker is stripped by plain().
+     */
+    public const RICH_KEYS = [
+        'hero_title', 'about_title', 'features_title', 'demo_head',
+        'why_title', 'integrations_title', 'faq_head', 'final_cta_title',
+    ];
+
+    /** Menu items, buttons, badges, tab and field labels: one line in a tight spot. */
+    public const SHORT_KEYS = [
+        'brand', 'nav_features', 'nav_how', 'nav_pricing', 'nav_faq', 'nav_login', 'nav_cta',
+        'nav_lang_fa', 'nav_lang_en', 'footer_login',
+        'hero_cta', 'hero_cta_secondary', 'hero_demo_product_price', 'hero_demo_product_stock', 'hero_demo_add_to_cart',
+        'about_eyebrow', 'features_eyebrow', 'why_eyebrow', 'how_eyebrow', 'pricing_eyebrow',
+        'p1', 'p1p', 'p2', 'p2p', 'p3', 'p3p',
+        'demo_tab_sales', 'demo_tab_compare', 'demo_tab_gap',
+        'integrations_wp', 'integrations_woo',
+        'pricing_per_month', 'pricing_cta', 'pricing_popular',
+        'tool_compare_feature', 'tool_compare_yes', 'tool_compare_no',
+        'signup_name', 'signup_email', 'signup_country', 'signup_password', 'signup_password_confirm', 'signup_submit',
+        'final_cta_button', 'cta_plans',
+    ];
+
+    public const MAX_SHORT = 40;
+    public const MAX_HEADING = 160;
+    public const MAX_TEXT = 600;
+
+    public const IMAGE_SLOTS = ['hero', 'demo', 'why'];
+    /** On Brand::DISK (served at /brand/); uploads go under IMAGE_DIR/uploads, defaults ship in public/brand/landing. */
+    public const IMAGE_DIR = 'landing';
+    public const IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'];
+    public const IMAGE_MAX_KB = 1024;
 
     public const LEGAL_PAGES = ['about', 'contact', 'terms', 'privacy'];
 
@@ -132,12 +237,147 @@ class LandingContent
     public static function get(string $key, string $locale): string
     {
         $content = self::content();
-        return $content['landing'][$key][$locale] ?? Lang::get("landing.{$key}", [], $locale);
+        $value = $content['landing'][$key][$locale] ?? null;
+        return ($value !== null && $value !== '') ? $value : self::fallback($key, $locale);
+    }
+
+    /** The lang-file default, read from the file itself — never the translator, which applyOverrides() may already have patched this request. */
+    public static function fallback(string $key, string $locale): string
+    {
+        static $files = [];
+        $files[$locale] ??= (array) require lang_path("{$locale}/landing.php");
+        return (string) ($files[$locale][$key] ?? "landing.{$key}");
+    }
+
+    public static function maxLength(string $key): int
+    {
+        if (in_array($key, self::SHORT_KEYS, true)) return self::MAX_SHORT;
+        if ($key === 'tagline' || preg_match('/(_title|_head|_alt)$/', $key)) return self::MAX_HEADING;
+        return self::MAX_TEXT;
+    }
+
+    /** ":count", ":chatbots" … — the replacements the view passes in. An override that drops one would print a blank where a number belongs. */
+    public static function placeholders(string $text): array
+    {
+        preg_match_all('/(?<![\p{L}\p{N}_]):([a-z][a-z_]*)/u', $text, $m);
+        $names = array_values(array_unique($m[1]));
+        sort($names);
+        return $names;
+    }
+
+    /**
+     * Why $value cannot be saved for $key/$locale, or null when it can.
+     * Empty is always allowed: it means "back to the default".
+     */
+    public static function validationError(string $key, string $locale, ?string $value): ?string
+    {
+        $value = trim((string) $value);
+        if ($value === '') return null;
+
+        $max = self::maxLength($key);
+        if (mb_strlen($value) > $max) {
+            return __('content.error_too_long', ['max' => $max]);
+        }
+        if (substr_count($value, '[[') !== substr_count($value, ']]')) {
+            return __('content.error_marker');
+        }
+        $missing = array_diff(self::placeholders(self::fallback($key, $locale)), self::placeholders($value));
+        if ($missing) {
+            return __('content.error_placeholder', ['names' => implode('، ', array_map(fn ($n) => ":{$n}", $missing))]);
+        }
+        return null;
+    }
+
+    // ── Rendering ───────────────────────────────────────────────────────
+
+    /**
+     * For a heading: the text is HTML-escaped FIRST, and only then is the
+     * [[...]] marker turned into <span class="hl">…</span> — so nothing an
+     * admin types can ever reach the page as markup; the marker is the only
+     * formatting there is.
+     */
+    public static function rich(?string $text): HtmlString
+    {
+        $escaped = e((string) $text);
+        return new HtmlString(preg_replace('/\[\[(.+?)\]\]/su', '<span class="hl">$1</span>', $escaped));
+    }
+
+    /** Everywhere a heading's markup cannot go (the <title>, OG/Twitter tags, aria labels) and every non-heading key: the marker is dropped, the words kept. */
+    public static function plain(?string $text): string
+    {
+        return str_replace(['[[', ']]'], '', (string) $text);
+    }
+
+    // ── Images ─────────────────────────────────────────────────────────
+
+    public static function defaultImageUrl(string $slot): string
+    {
+        return '/brand/' . self::IMAGE_DIR . "/{$slot}.webp";
+    }
+
+    /** Disk-relative path of an uploaded image (Brand::DISK), or null while the shipped default is in use. */
+    public static function imagePath(string $slot): ?string
+    {
+        $path = self::content()['images'][$slot] ?? null;
+        return is_string($path) && $path !== '' ? $path : null;
+    }
+
+    public static function imageUrl(string $slot): string
+    {
+        $path = self::imagePath($slot);
+        return $path ? '/brand/' . ltrim($path, '/') : self::defaultImageUrl($slot);
+    }
+
+    public static function imageAlt(string $slot, ?string $locale = null): string
+    {
+        return self::plain(self::get("image_{$slot}_alt", $locale ?? app()->getLocale()));
+    }
+
+    /**
+     * Points a slot at a newly uploaded file (or back at the default with
+     * null) and deletes the upload it replaces. Only files under
+     * IMAGE_DIR/uploads are ever deleted — never a shipped default.
+     */
+    public static function setImage(string $slot, ?string $path): bool
+    {
+        if (!in_array($slot, self::IMAGE_SLOTS, true)) {
+            throw new \InvalidArgumentException("Unknown landing image slot: {$slot}");
+        }
+        $path = $path !== null && trim($path) !== '' ? ltrim(trim($path), '/') : null;
+        $old = self::imagePath($slot);
+        if ($path === $old) return false;
+
+        $settings = PlatformSetting::current();
+        $content = $settings->values['content'] ?? [];
+        if ($path === null) {
+            unset($content['images'][$slot]);
+            if (empty($content['images'])) unset($content['images']);
+        } else {
+            $content['images'][$slot] = $path;
+        }
+        self::persist($settings, $content);
+
+        if ($old && str_starts_with($old, self::IMAGE_DIR . '/uploads/') && !in_array($old, array_filter(array_map(self::imagePath(...), self::IMAGE_SLOTS)), true)) {
+            Storage::disk(Brand::DISK)->delete($old);
+        }
+        return true;
+    }
+
+    /** An SVG is served from our own origin, so one carrying script must never be accepted, even from an admin. */
+    public static function svgIsUnsafe(string $svg): bool
+    {
+        return (bool) preg_match('/<\s*script|<\s*foreignObject|\son[a-z]+\s*=|javascript:|<\s*iframe|<\s*embed|<\s*object/i', $svg);
     }
 
     public static function set(string $key, string $locale, ?string $value): bool
     {
+        if (!in_array($key, self::LANDING_KEYS, true)) {
+            throw new \InvalidArgumentException("Not an editable landing key: {$key}");
+        }
         $value = trim((string) $value);
+        if ($error = self::validationError($key, $locale, $value)) {
+            throw new \InvalidArgumentException($error);
+        }
         if ($value === self::get($key, $locale)) return false;
 
         $settings = PlatformSetting::current();
@@ -256,6 +496,12 @@ class LandingContent
     // ── internals ────────────────────────────────────────────────────────
 
     private static ?array $cache = null;
+
+    /** Drops the memoized row — for tests, whose RefreshDatabase rollback never touches this static (same as Settings::forget()). */
+    public static function forget(): void
+    {
+        self::$cache = null;
+    }
 
     private static function content(): array
     {

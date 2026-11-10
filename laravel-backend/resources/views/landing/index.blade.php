@@ -1,14 +1,24 @@
 @php
     $rtl = app()->getLocale() === 'fa';
-    $otherLocale = $rtl ? 'en' : 'fa';
+    // Every visible string goes through one of these two. $t: plain text,
+    // Blade-escaped by {{ }}, with any [[...]] emphasis marker dropped.
+    // $h: a heading — escaped FIRST inside LandingContent::rich(), and only
+    // then is [[...]] turned into <span class="hl">. Nothing an admin types
+    // in the Site content page can reach this page as HTML.
+    $t = fn (string $key, array $replace = []) => \App\Support\LandingContent::plain(__("landing.{$key}", $replace));
+    $h = fn (string $key) => \App\Support\LandingContent::rich(__("landing.{$key}"));
+    $metaTitle = $t('brand') . ' — ' . $t('hero_title');
+    $steps = $rtl ? ['۱', '۲', '۳'] : ['1', '2', '3'];
+    $img = fn (string $slot) => \App\Support\LandingContent::imageUrl($slot);
+    $alt = fn (string $slot) => \App\Support\LandingContent::imageAlt($slot);
 @endphp
 <!DOCTYPE html>
 <html lang="{{ app()->getLocale() }}" dir="{{ $rtl ? 'rtl' : 'ltr' }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>{{ __('landing.brand') }} — {{ __('landing.hero_title') }}</title>
-    <meta name="description" content="{{ __('landing.hero_subtitle') }}">
+    <title>{{ $metaTitle }}</title>
+    <meta name="description" content="{{ $t('hero_subtitle') }}">
     <link rel="canonical" href="{{ \App\Support\BrandDomains::landingUrl('/') }}">
 
     <link rel="icon" href="{{ \App\Support\BrandDomains::landingUrl('/favicon.ico') }}" sizes="any">
@@ -19,19 +29,19 @@
          og:locale follows the rendered language, since the same URL serves
          both. The card is generated from resources/og/og-image.svg. --}}
     <meta property="og:type" content="website">
-    <meta property="og:site_name" content="{{ __('landing.brand') }}">
-    <meta property="og:title" content="{{ __('landing.brand') }} — {{ __('landing.hero_title') }}">
-    <meta property="og:description" content="{{ __('landing.hero_subtitle') }}">
+    <meta property="og:site_name" content="{{ $t('brand') }}">
+    <meta property="og:title" content="{{ $metaTitle }}">
+    <meta property="og:description" content="{{ $t('hero_subtitle') }}">
     <meta property="og:url" content="{{ \App\Support\BrandDomains::landingUrl('/') }}">
     <meta property="og:locale" content="{{ $rtl ? 'fa_IR' : 'en_US' }}">
     <meta property="og:image" content="{{ \App\Support\BrandDomains::landingUrl('/og/og-image.png') }}">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
-    <meta property="og:image:alt" content="{{ __('landing.brand') }} — {{ __('landing.hero_title') }}">
+    <meta property="og:image:alt" content="{{ $metaTitle }}">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:image" content="{{ \App\Support\BrandDomains::landingUrl('/og/og-image.png') }}">
-    <meta name="twitter:title" content="{{ __('landing.brand') }} — {{ __('landing.hero_title') }}">
-    <meta name="twitter:description" content="{{ __('landing.hero_subtitle') }}">
+    <meta name="twitter:title" content="{{ $metaTitle }}">
+    <meta name="twitter:description" content="{{ $t('hero_subtitle') }}">
 
     {{-- A font preload was tried here and measured out: it shaved latency
          but moved the Vazirmatn/Poppins swap earlier, into the same window
@@ -41,479 +51,591 @@
          correct — here, measured, it was not. --}}
     <link rel="stylesheet" href="/css/brand.css">
     <style>
+        /* Violet on purpose (the 2026-11 redesign): the real brand gradient
+           stays on the mark, the step numbers and the ticks; #6D28D9 is the
+           interactive colour — buttons, links, emphasis — at 6.1:1 on white.
+           Light only, like the rest of the public site. */
         :root {
-            --ink: var(--brand-navy);
-            --muted: var(--brand-muted);
-            --line: #E6E9F2;
-            --bg: #ffffff;
-            --soft: #F6F8FC;
-            --radius: 16px;
-            --radius-sm: 10px;
-            --shadow: 0 1px 2px rgba(0,16,48,.04), 0 8px 24px rgba(0,16,48,.06);
+            --brand: #6D28D9;
+            --brand-deep: #2E1065;
+            --grad: linear-gradient(135deg, #0098F8 0%, #4870F8 50%, #7050F8 100%);
+            --ink: #16123A;
+            --muted: #615C8A;
+            --subtle: #8E89B3;
+            --surface: #FFFFFF;
+            --tint: #F6F3FE;
+            --tint-2: #EDE8FD;
+            --line: #E7E2F8;
+            --line-strong: #D6CEF3;
+            --ok: #0D9488;
+            --shadow: 0 1px 2px rgba(22,18,58,.04), 0 12px 28px -12px rgba(46,16,101,.18);
+            --shadow-lg: 0 2px 4px rgba(22,18,58,.04), 0 28px 60px -20px rgba(46,16,101,.26);
+            --r: 18px; --r-lg: 26px;
+            --fa: "Vazirmatn", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+            --en: "Poppins", "Vazirmatn", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+            color-scheme: light;
         }
         * { box-sizing: border-box; }
-        html { scroll-behavior: smooth; }
+        html { scroll-behavior: smooth; scroll-padding-top: 76px; }
         body {
-            margin: 0; background: var(--bg); color: var(--ink);
-            font-family: var(--font-body);
-            line-height: 1.7; font-size: 16px; overflow-x: hidden;
+            margin: 0; background: var(--surface); color: var(--ink);
+            font-family: var(--fa); font-size: 16px; line-height: 1.85;
+            -webkit-font-smoothing: antialiased;
         }
-        a { color: inherit; text-decoration: none; }
-        img, svg { max-width: 100%; }
-        .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
-        h1, h2, h3, h4 { font-family: var(--font-heading); line-height: 1.3; margin: 0 0 .5em; font-weight: 600; }
-        h1 { font-size: clamp(1.9rem, 4.2vw, 3.1rem); font-weight: 700; letter-spacing: -.02em; }
-        h2 { font-size: clamp(1.5rem, 2.8vw, 2.1rem); }
-        p { margin: 0 0 1em; }
+        html[dir="ltr"] body { font-family: var(--en); line-height: 1.7; }
+        img { max-width: 100%; }
+        .band { width: 100%; }
+        .band.tinted { background: linear-gradient(180deg, #FBFAFF 0%, var(--tint) 50%, #FBFAFF 100%); }
+        .band.plain { background: var(--surface); }
+        .wrap {
+            max-width: 1120px; margin-inline: auto;
+            padding-left: max(16px, env(safe-area-inset-left, 0px));
+            padding-right: max(16px, env(safe-area-inset-right, 0px));
+            padding-block: 84px;
+        }
+        .wrap.tight { padding-block: 56px; }
+        h1, h2, h3 { margin: 0; text-wrap: balance; line-height: 1.45; font-weight: 800; letter-spacing: -.01em; }
+        html[dir="ltr"] h1, html[dir="ltr"] h2, html[dir="ltr"] h3 { font-weight: 700; }
+        h1 { font-size: clamp(28px, 4.6vw, 46px); line-height: 1.4; }
+        h2 { font-size: clamp(23px, 3.1vw, 34px); }
+        h3 { font-size: 18px; font-weight: 700; line-height: 1.6; }
+        p { margin: 0; }
+        a { color: var(--brand); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        :focus-visible { outline: 2.5px solid var(--brand); outline-offset: 3px; border-radius: 6px; }
+        .hl { color: var(--brand); }
+        .lead { color: var(--muted); font-size: clamp(15px, 1.5vw, 17.5px); }
         .muted { color: var(--muted); }
-        .eyebrow { font-family: var(--font-heading); font-weight: 600; font-size: .82rem; letter-spacing: .04em; text-transform: uppercase; color: var(--brand-indigo); margin-bottom: .5em; }
 
-        .gradient-text { background: var(--brand-gradient); -webkit-background-clip: text; background-clip: text; color: transparent; }
+        .eyebrow { display: inline-block; background: var(--tint-2); color: var(--brand);
+            font-size: 13px; font-weight: 700; padding: 7px 16px; border-radius: 999px; line-height: 1.6; }
+        .sec-head { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px; margin-bottom: 46px; }
+        .sec-head p { max-width: 62ch; }
+
+        .btn { display: inline-flex; align-items: center; gap: 9px; justify-content: center;
+            font-family: inherit; font-size: 15.5px; font-weight: 700; line-height: 1.35; text-align: center; max-width: 100%;
+            padding: 15px 28px; border-radius: 14px; border: 1.5px solid transparent; cursor: pointer;
+            transition: transform .16s ease, box-shadow .16s ease, background .16s ease; }
+        .btn:hover { text-decoration: none; transform: translateY(-1.5px); }
+        .btn-primary { background: var(--brand); color: #fff; box-shadow: 0 10px 22px -8px rgba(109,40,217,.6); }
+        .btn-primary:hover { background: #5B21B6; }
+        .btn-ghost { background: var(--surface); color: var(--ink); border-color: var(--line-strong); box-shadow: var(--shadow); }
+        .btn-ghost:hover { border-color: var(--brand); color: var(--brand); }
+        .btn-light { background: #fff; color: var(--brand-deep); }
+        .btn-outline-light { background: transparent; color: #fff; border-color: rgba(255,255,255,.4); }
+        .btn-outline-light:hover { background: rgba(255,255,255,.1); }
+        .btn-block { width: 100%; }
+        .btn svg { width: 17px; height: 17px; flex: none; }
+        html[dir="ltr"] .btn .arrow { transform: scaleX(-1); }
 
         /* ── nav ─────────────────────────────────────────────────────── */
-        header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 40; background: rgba(255,255,255,.86); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
-        header .wrap { display: flex; align-items: center; gap: 28px; height: 68px; }
-        nav.links { display: flex; gap: 26px; margin-inline-start: auto; align-items: center; }
-        nav.links a.nav-link { color: var(--muted); font-size: .94rem; font-weight: 500; font-family: var(--font-heading); }
-        nav.links a.nav-link:hover { color: var(--ink); }
-        .lang-switch { display: flex; gap: 4px; padding: 3px; background: var(--soft); border-radius: 99px; font-size: .82rem; font-family: var(--font-heading); font-weight: 600; }
-        .lang-switch a { padding: 5px 12px; border-radius: 99px; color: var(--muted); }
-        .lang-switch a.active { background: #fff; color: var(--ink); box-shadow: var(--shadow); }
-        @media (max-width: 860px) { nav.links { display: none; } }
-        /* Pre-existing bug, found while checking the pricing page at phone
-           width for the tool-comparison table below: nav.links hiding above
-           is the ONLY narrow-width rule this header had. The language
-           switcher and the separate login link are nav.links' SIBLINGS, not
-           its children, so hiding nav.links alone doesn't free any space —
-           logo + two-pill lang switch + login link + CTA button all still
-           compete for one row, and the CTA button loses, overflowing off
-           the left edge (confirmed via document.documentElement.scrollWidth
-           exceeding clientWidth at 390px, independent of anything the new
-           table/cards below do). Hiding the login link here is safe: the
-           same destination is also reachable from every pricing card's own
-           "shuru" CTA and the page's own sign-up form. */
-        @media (max-width: 640px) {
-            header .wrap > a.nav-link { display: none; }
+        .nav-band { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+            background: rgba(255,255,255,.88); backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+        body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 21; background: #fff; }
+        .nav { display: flex; align-items: center; gap: 24px; padding-block: 14px; max-width: 1120px; margin-inline: auto;
+            padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+        .brand { display: flex; align-items: center; gap: 11px; font-weight: 800; font-size: 19px; color: var(--ink); flex: none; }
+        .brand:hover { text-decoration: none; }
+        .brand .mark { width: 34px; height: 40px; flex: none; object-fit: contain; }
+        .nav-links { display: flex; gap: 26px; margin-inline-start: auto; font-size: 15px; font-weight: 600; }
+        .nav-links a { color: var(--muted); }
+        .nav-links a:hover { color: var(--brand); text-decoration: none; }
+        .nav .btn { padding: 11px 20px; font-size: 14.5px; white-space: nowrap; flex: none; }
+        .lang { display: inline-flex; background: var(--tint-2); border-radius: 11px; padding: 3px; gap: 2px; flex: none; }
+        .lang a { font-size: 13.5px; font-weight: 700; padding: 7px 13px; border-radius: 8px; line-height: 1.3;
+            color: var(--brand); transition: background .15s ease; }
+        .lang a:hover { text-decoration: none; background: rgba(255,255,255,.6); }
+        .lang a[aria-current="true"] { background: #fff; box-shadow: 0 1px 3px rgba(46,16,101,.18); }
+        @media (max-width: 980px) { .nav-links { display: none; } .lang { margin-inline-start: auto; } }
+        @media (max-width: 620px) {
+            .nav .btn-ghost { display: none; } .nav { gap: 10px; }
+            .nav .btn { padding: 11px 15px; font-size: 14px; } .lang a { padding: 6px 10px; font-size: 13px; }
         }
-
-        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 22px; border-radius: 10px; font-weight: 600; font-size: .95rem; font-family: var(--font-heading); border: 1px solid transparent; cursor: pointer; white-space: nowrap; transition: transform .15s ease, box-shadow .15s ease; }
-        .btn-primary { background: var(--brand-gradient); color: #fff; box-shadow: 0 6px 20px rgba(72,112,248,.28); }
-        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 28px rgba(72,112,248,.36); }
-        .btn-ghost { border-color: var(--line); color: var(--ink); background: #fff; }
-        .btn-ghost:hover { border-color: var(--brand-indigo); }
-        .btn-block { width: 100%; }
-
-        section { padding: 88px 0; }
-        section.tight { padding: 64px 0; }
-        /* The layout/style recalculation cost Lighthouse's mobile CPU
-           throttling charges for a page this long was the single largest
-           item in every profile taken while building this page (measured
-           with a clean browser -- see brand.css's own note on a local
-           antivirus that had been quietly inflating that number further).
-           content-visibility skips layout and paint for a section until it
-           is close to the viewport, which is exactly the "no CLS" case
-           content-visibility promises when paired with an estimated
-           contain-intrinsic-size: the browser reserves that height up
-           front, so nothing jumps once the real content is measured. The
-           estimates below are each section's actual rendered height at a
-           common desktop width, not round numbers. */
-        #features, #demo, #integrations, #pricing, #signup, #faq { content-visibility: auto; }
-        #features { contain-intrinsic-size: 1200px 620px; }
-        #demo { contain-intrinsic-size: 1200px 620px; }
-        #integrations { contain-intrinsic-size: 1200px 460px; }
-        #pricing { contain-intrinsic-size: 1200px 900px; }
-        #signup { contain-intrinsic-size: 1200px 520px; }
-        #faq { contain-intrinsic-size: 1200px 700px; }
-        .lead { font-size: 1.15rem; color: var(--muted); max-width: 58ch; }
-        .center { text-align: center; margin-inline: auto; }
-        .grid { display: grid; gap: 22px; }
-        @media (min-width: 760px) {
-            .grid-2 { grid-template-columns: repeat(2, 1fr); }
-            .grid-3 { grid-template-columns: repeat(3, 1fr); }
-        }
-
-        .card { border: 1px solid var(--line); border-radius: var(--radius); padding: 26px; background: #fff; box-shadow: var(--shadow); }
-        .card h3 { font-size: 1.05rem; display: flex; align-items: center; gap: 10px; }
-        .card p { margin: 0; color: var(--muted); font-size: .95rem; }
-        .card .icon { width: 38px; height: 38px; border-radius: 10px; background: var(--brand-gradient); display: flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0; font-size: 1rem; }
-
-        .soft { background: var(--soft); }
+        @media (max-width: 430px) { .brand > span { display: none; } .nav { gap: 8px; } }
 
         /* ── hero ────────────────────────────────────────────────────── */
-        .hero-grid { display: grid; gap: 48px; align-items: center; }
-        @media (min-width: 940px) { .hero-grid { grid-template-columns: 1.05fr .95fr; } }
-        .hero-actions { display: flex; gap: 12px; margin-top: 30px; flex-wrap: wrap; }
+        .hero-band { background:
+            radial-gradient(900px 480px at 88% -5%, #EDE4FF 0%, rgba(237,228,255,0) 62%),
+            radial-gradient(760px 420px at 6% 8%, #E3EEFF 0%, rgba(227,238,255,0) 60%),
+            linear-gradient(180deg, #FBFAFF, #FFFFFF); border-bottom: 1px solid var(--line); }
+        .hero { display: grid; grid-template-columns: 1.05fr .95fr; gap: 52px; align-items: center; padding-block: 72px 84px; }
+        .hero-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 22px; min-width: 0; }
+        .hero-actions { display: flex; gap: 13px; flex-wrap: wrap; }
+        .hero-note { font-size: 14px; color: var(--subtle); display: flex; align-items: center; gap: 8px; }
+        .hero-note svg { width: 16px; height: 16px; flex: none; color: var(--ok); }
+        .hero-art { position: relative; min-width: 0; }
+        @media (max-width: 900px) { .hero { grid-template-columns: 1fr; gap: 42px; padding-block: 48px 60px; } .hero-art { order: -1; } }
 
-        /* Chat widget mockup: a real conversation shape, animated with CSS
-           only — a typing indicator then a product card fading in — never a
-           video, so it stays crisp and costs nothing to keep in sync. */
-        .phone { max-width: 380px; margin-inline-start: auto; border-radius: 22px; background: #fff; border: 1px solid var(--line); box-shadow: 0 20px 60px rgba(0,16,48,.14), var(--shadow); overflow: hidden; }
-        .phone-bar { background: var(--brand-gradient); padding: 16px 18px; display: flex; align-items: center; gap: 10px; color: #fff; }
-        .phone-bar .dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,.9); }
-        .phone-bar strong { font-family: var(--font-heading); font-size: .95rem; }
-        /* Full opacity, not .85 -- the same AA reasoning as .cta-band p and
-           .popular-badge: small text on the gradient needs every bit of the
-           contrast solid white gives it, since it is too small to qualify
-           for the large-text exemption. */
-        .phone-bar span { font-size: .74rem; }
-        .phone-body { padding: 18px; display: flex; flex-direction: column; gap: 12px; min-height: 300px; }
-        .bubble { max-width: 84%; padding: 11px 14px; border-radius: 14px; font-size: .9rem; line-height: 1.55; animation: rise .45s ease both; }
-        .bubble.user { align-self: flex-end; background: var(--soft); border-end-end-radius: 4px; }
-        [dir="rtl"] .bubble.user { align-self: flex-start; }
-        .bubble.bot { align-self: flex-start; background: #fff; border: 1px solid var(--line); border-end-start-radius: 4px; }
-        [dir="rtl"] .bubble.bot { align-self: flex-end; }
-        .bubble.bot.delay1 { animation-delay: .9s; }
-        .bubble.bot.delay2 { animation-delay: 1.5s; }
-        .typing { display: inline-flex; gap: 4px; align-items: center; align-self: flex-start; animation: rise .3s ease .5s both, fadeout .3s ease .85s forwards; }
-        [dir="rtl"] .typing { align-self: flex-end; }
-        .typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--brand-indigo); opacity: .5; animation: blink 1s infinite ease-in-out; }
-        .typing span:nth-child(2) { animation-delay: .15s; }
-        .typing span:nth-child(3) { animation-delay: .3s; }
-        .product-card { align-self: flex-start; max-width: 88%; border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: flex; gap: 12px; align-items: center; animation: rise .45s ease 1.5s both; background: #fff; }
-        [dir="rtl"] .product-card { align-self: flex-end; }
-        .product-thumb { width: 52px; height: 52px; border-radius: 10px; background: var(--brand-gradient); flex-shrink: 0; }
-        .product-card .name { font-weight: 600; font-size: .88rem; font-family: var(--font-heading); }
-        .product-card .price { font-size: .84rem; color: var(--brand-indigo); font-weight: 600; }
-        .product-card .stock { font-size: .74rem; color: #16794c; }
-        .product-cta { margin-top: 8px; }
-        .product-cta button { width: 100%; border: none; background: var(--brand-gradient); color: #fff; padding: 8px; border-radius: 8px; font-size: .82rem; font-weight: 600; font-family: var(--font-heading); }
-        @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes blink { 0%, 80%, 100% { opacity: .3; } 40% { opacity: 1; } }
-        @keyframes fadeout { to { opacity: 0; height: 0; margin: 0; overflow: hidden; } }
-        @media (prefers-reduced-motion: reduce) {
-            .bubble, .typing, .product-card { animation: none !important; opacity: 1 !important; }
+        /* An admin-replaceable picture (Site content → images). Always a real
+           image — a shipped default until one is uploaded — so the public
+           page never shows an empty frame. Fixed aspect ratio + width/height
+           attributes: nothing shifts when it loads. */
+        .media { position: relative; width: 100%; border-radius: var(--r-lg); overflow: hidden;
+            background: linear-gradient(145deg, #EFE8FF, #E0EBFF); border: 1px solid var(--line); box-shadow: var(--shadow-lg); }
+        .media img { display: block; width: 100%; height: 100%; object-fit: cover; }
+        .media.hero-media { aspect-ratio: 1 / 1; max-width: 460px; margin-inline: auto; }
+        .media.wide { aspect-ratio: 4 / 3; }
+
+        .float { position: absolute; background: #fff; border: 1px solid var(--line); border-radius: 16px;
+            box-shadow: var(--shadow-lg); padding: 13px 16px; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 10px; line-height: 1.6; }
+        .float-q { top: 6%; inset-inline-start: -6px; max-width: 210px; }
+        .float-a { bottom: 7%; inset-inline-end: -6px; max-width: 240px; flex-direction: column; align-items: stretch; gap: 11px; padding: 14px; }
+        .av { width: 30px; height: 30px; border-radius: 9px; background: var(--tint-2); display: grid; place-items: center; flex: none; color: var(--brand); }
+        .av svg { width: 17px; height: 17px; }
+        .av.user { background: #E3EBFF; color: #3B5BDB; }
+        .mini-card { display: flex; gap: 11px; align-items: center; background: var(--tint); border-radius: 12px; padding: 10px; }
+        .mini-thumb { width: 46px; height: 46px; border-radius: 9px; background: linear-gradient(140deg, #D5CEFB, #C2D6FB); flex: none; display: grid; place-items: center; color: var(--brand); }
+        .mini-thumb svg { width: 22px; height: 22px; }
+        .mini-meta { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+        .mini-name { font-size: 12.5px; font-weight: 700; line-height: 1.5; }
+        .mini-row { display: flex; align-items: center; gap: 7px; font-size: 12px; flex-wrap: wrap; }
+        .mini-price { font-weight: 800; color: var(--brand); }
+        .stock { display: inline-flex; align-items: center; gap: 4px; color: var(--ok); font-weight: 700; font-size: 11.5px; }
+        .stock svg { width: 12px; height: 12px; }
+        .mini-cta { background: var(--brand); color: #fff; border-radius: 10px; text-align: center; font-size: 12.5px; font-weight: 700; padding: 9px; }
+        @media (max-width: 560px) {
+            /* Deviation from the design file, which stacked both cards under
+               the image: on a phone that pushed the headline ~750px down,
+               off the first screen. The hero image already shows the same
+               conversation, so the decorative cards step aside instead. */
+            .float-q, .float-a { display: none; }
+            .media.hero-media { aspect-ratio: 4 / 3; }
+            .hero { gap: 28px; padding-block: 28px 52px; }
         }
 
-        /* ── tabs ────────────────────────────────────────────────────── */
-        .tabbar { display: inline-flex; gap: 4px; padding: 4px; background: var(--soft); border-radius: 12px; margin-bottom: 28px; flex-wrap: wrap; }
-        .tabbar button { border: none; background: transparent; padding: 10px 18px; border-radius: 9px; font-family: var(--font-heading); font-weight: 600; font-size: .9rem; color: var(--muted); cursor: pointer; }
-        .tabbar button.active { background: #fff; color: var(--ink); box-shadow: var(--shadow); }
-        .tabpanel { display: none; }
-        .tabpanel.active { display: block; animation: rise .3s ease both; }
-        .demo-frame { border: 1px solid var(--line); border-radius: var(--radius); background: #fff; box-shadow: var(--shadow); overflow: hidden; }
-        .demo-frame .phone-body { min-height: 220px; }
-        .demo-frame img { display: block; width: 100%; height: auto; }
+        /* ── split sections ──────────────────────────────────────────── */
+        .split { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
+        .split.rev .split-art { order: -1; }
+        .split-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; min-width: 0; }
+        .split-art { min-width: 0; }
+        @media (max-width: 900px) { .split { grid-template-columns: 1fr; gap: 38px; } .split.rev .split-art { order: 0; } }
 
-        /* ── report mock (trends) ───────────────────────────────────── */
-        .mock-bar { background: var(--soft); border-bottom: 1px solid var(--line); padding: 12px 18px; font-size: .85rem; color: var(--muted); display: flex; justify-content: space-between; align-items: center; font-family: var(--font-heading); }
-        .tag { font-size: .72rem; background: #EEF2FC; color: var(--brand-indigo); padding: 3px 10px; border-radius: 99px; font-weight: 600; }
-        table { width: 100%; border-collapse: collapse; font-size: .9rem; }
-        th, td { text-align: start; padding: 10px 18px; border-bottom: 1px solid var(--line); }
-        th { color: var(--muted); font-weight: 600; font-size: .78rem; font-family: var(--font-heading); }
-        tr:last-child td { border-bottom: 0; }
-        .up { color: #16794c; font-weight: 600; }
-        .down { color: #b45309; font-weight: 600; }
+        .panel { background: #fff; border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow-lg); overflow: hidden; }
+        .panel-top { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, #FBFAFF, #fff); }
+        .panel-title { font-size: 14.5px; font-weight: 700; }
+        .panel-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; background: var(--tint); }
+        .bubble { max-width: 86%; padding: 12px 15px; border-radius: 16px; font-size: 14px; line-height: 1.8; }
+        .bubble.user { margin-inline-start: auto; background: var(--brand); color: #fff; border-end-end-radius: 5px; }
+        .bubble.bot { background: #fff; border: 1px solid var(--line); border-end-start-radius: 5px; }
+        .cards-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .pcard { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+        .pcard-img { aspect-ratio: 1 / 1; border-radius: 10px; background: linear-gradient(140deg, #E1DBFC, #CFDCFB); display: grid; place-items: center; color: var(--brand); }
+        .pcard-img svg { width: 26px; height: 26px; }
+        .pcard-name { font-size: 11.5px; font-weight: 700; line-height: 1.55; }
+        .pcard-price { font-size: 12px; font-weight: 800; color: var(--brand); }
+        @media (max-width: 430px) { .cards-row { grid-template-columns: repeat(2, 1fr); } }
 
-        /* ── integrations ───────────────────────────────────────────── */
-        .integrations-row { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; margin-bottom: 44px; }
-        .integration-badge { display: flex; align-items: center; gap: 12px; border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 26px; background: #fff; box-shadow: var(--shadow); font-family: var(--font-heading); font-weight: 600; }
-        .integration-badge .dot-icon { width: 34px; height: 34px; border-radius: 9px; background: var(--brand-gradient); }
-        .steps { display: grid; gap: 22px; counter-reset: step; }
-        @media (min-width: 760px) { .steps { grid-template-columns: repeat(3, 1fr); } }
-        .step { position: relative; padding-inline-start: 46px; }
-        [dir="rtl"] .step { padding-inline-start: 0; padding-inline-end: 46px; }
-        .step::before { counter-increment: step; content: counter(step); position: absolute; inset-inline-start: 0; top: 0; width: 32px; height: 32px; border-radius: 50%; background: var(--brand-gradient); color: #fff; display: flex; align-items: center; justify-content: center; font-family: var(--font-heading); font-weight: 700; font-size: .9rem; }
-        .step h4 { font-size: .98rem; margin-bottom: 4px; }
-        .step p { font-size: .9rem; }
+        /* ── cards / grid ────────────────────────────────────────────── */
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+        @media (max-width: 900px) { .grid-3 { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 620px) { .grid-3 { grid-template-columns: 1fr; } }
+        .card { background: #fff; border: 1px solid var(--line); border-radius: var(--r); padding: 26px 24px;
+            display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow); min-width: 0;
+            transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+        .card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); border-color: var(--line-strong); }
+        .card p { font-size: 14.5px; color: var(--muted); line-height: 1.85; }
+        .well { width: 48px; height: 48px; border-radius: 14px; background: var(--tint-2); display: grid; place-items: center; color: var(--brand); flex: none; }
+        .well svg { width: 23px; height: 23px; }
 
-        /* ── pricing ─────────────────────────────────────────────────── */
-        .price-grid { display: grid; gap: 22px; }
-        @media (min-width: 760px) { .price-grid { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); } }
-        .price { position: relative; border: 1px solid var(--line); border-radius: var(--radius); padding: 30px 26px; display: flex; flex-direction: column; background: #fff; box-shadow: var(--shadow); }
-        .price.popular { border-color: var(--brand-indigo); box-shadow: 0 12px 32px rgba(72,112,248,.18); }
-        /* Navy, not the gradient: at .74rem/700 this text is too small to
-           qualify for the WCAG large-text exemption, and white on the
-           gradient's own blue end is only 3.07:1 -- short of the 4.5:1 a
-           badge this size actually needs. White on navy is 18.8:1, and
-           navy is already a brand token, not a color invented for this. */
-        .price .popular-badge { position: absolute; top: -13px; inset-inline-start: 26px; background: var(--brand-navy); color: #fff; font-family: var(--font-heading); font-size: .74rem; font-weight: 700; padding: 5px 14px; border-radius: 99px; }
-        .price .amount { font-size: 2.1rem; font-weight: 700; letter-spacing: -.02em; font-family: var(--font-heading); }
-        .price ul { list-style: none; padding: 0; margin: 18px 0 26px; }
-        .price li { padding: 7px 0; color: var(--muted); font-size: .92rem; border-bottom: 1px dashed var(--line); }
-        .price li:last-child { border-bottom: 0; }
+        .proof { display: flex; flex-direction: column; gap: 14px; width: 100%; }
+        .proof-item { background: #fff; border: 1px solid var(--line); border-radius: var(--r); padding: 20px 22px; box-shadow: var(--shadow); }
+        .proof-tag { font-size: 12px; font-weight: 800; color: var(--brand); margin-bottom: 12px; display: block; }
+        .qa { display: flex; flex-direction: column; gap: 10px; }
+        .qa .bubble { max-width: 100%; }
+
+        .rail { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+        @media (max-width: 820px) { .rail { grid-template-columns: 1fr; } }
+        .step { background: #fff; border: 1px solid var(--line); border-radius: var(--r); padding: 26px 24px 24px;
+            display: flex; flex-direction: column; gap: 11px; box-shadow: var(--shadow); min-width: 0; }
+        .step-n { width: 38px; height: 38px; border-radius: 12px; background: var(--grad); color: #fff;
+            display: grid; place-items: center; font-weight: 800; font-size: 16px; flex: none; }
+        .step p { font-size: 14.5px; color: var(--muted); }
+        .platforms { display: flex; gap: 10px; justify-content: center; margin-top: 30px; flex-wrap: wrap; }
+        .chip { display: inline-flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--line-strong);
+            border-radius: 999px; padding: 10px 20px; font-size: 14px; font-weight: 700; box-shadow: var(--shadow); }
+        .chip svg { width: 17px; height: 17px; color: var(--brand); }
+
+        .checks { display: flex; flex-direction: column; gap: 14px; margin-top: 12px; }
+        .check { display: flex; gap: 12px; align-items: flex-start; font-size: 15px; line-height: 1.8; }
+        .tick { width: 24px; height: 24px; border-radius: 8px; background: var(--grad); color: #fff; display: grid; place-items: center; flex: none; margin-top: 4px; }
+        .tick svg { width: 13px; height: 13px; }
+
+        /* ── pricing (plans from the DB — only the look changed) ────────── */
+        .price-grid { display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+        @media (max-width: 620px) { .price-grid { grid-template-columns: 1fr; } }
+        .price { position: relative; background: #fff; border: 1px solid var(--line); border-radius: var(--r-lg); padding: 30px 26px;
+            display: flex; flex-direction: column; box-shadow: var(--shadow); min-width: 0; }
+        .price.popular { border: 2px solid var(--brand); box-shadow: var(--shadow-lg); }
+        .price h3 { font-size: 19px; }
+        .price .popular-badge { position: absolute; top: -14px; inset-inline-start: 24px; background: var(--brand); color: #fff;
+            font-size: 12.5px; font-weight: 700; padding: 5px 14px; border-radius: 999px; line-height: 1.5; }
+        .price .amount { font-size: 32px; font-weight: 800; letter-spacing: -.02em; margin-top: 10px; line-height: 1.3; color: var(--ink); }
+        .price .unit { font-size: 14px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
+        .price ul { list-style: none; padding: 0; margin: 18px 0 26px; display: flex; flex-direction: column; gap: 10px; }
+        .price li { display: flex; gap: 10px; align-items: flex-start; color: var(--muted); font-size: 14.5px; line-height: 1.7; }
+        .price li::before { content: ""; width: 18px; height: 18px; border-radius: 6px; flex: none; margin-top: 3px;
+            background: var(--tint-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236D28D9' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6L9 17l-5-5'/%3E%3C/svg%3E") center / 11px no-repeat; }
         .price .btn { margin-top: auto; }
+        .pricing-notes { text-align: center; margin-top: 24px; font-size: 14.5px; color: var(--muted); display: flex; flex-direction: column; gap: 6px; }
 
-        /* ── tool comparison table ──────────────────────────────────── */
-        /* Two markups, shown one at a time by width via plain CSS
-           (no JS) — a four-plus-column table reads fine once there's room
-           for a horizontal scroll, but position: sticky on <th>/<td> is
-           genuinely unreliable across engines (a real Chromium headless
-           case of it visually failing is what moved this away from a
-           sticky-first-column single table). Below ~640px, one card per
-           tool with its own per-plan rows is both simpler and more
-           robust than fighting sticky table cells on a phone screen. */
-        .tool-compare-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); margin-top: 32px; -webkit-overflow-scrolling: touch; }
-        .tool-compare { width: 100%; min-width: 480px; border-collapse: separate; border-spacing: 0; font-size: .9rem; }
-        .tool-compare th, .tool-compare td { padding: 12px 16px; text-align: center; border-bottom: 1px solid var(--line); white-space: nowrap; }
+        .notice { background: #fff; border: 1px solid var(--line); border-inline-start: 4px solid #B45309; padding: 14px 18px; border-radius: 12px; color: var(--muted); font-size: 15px; max-width: 640px; margin-inline: auto; }
+        .notice.ok { border-inline-start-color: var(--ok); }
+
+        /* Two markups, shown one at a time by width via plain CSS — sticky
+           table cells are unreliable across engines, so below 640px it is
+           one card per tool instead of a horizontally scrolled table. */
+        .sub-title { text-align: center; margin-top: 56px; margin-bottom: 20px; font-size: 20px; }
+        .tool-compare-wrap { overflow-x: auto; background: #fff; border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); -webkit-overflow-scrolling: touch; }
+        .tool-compare { width: 100%; min-width: 480px; border-collapse: separate; border-spacing: 0; font-size: 14.5px; }
+        .tool-compare th, .tool-compare td { padding: 13px 16px; text-align: center; border-bottom: 1px solid var(--line); white-space: nowrap; }
         .tool-compare tbody tr:last-child th, .tool-compare tbody tr:last-child td { border-bottom: 0; }
-        .tool-compare thead th { font-family: var(--font-heading); font-weight: 600; color: var(--ink); background: var(--soft); }
+        .tool-compare thead th { font-weight: 700; color: var(--ink); background: var(--tint); }
         .tool-compare th:first-child, .tool-compare td:first-child { text-align: start; font-weight: 600; }
-        .tool-yes { color: #16794c; font-weight: 700; }
-        .tool-no { color: var(--line); }
+        .tool-yes { color: var(--ok); font-weight: 800; }
+        .tool-no { color: var(--line-strong); }
+        .tool-compare-cards { display: none; }
+        .tool-compare-card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-top: 10px; }
+        .tool-compare-card .name { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+        .tool-compare-card .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 5px 0; font-size: 14px; color: var(--muted); }
+        @media (max-width: 640px) { .tool-compare-wrap { display: none; } .tool-compare-cards { display: block; } }
 
-        .tool-compare-cards { display: none; margin-top: 32px; }
-        .tool-compare-card { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 14px 16px; margin-top: 10px; }
-        .tool-compare-card .name { font-weight: 600; font-family: var(--font-heading); font-size: .92rem; margin-bottom: 8px; }
-        .tool-compare-card .row { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; font-size: .88rem; color: var(--muted); }
-        @media (max-width: 640px) {
-            .tool-compare-wrap { display: none; }
-            .tool-compare-cards { display: block; }
-        }
-
-        .type-list { list-style: none; margin: 14px 0 0; padding: 0; max-width: 520px; }
+        .types { margin: 48px auto 0; max-width: 560px; text-align: center; }
+        .types h3 { font-size: 19px; }
+        .type-list { list-style: none; margin: 16px 0 0; padding: 6px 20px; background: #fff; border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); text-align: start; }
         .type-list li { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
         .type-list li:last-child { border-bottom: 0; }
 
-        .notice { border: 1px solid var(--line); border-inline-start: 3px solid #b45309; background: #FFFBF5; padding: 14px 16px; border-radius: 8px; color: var(--muted); font-size: .93rem; }
-
-        form label { display: block; font-size: .88rem; font-weight: 600; margin-bottom: 5px; font-family: var(--font-heading); }
-        form input, form textarea, form select { width: 100%; padding: 11px 13px; border: 1px solid var(--line); border-radius: var(--radius-sm); font: inherit; margin-bottom: 14px; background: #fff; }
-        form input:focus, form textarea:focus, form select:focus { outline: 2px solid var(--brand-indigo); outline-offset: 1px; }
-        .field-error { color: #b42318; font-size: .85rem; margin: -10px 0 12px; }
+        /* ── signup ──────────────────────────────────────────────────── */
+        .signup { max-width: 560px; margin-inline: auto; }
+        .form-card { background: #fff; border: 1px solid var(--line); border-radius: var(--r-lg); padding: 28px 26px; box-shadow: var(--shadow-lg); }
+        form label { display: block; font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+        form input, form select { width: 100%; padding: 12px 14px; border: 1.5px solid var(--line-strong); border-radius: 12px; font: inherit; font-size: 15px; margin-bottom: 16px; background: #fff; color: var(--ink); }
+        form input:focus, form select:focus { outline: 2.5px solid var(--brand); outline-offset: 1px; border-color: var(--brand); }
+        .field-help { font-size: 13px; color: var(--muted); margin: -10px 0 14px; }
+        .field-error { color: #B42318; font-size: 13.5px; margin: -10px 0 14px; }
+        .signup-alt { text-align: center; font-size: 14.5px; margin-top: 18px; color: var(--muted); }
 
         /* ── FAQ ─────────────────────────────────────────────────────── */
-        details { border-bottom: 1px solid var(--line); padding: 18px 0; }
-        details summary { cursor: pointer; font-weight: 600; list-style: none; font-family: var(--font-heading); display: flex; justify-content: space-between; gap: 12px; }
-        details summary::-webkit-details-marker { display: none; }
-        details summary::after { content: '+'; font-size: 1.3rem; color: var(--brand-indigo); flex-shrink: 0; transition: transform .2s ease; }
-        details[open] summary::after { transform: rotate(45deg); }
-        details p { margin: 12px 0 0; color: var(--muted); }
+        .faq { display: flex; flex-direction: column; gap: 12px; max-width: 820px; margin-inline: auto; }
+        details { background: #fff; border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; }
+        details[open] { border-color: var(--line-strong); }
+        summary { cursor: pointer; list-style: none; padding: 19px 22px; font-weight: 700; font-size: 15.5px;
+            display: flex; align-items: center; gap: 13px; transition: color .15s ease; line-height: 1.7; }
+        summary::-webkit-details-marker { display: none; }
+        summary:hover { color: var(--brand); }
+        .caret { width: 22px; height: 22px; border-radius: 7px; background: var(--tint-2); color: var(--brand);
+            display: grid; place-items: center; flex: none; margin-inline-start: auto; transition: transform .2s ease; }
+        .caret svg { width: 12px; height: 12px; }
+        details[open] .caret { transform: rotate(180deg); }
+        details p { padding: 0 22px 20px; color: var(--muted); font-size: 14.5px; line-height: 1.9; }
 
         /* ── final CTA ───────────────────────────────────────────────── */
-        .cta-band { background: var(--brand-gradient); color: #fff; text-align: center; border-radius: 28px; padding: 64px 32px; margin: 0 20px; }
-        .cta-band h2 { color: #fff; }
-        /* Solid white, not translucent, and sized/weighted to qualify as
-           "large text" under WCAG (>=18.66px bold) rather than the 18.4px
-           regular .lead default: the gradient's own blue end contrasts
-           white at 3.07:1, which clears the large-text AA minimum (3:1) but
-           not the normal-text one (4.5:1) -- this text needs the exemption,
-           not a slightly-less-translucent white. */
-        .cta-band p { color: #fff; font-size: 1.3rem; font-weight: 500; }
-        .cta-band .btn-primary { background: #fff; color: var(--brand-indigo); box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+        .cta-band { background:
+            radial-gradient(620px 300px at 82% 18%, rgba(112,80,248,.45) 0%, rgba(112,80,248,0) 68%),
+            radial-gradient(circle at 12% 82%, rgba(0,152,248,.26) 0%, rgba(0,152,248,0) 56%),
+            linear-gradient(135deg, #2E1065 0%, #1B1046 55%, #140B33 100%);
+            position: relative; overflow: hidden; }
+        .cta-band::after { content: ""; position: absolute; inset: 0;
+            background-image: radial-gradient(rgba(255,255,255,.22) 1px, transparent 1px);
+            background-size: 26px 26px; opacity: .4; pointer-events: none; }
+        .cta { display: grid; grid-template-columns: 1.25fr auto; gap: 36px; align-items: center; position: relative; z-index: 1; }
+        .cta h2 { color: #fff; }
+        .cta .hl { color: #C4B5FD; }
+        .cta p { color: #CEC4EE; font-size: 16px; margin-top: 12px; max-width: 56ch; }
+        .cta-actions { display: flex; gap: 13px; flex-wrap: wrap; }
+        @media (max-width: 860px) { .cta { grid-template-columns: 1fr; gap: 26px; } }
 
-        footer { padding: 48px 0 calc(32px + env(safe-area-inset-bottom, 0px)); color: var(--muted); font-size: .9rem; border-top: 1px solid var(--line); margin-top: 40px; }
-        footer .wrap { display: flex; gap: 24px; flex-wrap: wrap; align-items: center; }
-        footer .foot-links { display: flex; gap: 20px; margin-inline-start: auto; flex-wrap: wrap; }
-        footer .foot-links a:hover { color: var(--ink); }
+        /* ── footer ──────────────────────────────────────────────────── */
+        .foot-band { background: #120A2E; color: #A79BD0; }
+        .foot { display: flex; justify-content: space-between; align-items: center; gap: 22px; flex-wrap: wrap; padding-block: 34px 18px; font-size: 14px; }
+        .foot a { color: #CEC4EE; }
+        .foot-links { display: flex; gap: 8px 22px; flex-wrap: wrap; }
+        .foot .brand { color: #fff; font-size: 17px; }
+        .foot-meta { display: flex; gap: 8px 22px; flex-wrap: wrap; justify-content: space-between; font-size: 13.5px;
+            padding-block: 18px calc(28px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid rgba(255,255,255,.08); }
+        .foot-contact { display: flex; gap: 8px 18px; flex-wrap: wrap; }
 
-        @media (max-width: 400px) {
-            section { padding: 56px 0; }
-            .cta-band { padding: 44px 20px; margin: 0 12px; border-radius: 20px; }
+        /* Off-screen sections skip layout and paint until they are near the
+           viewport — the largest single cost in every mobile Lighthouse
+           profile of this page. Each estimate is the section's real rendered
+           height at a common desktop width, so nothing jumps on arrival. */
+        #features, #demo, #why, #how, #pricing, #signup, #faq { content-visibility: auto; }
+        #features { contain-intrinsic-size: auto 900px; }
+        #demo { contain-intrinsic-size: auto 820px; }
+        #why { contain-intrinsic-size: auto 640px; }
+        #how { contain-intrinsic-size: auto 560px; }
+        #pricing { contain-intrinsic-size: auto 1200px; }
+        #signup { contain-intrinsic-size: auto 820px; }
+        #faq { contain-intrinsic-size: auto 820px; }
+
+        @media (prefers-reduced-motion: reduce) {
+            * { animation: none !important; transition: none !important; }
+            html { scroll-behavior: auto; }
+            .btn:hover, .card:hover { transform: none; }
         }
     </style>
 </head>
 <body>
 
-<header>
-    <div class="wrap">
-        <a href="#top" aria-label="{{ __('landing.brand') }}">@include('partials.brand-logo', ['height' => 30])</a>
-        <nav class="links">
-            <a class="nav-link" href="#features">{{ __('landing.nav_features') }}</a>
-            <a class="nav-link" href="#pricing">{{ __('landing.nav_pricing') }}</a>
-            <a class="nav-link" href="#faq">{{ __('landing.nav_guide') }}</a>
-        </nav>
-        <div class="lang-switch" role="group" aria-label="Language">
-            <a href="?lang=fa" class="{{ $rtl ? 'active' : '' }}">{{ __('landing.nav_lang_fa') }}</a>
-            <a href="?lang=en" class="{{ $rtl ? '' : 'active' }}">{{ __('landing.nav_lang_en') }}</a>
+{{-- ══ NAV ══ --}}
+<header class="nav-band">
+    <nav class="nav" aria-label="{{ $t('brand') }}">
+        <a class="brand" href="#top">
+            <img class="mark" src="{{ \App\Support\Brand::markUrl() }}" alt="" width="34" height="40">
+            <span>{{ $t('brand') }}</span>
+        </a>
+        <div class="nav-links">
+            <a href="#features">{{ $t('nav_features') }}</a>
+            <a href="#how">{{ $t('nav_how') }}</a>
+            <a href="#pricing">{{ $t('nav_pricing') }}</a>
+            <a href="#faq">{{ $t('nav_faq') }}</a>
         </div>
-        <a class="nav-link" href="{{ \App\Support\BrandDomains::appUrl('/portal/login') }}">{{ __('landing.nav_login') }}</a>
-        <a class="btn btn-primary" href="#signup">{{ __('landing.nav_cta') }}</a>
-    </div>
+        <div class="lang" role="group" aria-label="Language">
+            <a href="?lang=fa" lang="fa" hreflang="fa" aria-current="{{ $rtl ? 'true' : 'false' }}">{{ $t('nav_lang_fa') }}</a>
+            <a href="?lang=en" lang="en" hreflang="en" aria-current="{{ $rtl ? 'false' : 'true' }}">{{ $t('nav_lang_en') }}</a>
+        </div>
+        <a class="btn btn-ghost" href="{{ \App\Support\BrandDomains::appUrl('/portal/login') }}">{{ $t('nav_login') }}</a>
+        <a class="btn btn-primary" href="#signup">{{ $t('nav_cta') }}</a>
+    </nav>
 </header>
 
-<div id="top"></div>
-
-{{-- Hero --}}
-<section>
-    <div class="wrap hero-grid">
-        <div>
-            <h1>{{ __('landing.hero_title') }}</h1>
-            <p class="lead">{{ __('landing.hero_subtitle') }}</p>
+<main>
+{{-- ══ HERO ══ --}}
+<div class="band hero-band" id="top">
+    <div class="wrap hero">
+        <div class="hero-copy">
+            <span class="eyebrow">{{ $t('tagline') }}</span>
+            <h1>{{ $h('hero_title') }}</h1>
+            <p class="lead">{{ $t('hero_subtitle') }}</p>
             <div class="hero-actions">
-                <a class="btn btn-primary" href="#signup">{{ __('landing.hero_cta') }}</a>
-                <a class="btn btn-ghost" href="#demo">{{ __('landing.hero_cta_secondary') }}</a>
+                <a class="btn btn-primary" href="#signup">
+                    <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                    <span>{{ $t('hero_cta') }}</span>
+                </a>
+                <a class="btn btn-ghost" href="#demo">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 9l5 3-5 3z" fill="currentColor"/></svg>
+                    <span>{{ $t('hero_cta_secondary') }}</span>
+                </a>
             </div>
-            <p class="muted" style="font-size:.88rem;margin-top:22px">{{ __('landing.hero_note') }}</p>
+            <p class="hero-note">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+                <span>{{ $t('hero_note') }}</span>
+            </p>
         </div>
 
-        <div class="phone" aria-hidden="true">
-            <div class="phone-bar">
-                @include('partials.brand-logo', ['height' => 20, 'variant' => 'light'])
-                <div style="margin-inline-start:auto;text-align:end">
-                    <div class="dot" style="display:inline-block;margin-inline-end:5px"></div>
-                    <span>{{ __('landing.hero_demo_typing') }}</span>
-                </div>
+        <div class="hero-art">
+            <div class="media hero-media">
+                <img src="{{ $img('hero') }}" alt="{{ $alt('hero') }}" width="720" height="720" fetchpriority="high" decoding="async">
             </div>
-            <div class="phone-body">
-                <div class="bubble user">{{ __('landing.hero_demo_customer') }}</div>
-                <div class="typing"><span></span><span></span><span></span></div>
-                <div class="bubble bot delay1">{{ __('landing.hero_demo_bot_intro') }}</div>
-                <div class="product-card delay2">
-                    <div class="product-thumb"></div>
-                    <div>
-                        <div class="name">{{ __('landing.hero_demo_product_name') }}</div>
-                        <div class="price">{{ __('landing.hero_demo_product_price') }}</div>
-                        <div class="stock">{{ __('landing.hero_demo_product_stock') }}</div>
+
+            <div class="float float-q" aria-hidden="true">
+                <span class="av user"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/></svg></span>
+                <span>{{ $t('hero_demo_customer') }}</span>
+            </div>
+
+            <div class="float float-a" aria-hidden="true">
+                <div style="display:flex;align-items:center;gap:10px">
+                    <span class="av"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 7V4M8.5 12.5v1.5M15.5 12.5v1.5"/></svg></span>
+                    <span>{{ $t('hero_demo_bot_intro') }}</span>
+                </div>
+                <div class="mini-card">
+                    <span class="mini-thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8l-1 5H9z"/><path d="M9 8h6l1 11a2 2 0 01-2 2h-4a2 2 0 01-2-2z"/></svg></span>
+                    <div class="mini-meta">
+                        <span class="mini-name">{{ $t('hero_demo_product_name') }}</span>
+                        <span class="mini-row">
+                            <span class="mini-price">{{ $t('hero_demo_product_price') }}</span>
+                            <span class="stock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg><span>{{ $t('hero_demo_product_stock') }}</span></span>
+                        </span>
                     </div>
                 </div>
-                <div class="product-cta" style="animation:rise .45s ease 1.8s both;opacity:0;animation-fill-mode:forwards">
-                    <button type="button" tabindex="-1">{{ __('landing.hero_demo_add_to_cart') }}</button>
+                <span class="mini-cta">{{ $t('hero_demo_add_to_cart') }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- ══ WHAT IT IS ══ --}}
+<section class="band plain" id="about">
+    <div class="wrap split">
+        <div class="split-copy">
+            <span class="eyebrow">{{ $t('about_eyebrow') }}</span>
+            <h2>{{ $h('about_title') }}</h2>
+            <p class="lead">{{ $t('about_body1') }}</p>
+            <p class="lead">{{ $t('about_body2') }}</p>
+        </div>
+        <div class="split-art" aria-hidden="true">
+            <div class="panel">
+                <div class="panel-top">
+                    <span class="av"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 7V4M8.5 12.5v1.5M15.5 12.5v1.5"/></svg></span>
+                    <span class="panel-title">{{ $t('brand') }}</span>
+                </div>
+                <div class="panel-body">
+                    <div class="bubble user">{{ $t('panel_q') }}</div>
+                    <div class="cards-row">
+                        <div class="pcard">
+                            <div class="pcard-img"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13a8 8 0 0116 0v4a2 2 0 01-2 2h-1v-6h3M4 13v4a2 2 0 002 2h1v-6H4"/></svg></div>
+                            <span class="pcard-name">{{ $t('p1') }}</span>
+                            <span class="pcard-price">{{ $t('p1p') }}</span>
+                        </div>
+                        <div class="pcard">
+                            <div class="pcard-img"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="6" width="10" height="12" rx="2.5"/><path d="M9.5 6V3.5h5V6M9.5 18v2.5h5V18"/></svg></div>
+                            <span class="pcard-name">{{ $t('p2') }}</span>
+                            <span class="pcard-price">{{ $t('p2p') }}</span>
+                        </div>
+                        <div class="pcard">
+                            <div class="pcard-img"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="3"/><circle cx="16" cy="15" r="3"/><path d="M8 12V7M16 12V7"/></svg></div>
+                            <span class="pcard-name">{{ $t('p3') }}</span>
+                            <span class="pcard-price">{{ $t('p3p') }}</span>
+                        </div>
+                    </div>
+                    <div class="bubble bot">{{ $t('panel_a') }}</div>
                 </div>
             </div>
         </div>
     </div>
 </section>
 
-{{-- Six things it does --}}
-<section id="features" class="soft">
+{{-- ══ FEATURES ══ --}}
+<section class="band tinted" id="features">
     <div class="wrap">
-        <div class="eyebrow center">{{ __('landing.nav_features') }}</div>
-        <h2 class="center">{{ __('landing.features_title') }}</h2>
-        <p class="lead center">{{ __('landing.features_subtitle') }}</p>
-        <div class="grid grid-3" style="margin-top:40px">
+        <div class="sec-head">
+            <span class="eyebrow">{{ $t('features_eyebrow') }}</span>
+            <h2>{{ $h('features_title') }}</h2>
+            <p class="lead">{{ $t('features_subtitle') }}</p>
+        </div>
+        <div class="grid-3">
             @foreach ([
-                ['icon' => '💬', 'i' => 1], ['icon' => '📦', 'i' => 2], ['icon' => '⚖️', 'i' => 3],
-                ['icon' => '🛒', 'i' => 4], ['icon' => '📇', 'i' => 5], ['icon' => '📈', 'i' => 6],
-            ] as $f)
+                1 => '<path d="M4 5.5A2.5 2.5 0 016.5 3H19v16H6.5A2.5 2.5 0 004 21.5z"/><path d="M8 8h7M8 12h5"/>',
+                2 => '<path d="M12 7v5l3.5 2"/><circle cx="12" cy="12" r="9"/>',
+                3 => '<path d="M5 8h6M5 16h6M8 5v6M8 13v6"/><path d="M15 7h5M15 12h5M15 17h5"/>',
+                4 => '<path d="M3 5h2.2l2 11h10l2-8H7"/><circle cx="9.5" cy="19.5" r="1.4"/><circle cx="16.5" cy="19.5" r="1.4"/>',
+                5 => '<circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/>',
+                6 => '<path d="M5 19V11M12 19V5M19 19v-6"/>',
+            ] as $i => $icon)
                 <div class="card">
-                    <h3><span class="icon">{{ $f['icon'] }}</span> {{ __("landing.feature{$f['i']}_title") }}</h3>
-                    <p>{{ __("landing.feature{$f['i']}_body") }}</p>
+                    <span class="well"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{!! $icon !!}</svg></span>
+                    <h3>{{ $t("feature{$i}_title") }}</h3>
+                    <p>{{ $t("feature{$i}_body") }}</p>
                 </div>
             @endforeach
         </div>
     </div>
 </section>
 
-{{-- See how it works: tabbed demo --}}
-<section id="demo">
-    <div class="wrap">
-        <div class="eyebrow center">{{ __('landing.demo_title') }}</div>
-        <h2 class="center">{{ __('landing.demo_title') }}</h2>
-        <p class="lead center">{{ __('landing.demo_subtitle') }}</p>
-
-        <div class="center" style="margin-top:32px">
-            <div class="tabbar" role="tablist">
-                <button type="button" class="active" data-tab="sales" role="tab" aria-selected="true">{{ __('landing.demo_tab_sales') }}</button>
-                <button type="button" data-tab="compare" role="tab" aria-selected="false">{{ __('landing.demo_tab_compare') }}</button>
-                <button type="button" data-tab="gap" role="tab" aria-selected="false">{{ __('landing.demo_tab_gap') }}</button>
+{{-- ══ PROOF ══ --}}
+<section class="band plain" id="demo">
+    <div class="wrap split rev">
+        <div class="split-art">
+            <div class="media wide">
+                <img src="{{ $img('demo') }}" alt="{{ $alt('demo') }}" width="780" height="585" loading="lazy" decoding="async">
             </div>
         </div>
-
-        <div class="tabpanel active" data-panel="sales">
-            <div class="demo-frame" style="max-width:520px;margin:0 auto">
-                <div class="phone-bar">@include('partials.brand-logo', ['height' => 18, 'variant' => 'light'])</div>
-                <div class="phone-body">
-                    <div class="bubble user">{{ __('landing.demo_sales_customer') }}</div>
-                    <div class="bubble bot">{{ __('landing.demo_sales_bot') }}</div>
+        <div class="split-copy">
+            <span class="eyebrow">{{ $t('demo_title') }}</span>
+            <h2>{{ $h('demo_head') }}</h2>
+            <p class="lead" style="margin-bottom:8px">{{ $t('demo_sub') }}</p>
+            <div class="proof">
+                <div class="proof-item">
+                    <span class="proof-tag">{{ $t('demo_tab_sales') }}</span>
+                    <div class="qa">
+                        <div class="bubble user">{{ $t('demo_sales_customer') }}</div>
+                        <div class="bubble bot">{{ $t('demo_sales_bot') }}</div>
+                    </div>
                 </div>
-            </div>
-        </div>
-
-        <div class="tabpanel" data-panel="compare">
-            <div class="demo-frame" style="max-width:520px;margin:0 auto">
-                <div class="phone-bar">@include('partials.brand-logo', ['height' => 18, 'variant' => 'light'])</div>
-                <div class="phone-body">
-                    <div class="bubble user">{{ __('landing.demo_compare_customer') }}</div>
-                    <div class="bubble bot">{{ __('landing.demo_compare_bot') }}</div>
+                <div class="proof-item">
+                    <span class="proof-tag">{{ $t('demo_tab_compare') }}</span>
+                    <div class="qa">
+                        <div class="bubble user">{{ $t('demo_compare_customer') }}</div>
+                        <div class="bubble bot">{{ $t('demo_compare_bot') }}</div>
+                    </div>
                 </div>
-            </div>
-        </div>
-
-        <div class="tabpanel" data-panel="gap">
-            <div class="demo-frame" style="max-width:640px;margin:0 auto">
-                <div class="mock-bar">
-                    <span>{{ __('landing.demo_gap_title') }}</span>
-                    <span class="tag">{{ __('landing.demo_gap_subtitle') }}</span>
+                <div class="proof-item">
+                    <span class="proof-tag">{{ $t('demo_tab_gap') }}</span>
+                    <p style="font-size:14.5px;color:var(--muted)">{{ $t('demo_gap_note') }}</p>
                 </div>
-                <table>
-                    <thead><tr><th>{{ __('landing.nav_features') }}</th><th>30d</th><th></th></tr></thead>
-                    <tbody>
-                        @foreach ([['price', 82, '+', 100], ['availability', 64, '+', 78], ['comparison', 41, '-', 50], ['shipping', 23, '+', 28]] as [$topic, $n, $dir, $w])
-                            <tr>
-                                <td>{{ $topic }}</td>
-                                <td>
-                                    <span style="display:flex;align-items:center;gap:8px">
-                                        <span style="height:7px;border-radius:4px;background:var(--brand-gradient);opacity:.8;width:{{ $w }}px"></span>{{ $n }}
-                                    </span>
-                                </td>
-                                <td class="{{ $dir === '+' ? 'up' : 'down' }}">{{ $dir }}</td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-                <p class="muted" style="padding:14px 18px;font-size:.85rem;margin:0">{{ __('landing.demo_gap_note') }}</p>
             </div>
         </div>
     </div>
 </section>
-<script>
-    (function () {
-        var buttons = document.querySelectorAll('.tabbar [data-tab]');
-        var panels = document.querySelectorAll('.tabpanel[data-panel]');
-        buttons.forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                buttons.forEach(function (b) { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
-                panels.forEach(function (p) { p.classList.remove('active'); });
-                btn.classList.add('active');
-                btn.setAttribute('aria-selected', 'true');
-                document.querySelector('.tabpanel[data-panel="' + btn.dataset.tab + '"]').classList.add('active');
-            });
-        });
-    })();
-</script>
 
-{{-- Integrations --}}
-<section id="integrations" class="soft">
-    <div class="wrap">
-        <div class="eyebrow center">{{ __('landing.integrations_title') }}</div>
-        <h2 class="center">{{ __('landing.integrations_title') }}</h2>
-        <p class="lead center">{{ __('landing.integrations_subtitle') }}</p>
-
-        <div class="integrations-row">
-            <div class="integration-badge"><span class="dot-icon"></span> {{ __('landing.integrations_wp') }}</div>
-            <div class="integration-badge"><span class="dot-icon"></span> {{ __('landing.integrations_woo') }}</div>
+{{-- ══ WHY ══ --}}
+<section class="band tinted" id="why">
+    <div class="wrap split">
+        <div class="split-copy">
+            <span class="eyebrow">{{ $t('why_eyebrow') }}</span>
+            <h2>{{ $h('why_title') }}</h2>
+            <div class="checks">
+                @foreach ([1, 2, 3, 4] as $i)
+                    <div class="check">
+                        <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg></span>
+                        <span>{{ $t("why{$i}") }}</span>
+                    </div>
+                @endforeach
+            </div>
         </div>
+        <div class="split-art">
+            <div class="media wide">
+                <img src="{{ $img('why') }}" alt="{{ $alt('why') }}" width="960" height="720" loading="lazy" decoding="async">
+            </div>
+        </div>
+    </div>
+</section>
 
-        <div class="steps">
+{{-- ══ HOW ══ --}}
+<section class="band plain" id="how">
+    <div class="wrap">
+        <div class="sec-head">
+            <span class="eyebrow">{{ $t('how_eyebrow') }}</span>
+            <h2>{{ $h('integrations_title') }}</h2>
+            <p class="lead">{{ $t('integrations_subtitle') }}</p>
+        </div>
+        <div class="rail">
             @foreach ([1, 2, 3] as $i)
                 <div class="step">
-                    <h4>{{ __("landing.integrations_step{$i}_title") }}</h4>
-                    <p>{{ __("landing.integrations_step{$i}_body") }}</p>
+                    <span class="step-n" aria-hidden="true">{{ $steps[$i - 1] }}</span>
+                    <h3>{{ $t("integrations_step{$i}_title") }}</h3>
+                    <p>{{ $t("integrations_step{$i}_body") }}</p>
                 </div>
             @endforeach
+        </div>
+        <div class="platforms">
+            <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3.5 9h17M3.5 15h17M12 3a15 15 0 000 18A15 15 0 0012 3z"/></svg> <span>{{ $t('integrations_wp') }}</span></span>
+            <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h2l2 10h11l2-7H7"/><circle cx="9.5" cy="19.5" r="1.4"/><circle cx="16.5" cy="19.5" r="1.4"/></svg> <span>{{ $t('integrations_woo') }}</span></span>
         </div>
     </div>
 </section>
 
-{{-- Pricing, read from the plans an admin published --}}
-<section id="pricing">
+{{-- ══ PRICING — read from the plans an admin published ══ --}}
+<section class="band tinted" id="pricing">
     <div class="wrap">
-        <div class="eyebrow center">{{ __('landing.pricing_title') }}</div>
-        <h2 class="center">{{ __('landing.pricing_title') }}</h2>
-        <p class="lead center">{{ __('landing.pricing_subtitle') }}</p>
+        <div class="sec-head">
+            <span class="eyebrow">{{ $t('pricing_eyebrow') }}</span>
+            <h2>{{ $t('pricing_title') }}</h2>
+            <p class="lead">{{ $t('pricing_subtitle') }}</p>
+        </div>
 
         @if ($plans->isEmpty())
-            <p class="notice" style="margin-top:28px">{{ __('landing.pricing_empty') }}</p>
+            <p class="notice">{{ $t('pricing_empty') }}</p>
         @elseif ($pricingComingSoon)
-            <p class="notice" style="margin-top:28px">{{ __('landing.pricing_coming_soon') }}</p>
+            <p class="notice">{{ $t('pricing_coming_soon') }}</p>
         @else
-            <div class="price-grid" style="margin-top:40px">
+            <div class="price-grid">
                 @foreach ($visiblePlans as $plan)
                     @php $isPopular = $popularSlug !== '' && $plan->slug === $popularSlug; @endphp
                     <div class="price {{ $isPopular ? 'popular' : '' }}">
                         @if ($isPopular)
-                            <span class="popular-badge">{{ __('landing.pricing_popular') }}</span>
+                            <span class="popular-badge">{{ $t('pricing_popular') }}</span>
                         @endif
                         <h3>{{ $plan->display_name }}</h3>
                         @php $amount = \App\Support\Money::convert($plan->price_monthly, $currency); @endphp
                         <div class="amount">
                             {{ number_format((float) $amount) }}
-                            <span class="muted" style="font-size:.9rem;font-weight:400">{{ \App\Support\Money::unitLabel($currency) }}</span>
+                            <span class="unit">{{ \App\Support\Money::unitLabel($currency) }}</span>
                         </div>
-                        <div class="muted" style="font-size:.85rem">{{ __('landing.pricing_per_month') }}</div>
+                        <div class="muted" style="font-size:14px">{{ $t('pricing_per_month') }}</div>
 
                         @if ($plan->display_description)
-                            <p class="muted" style="margin-top:12px;font-size:.92rem">{{ $plan->display_description }}</p>
+                            <p class="muted" style="margin-top:12px;font-size:14.5px">{{ $plan->display_description }}</p>
                         @endif
 
                         <ul>
@@ -530,31 +652,32 @@
                             @endforeach
                         </ul>
 
-                        <a class="btn {{ $isPopular ? 'btn-primary' : 'btn-ghost' }}" href="#signup">{{ __('landing.pricing_cta') }}</a>
+                        <a class="btn {{ $isPopular ? 'btn-primary' : 'btn-ghost' }}" href="#signup">{{ $t('pricing_cta') }}</a>
                     </div>
                 @endforeach
             </div>
 
-            @if ($freePlan ?? null)
-                <p class="muted center" style="margin-top:24px;font-size:.9rem">{{ __('landing.pricing_free_line', [
-                    'chatbots'  => trans_choice('landing.pricing_chatbots', (int) $freePlan->max_chatbots, ['count' => number_format((int) $freePlan->max_chatbots)]),
-                    'documents' => trans_choice('landing.pricing_documents', (int) $freePlan->max_documents, ['count' => number_format((int) $freePlan->max_documents)]),
-                    'messages'  => number_format((int) $freePlan->max_messages_monthly),
-                ]) }}</p>
-            @endif
-            <p class="muted center" style="margin-top:{{ ($freePlan ?? null) ? '8px' : '24px' }};font-size:.9rem">{{ __('landing.pricing_enterprise_note') }}</p>
+            <div class="pricing-notes">
+                @if ($freePlan ?? null)
+                    <p>{{ $t('pricing_free_line', [
+                        'chatbots'  => trans_choice('landing.pricing_chatbots', (int) $freePlan->max_chatbots, ['count' => number_format((int) $freePlan->max_chatbots)]),
+                        'documents' => trans_choice('landing.pricing_documents', (int) $freePlan->max_documents, ['count' => number_format((int) $freePlan->max_documents)]),
+                        'messages'  => number_format((int) $freePlan->max_messages_monthly),
+                    ]) }}</p>
+                @endif
+                <p>{{ $t('pricing_enterprise_note') }}</p>
+            </div>
 
             {{-- Built only from plans.allowed_tools — see LandingController
                  ::toolComparisonRows(). No hardcoded feature array here. --}}
             @if (!empty($toolRows))
-                <h3 class="center" style="margin-top:56px">{{ __('landing.tool_compare_title') }}</h3>
+                <h3 class="sub-title">{{ $t('tool_compare_title') }}</h3>
 
-                {{-- >=641px: a table, scrollable horizontally if it's wider than the viewport. --}}
                 <div class="tool-compare-wrap">
                     <table class="tool-compare">
                         <thead>
                             <tr>
-                                <th>{{ __('landing.tool_compare_feature') }}</th>
+                                <th>{{ $t('tool_compare_feature') }}</th>
                                 @foreach ($visiblePlans as $plan)
                                     <th>{{ $plan->display_name }}</th>
                                 @endforeach
@@ -567,9 +690,9 @@
                                     @foreach ($visiblePlans as $plan)
                                         <td>
                                             @if (in_array($toolName, $plan->allowed_tools ?? [], true))
-                                                <span class="tool-yes" aria-label="{{ __('landing.tool_compare_yes') }}">&#10003;</span>
+                                                <span class="tool-yes" aria-label="{{ $t('tool_compare_yes') }}">&#10003;</span>
                                             @else
-                                                <span class="tool-no" aria-label="{{ __('landing.tool_compare_no') }}">&mdash;</span>
+                                                <span class="tool-no" aria-label="{{ $t('tool_compare_no') }}">&mdash;</span>
                                             @endif
                                         </td>
                                     @endforeach
@@ -579,7 +702,6 @@
                     </table>
                 </div>
 
-                {{-- <=640px: one card per tool, same data, no horizontal scroll at all. --}}
                 <div class="tool-compare-cards">
                     @foreach ($toolRows as $toolName)
                         <div class="tool-compare-card">
@@ -588,9 +710,9 @@
                                 <div class="row">
                                     <span>{{ $plan->display_name }}</span>
                                     @if (in_array($toolName, $plan->allowed_tools ?? [], true))
-                                        <span class="tool-yes" aria-label="{{ __('landing.tool_compare_yes') }}">&#10003;</span>
+                                        <span class="tool-yes" aria-label="{{ $t('tool_compare_yes') }}">&#10003;</span>
                                     @else
-                                        <span class="tool-no" aria-label="{{ __('landing.tool_compare_no') }}">&mdash;</span>
+                                        <span class="tool-no" aria-label="{{ $t('tool_compare_no') }}">&mdash;</span>
                                     @endif
                                 </div>
                             @endforeach
@@ -601,9 +723,9 @@
         @endif
 
         @if ($chatbotTypes->isNotEmpty())
-            <div class="types" style="margin-top:48px;max-width:560px;margin-inline:auto">
-                <h3 style="font-size:1.1rem;text-align:center">{{ __('landing.types_title') }}</h3>
-                <p class="muted" style="font-size:.92rem;text-align:center">{{ __('landing.types_subtitle') }}</p>
+            <div class="types">
+                <h3>{{ $t('types_title') }}</h3>
+                <p class="muted" style="font-size:14.5px;margin-top:6px">{{ $t('types_subtitle') }}</p>
                 <ul class="type-list">
                     @foreach ($chatbotTypes as $type)
                         @php $typeAmount = \App\Support\Money::convert($type->price_toman, $currency); @endphp
@@ -611,7 +733,7 @@
                         <li>
                             <span>{{ $type->display_name }}</span>
                             <strong>{{ number_format($typeAmount) }}
-                                <span class="muted" style="font-weight:400;font-size:.85rem">{{ \App\Support\Money::unitLabel($currency) }}</span>
+                                <span class="muted" style="font-weight:500;font-size:13.5px">{{ \App\Support\Money::unitLabel($currency) }}</span>
                             </strong>
                         </li>
                         @endif
@@ -622,21 +744,23 @@
     </div>
 </section>
 
-{{-- Signup --}}
-<section id="signup" class="soft">
-    <div class="wrap" style="max-width:560px">
-        <h2 class="center">{{ __('landing.signup_title') }}</h2>
-        <p class="lead center">{{ __('landing.signup_subtitle') }}</p>
+{{-- ══ SIGNUP ══ --}}
+<section class="band plain" id="signup">
+    <div class="wrap signup">
+        <div class="sec-head" style="margin-bottom:28px">
+            <h2>{{ $t('signup_title') }}</h2>
+            <p class="lead">{{ $t('signup_subtitle') }}</p>
+        </div>
 
         @if (session('landing_status'))
-            <p class="notice" style="border-inline-start-color:#16794c;background:#F4FBF7">{{ session('landing_status') }}</p>
+            <p class="notice ok" style="margin-bottom:18px">{{ session('landing_status') }}</p>
         @endif
 
         @if (! $emailSignup)
-            <p class="notice">{{ __('landing.signup_email_disabled') }}</p>
-            <p class="center"><a class="btn btn-primary" href="{{ \App\Support\BrandDomains::appUrl('/portal/login?method=phone') }}">{{ __('landing.signup_phone_alternative') }}</a></p>
+            <p class="notice">{{ $t('signup_email_disabled') }}</p>
+            <p style="text-align:center;margin-top:20px"><a class="btn btn-primary" href="{{ \App\Support\BrandDomains::appUrl('/portal/login?method=phone') }}">{{ $t('signup_phone_alternative') }}</a></p>
         @else
-            <div class="card" style="margin-top:24px">
+            <div class="form-card">
                 <form method="POST" action="{{ route('landing.register') }}">
                     @csrf
                     <input type="hidden" name="form_rendered_at" value="{{ now()->timestamp }}">
@@ -645,52 +769,55 @@
                         <label for="company_fax">Company Fax</label>
                         <input type="text" id="company_fax" name="company_fax" tabindex="-1" autocomplete="off">
                     </div>
-                    <label for="name">{{ __('landing.signup_name') }}</label>
-                    <input id="name" name="name" value="{{ old('name') }}" required maxlength="255">
+                    <label for="name">{{ $t('signup_name') }}</label>
+                    <input id="name" name="name" value="{{ old('name') }}" required maxlength="255" autocomplete="name">
                     @error('name') <div class="field-error">{{ $message }}</div> @enderror
 
-                    <label for="email">{{ __('landing.signup_email') }}</label>
-                    <input id="email" name="email" type="email" value="{{ old('email') }}" required maxlength="255">
+                    <label for="email">{{ $t('signup_email') }}</label>
+                    <input id="email" name="email" type="email" value="{{ old('email') }}" required maxlength="255" autocomplete="email" dir="ltr">
                     @error('email') <div class="field-error">{{ $message }}</div> @enderror
 
-                    <label for="country">{{ __('landing.signup_country') }}</label>
+                    <label for="country">{{ $t('signup_country') }}</label>
                     <select id="country" name="country" required>
-                        <option value="" disabled {{ old('country') ? '' : 'selected' }}>{{ __('landing.signup_country_placeholder') }}</option>
+                        <option value="" disabled {{ old('country') ? '' : 'selected' }}>{{ $t('signup_country_placeholder') }}</option>
                         @foreach ($countries as $code => $label)
                             <option value="{{ $code }}" {{ old('country') === $code ? 'selected' : '' }}>{{ $label }}</option>
                         @endforeach
                     </select>
-                    <p class="muted" style="font-size:.82rem;margin-top:2px">{{ __('landing.signup_country_help') }}</p>
+                    <p class="field-help">{{ $t('signup_country_help') }}</p>
                     @error('country') <div class="field-error">{{ $message }}</div> @enderror
 
-                    <label for="password">{{ __('landing.signup_password') }}</label>
-                    <input id="password" name="password" type="password" required minlength="8">
+                    <label for="password">{{ $t('signup_password') }}</label>
+                    <input id="password" name="password" type="password" required minlength="8" autocomplete="new-password">
                     @error('password') <div class="field-error">{{ $message }}</div> @enderror
 
-                    <label for="password_confirmation">{{ __('landing.signup_password_confirm') }}</label>
-                    <input id="password_confirmation" name="password_confirmation" type="password" required minlength="8">
+                    <label for="password_confirmation">{{ $t('signup_password_confirm') }}</label>
+                    <input id="password_confirmation" name="password_confirmation" type="password" required minlength="8" autocomplete="new-password">
 
-                    <button class="btn btn-primary btn-block" type="submit">{{ __('landing.signup_submit') }}</button>
+                    <button class="btn btn-primary btn-block" type="submit">{{ $t('signup_submit') }}</button>
                 </form>
             </div>
 
-            <p class="muted center" style="font-size:.9rem;margin-top:16px">
-                <a href="{{ \App\Support\BrandDomains::appUrl('/portal/login?method=phone') }}">{{ __('landing.signup_phone_alternative') }}</a>
+            <p class="signup-alt">
+                <a href="{{ \App\Support\BrandDomains::appUrl('/portal/login?method=phone') }}">{{ $t('signup_phone_alternative') }}</a>
                 &nbsp;·&nbsp;
-                <a href="{{ \App\Support\BrandDomains::appUrl('/portal/login') }}">{{ __('landing.signup_have_account') }}</a>
+                <a href="{{ \App\Support\BrandDomains::appUrl('/portal/login') }}">{{ $t('signup_have_account') }}</a>
             </p>
         @endif
     </div>
 </section>
 
-{{-- FAQ --}}
-<section id="faq">
-    <div class="wrap" style="max-width:760px">
-        <h2 class="center">{{ __('landing.faq_title') }}</h2>
-        <div style="margin-top:28px">
+{{-- ══ FAQ — LandingController::faq(), editable as a list in the panel ══ --}}
+<section class="band tinted" id="faq">
+    <div class="wrap">
+        <div class="sec-head">
+            <span class="eyebrow">{{ $t('faq_title') }}</span>
+            <h2>{{ $h('faq_head') }}</h2>
+        </div>
+        <div class="faq">
             @foreach ($faq as $item)
-                <details>
-                    <summary>{{ $item['q'] }}</summary>
+                <details @if ($loop->first) open @endif>
+                    <summary>{{ $item['q'] }}<span class="caret" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></summary>
                     <p>{{ $item['a'] }}</p>
                 </details>
             @endforeach
@@ -698,42 +825,58 @@
     </div>
 </section>
 
-{{-- Final CTA --}}
-<section class="tight">
-    <div class="wrap">
-        <div class="cta-band">
-            <h2>{{ __('landing.final_cta_title') }}</h2>
-            <p class="lead center" style="max-width:52ch">{{ __('landing.final_cta_subtitle') }}</p>
-            <a class="btn btn-primary" href="#signup">{{ __('landing.final_cta_button') }}</a>
+{{-- ══ CTA ══ --}}
+<section class="band cta-band" aria-labelledby="final-cta">
+    <div class="wrap tight cta">
+        <div>
+            <h2 id="final-cta">{{ $h('final_cta_title') }}</h2>
+            <p>{{ $t('final_cta_subtitle') }}</p>
+        </div>
+        <div class="cta-actions">
+            <a class="btn btn-light" href="#signup">
+                <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                <span>{{ $t('final_cta_button') }}</span>
+            </a>
+            <a class="btn btn-outline-light" href="#pricing">{{ $t('cta_plans') }}</a>
         </div>
     </div>
 </section>
+</main>
 
-<footer>
-    <div class="wrap">
-        @include('partials.brand-logo', ['height' => 26])
-        <span class="muted">{{ __('landing.footer_tagline') }}</span>
-        <span class="foot-links">
-            <a href="{{ \App\Support\BrandDomains::appUrl('/portal/login') }}">{{ __('landing.footer_login') }}</a>
+{{-- ══ FOOTER ══ --}}
+<footer class="band foot-band">
+    <div class="wrap foot">
+        <div style="display:flex;flex-direction:column;gap:7px">
+            <span class="brand">
+                <img class="mark" src="{{ \App\Support\Brand::markLightUrl() }}" alt="" width="34" height="40">
+                <span>{{ $t('brand') }}</span>
+            </span>
+            <span>{{ $t('footer_tagline') }}</span>
+        </div>
+        <nav class="foot-links" aria-label="{{ $t('brand') }}">
+            <a href="#features">{{ $t('nav_features') }}</a>
+            <a href="#pricing">{{ $t('nav_pricing') }}</a>
+            <a href="#faq">{{ $t('nav_faq') }}</a>
+            <a href="{{ \App\Support\BrandDomains::appUrl('/portal/login') }}">{{ $t('footer_login') }}</a>
             <a href="{{ route('legal', 'about') }}">{{ __('legal.about_title') }}</a>
             <a href="{{ route('legal', 'contact') }}">{{ __('legal.contact_title') }}</a>
             <a href="{{ route('legal', 'terms') }}">{{ __('legal.terms_title') }}</a>
             <a href="{{ route('legal', 'privacy') }}">{{ __('legal.privacy_title') }}</a>
-        </span>
+        </nav>
     </div>
-    {{-- Set once from the admin panel's Site Content page (Contact info),
-         read from the same place the /legal/contact page reads it — never
-         hardcoded twice. Each piece only renders once it has actually been
-         set, same as everywhere else in this codebase an optional field is
-         shown (see e.g. Profile.php's phone/national_id). --}}
-    @if ($contact['address'] || $contact['phone'] || $contact['email'])
-        <div class="wrap muted" style="margin-top:10px;font-size:.85rem;display:flex;gap:16px;flex-wrap:wrap">
-            @if ($contact['address'])<span>{{ $contact['address'] }}</span>@endif
-            @if ($contact['phone'])<span dir="ltr">{{ $contact['phone'] }}</span>@endif
-            @if ($contact['email'])<span dir="ltr">{{ $contact['email'] }}</span>@endif
-        </div>
-    @endif
-    <div class="wrap muted" style="margin-top:18px;font-size:.85rem">© {{ date('Y') }} {{ __('landing.brand') }} — {{ __('landing.footer_rights') }}</div>
+    <div class="wrap foot-meta" style="padding-top:18px">
+        {{-- Set once from the admin panel's Site Content page (Contact info),
+             read from the same place the /legal/contact page reads it —
+             never hardcoded twice. Each piece only renders once set. --}}
+        @if ($contact['address'] || $contact['phone'] || $contact['email'])
+            <span class="foot-contact">
+                @if ($contact['address'])<span>{{ $contact['address'] }}</span>@endif
+                @if ($contact['phone'])<span dir="ltr">{{ $contact['phone'] }}</span>@endif
+                @if ($contact['email'])<span dir="ltr">{{ $contact['email'] }}</span>@endif
+            </span>
+        @endif
+        <span>© {{ date('Y') }} {{ $t('brand') }} — {{ $t('footer_rights') }}</span>
+    </div>
 </footer>
 
 </body>

@@ -18,14 +18,15 @@ return [
 
     'nav_features' => 'Features',
     'nav_pricing' => 'Pricing',
-    'nav_guide' => 'Guide',
+    'nav_how' => 'Setup',
+    'nav_faq' => 'FAQ',
     'nav_login' => 'Sign in',
     'nav_cta' => 'Start free',
     'nav_lang_fa' => 'فارسی',
     'nav_lang_en' => 'English',
 
     // ── hero ─────────────────────────────────────────────────────────────
-    'hero_title' => 'A shop assistant that knows your catalogue',
+    'hero_title' => 'A shop assistant that knows [[your catalogue]]',
     'hero_subtitle' => 'Install one WooCommerce plugin. Your products, pages and FAQs sync across, and the assistant answers from those — not from guesswork.',
     'hero_cta' => 'Start free',
     'hero_cta_secondary' => 'See a demo',
@@ -40,10 +41,25 @@ return [
     'hero_demo_product_price' => '165,000 Toman',
     'hero_demo_product_stock' => 'In stock',
     'hero_demo_add_to_cart' => 'Add to cart',
-    'hero_demo_typing' => 'Assistant is typing',
+    'image_hero_alt' => 'The Haman AI assistant on a sample shop, suggesting two mugs with price and stock',
+
+    // ── what it is ────────────────────────────────────────────────────────
+    'about_eyebrow' => 'What is Haman AI?',
+    'about_title' => 'A conversation, instead of [[a long search]]',
+    'about_body1' => 'The customer asks for what they want in their own words. The assistant answers from that shop’s catalogue and pages, shows the product, and adds it to the cart right there when asked.',
+    'about_body2' => 'Stock and price are read from your site at that moment, not from a copy that may have gone stale.',
+    'panel_q' => 'Show me the recommended products, please.',
+    'panel_a' => 'All three are in stock. Which should I add to the cart?',
+    'p1' => 'Wireless headphones',
+    'p1p' => '1,240,000',
+    'p2' => 'Smart watch',
+    'p2p' => '2,890,000',
+    'p3' => 'Earbuds',
+    'p3p' => '840,000',
 
     // ── six things it does ──────────────────────────────────────────────
-    'features_title' => 'What it actually does',
+    'features_eyebrow' => 'Features',
+    'features_title' => 'What it [[actually]] does',
     'features_subtitle' => 'The list is exact because it only names what has been built.',
 
     'feature1_title' => 'Answers from your own content',
@@ -66,7 +82,8 @@ return [
 
     // ── "see how it works" tabs ─────────────────────────────────────────
     'demo_title' => 'See how it works',
-    'demo_subtitle' => 'Three real shapes of conversation, and the report behind them.',
+    'demo_head' => 'Three real shapes of [[conversation]]',
+    'demo_sub' => 'And the report behind them.',
 
     'demo_tab_sales' => 'Sales conversation',
     'demo_tab_compare' => 'Product comparison',
@@ -78,12 +95,21 @@ return [
     'demo_compare_customer' => 'What is the difference between the ceramic mug and the steel one?',
     'demo_compare_bot' => 'The ceramic mug keeps a drink hot for about half as long as the steel one, and costs less. The steel one is the one people usually add to the cart after asking.',
 
-    'demo_gap_title' => 'Demand gap',
-    'demo_gap_subtitle' => 'Illustration — sample data, shown to demonstrate the shape of the report.',
     'demo_gap_note' => 'Things customers asked for that are not in your catalogue, beside things that were asked about but did not sell.',
+    'image_demo_alt' => 'The assistant comparing two flasks side by side: volume, heat retention, material and colours',
+
+    // ── why ───────────────────────────────────────────────────────────────
+    'why_eyebrow' => 'Why Haman AI?',
+    'why_title' => 'A [[smarter]] way to talk to customers',
+    'why1' => 'Turn finding a product detail from a long search into one plain question',
+    'why2' => 'Cut the time spent answering the same questions over and over',
+    'why3' => 'See what customers asked for that your catalogue did not have',
+    'why4' => 'Switch each tool on or off separately, and see its cost before enabling it',
+    'image_why_alt' => 'A sample shop with the Haman AI chat open and ready-made suggestions',
 
     // ── integrations ─────────────────────────────────────────────────────
-    'integrations_title' => 'Where it runs',
+    'how_eyebrow' => 'Getting started',
+    'integrations_title' => 'Where it [[runs]]',
     'integrations_subtitle' => 'One platform today, done properly, rather than a dozen done halfway.',
     'integrations_wp' => 'WordPress',
     'integrations_woo' => 'WooCommerce',
@@ -95,6 +121,7 @@ return [
     'integrations_step3_body' => 'Products, pages and FAQs sync across, and the assistant is live on your site.',
 
     // ── pricing ─────────────────────────────────────────────────────────
+    'pricing_eyebrow' => 'Plans and pricing',
     'pricing_title' => 'Pricing',
     // TODO(business): trial policy is undecided — how long, and whether a
     // card is required up front.
@@ -145,6 +172,7 @@ return [
 
     // ── FAQ ─────────────────────────────────────────────────────────────
     'faq_title' => 'Frequently asked questions',
+    'faq_head' => 'What people usually [[ask]]',
 
     'faq_q1' => 'What does it run on?',
     'faq_a1' => 'WooCommerce on WordPress. You install the plugin and connect it to your account.',
@@ -170,16 +198,13 @@ return [
     'faq_a7' => 'Install the plugin, paste your key and run the first sync. A step-by-step guide is waiting in your panel once you have an account.',
 
     // ── final CTA band ──────────────────────────────────────────────────
-    'final_cta_title' => 'Give it your catalogue',
+    'final_cta_title' => 'Give it [[your catalogue]]',
     'final_cta_subtitle' => 'It only answers from what you give it — install the plugin and see what it says.',
     'final_cta_button' => 'Start free',
+    'cta_plans' => 'See plans and pricing',
 
     // ── footer ──────────────────────────────────────────────────────────
     'footer_tagline' => 'A shop assistant, grounded in your own content.',
-    // TODO(business): company address, phone and legal identifier go here.
-    // TODO(business): privacy policy and terms of service do not exist yet
-    // — no footer link to either until there is real text to link to.
-    'footer_contact' => 'Contact',
     'footer_login' => 'Sign in',
     'footer_rights' => 'All rights reserved.',
 ];

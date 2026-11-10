@@ -51,4 +51,26 @@ return [
     'field_contact_address' => 'آدرس',
     'field_contact_phone' => 'تلفن',
     'field_contact_email' => 'ایمیل',
+
+    // ── 2026-11 landing redesign: every section, images, validation ─────
+    'tab_header_footer' => 'منو و فوتر',
+    'tab_about' => 'هامان چیست',
+    'tab_demo' => 'دمو',
+    'tab_why' => 'چرا هامان',
+    'tab_pricing' => 'قیمت‌گذاری',
+    'tab_signup' => 'فرم ثبت‌نام',
+
+    'default_hint' => 'پیش‌فرض: :value',
+    'marker_hint' => 'برای رنگی کردن بخشی از عنوان، آن را بین [[ و ]] بگذارید؛ مثلاً: یک [[گفتگو]]. HTML پذیرفته نمی‌شود.',
+    'empty_hint' => 'خالی بگذارید تا متن پیش‌فرض برگردد.',
+    'error_too_long' => 'حداکثر :max نویسه.',
+    'error_marker' => 'هر [[ باید یک ]] داشته باشد.',
+    'error_placeholder' => 'این متن باید :names را نگه دارد؛ عدد واقعی جای آن نوشته می‌شود.',
+    'error_unsafe_svg' => 'این SVG اسکریپت یا محتوای فعال دارد و پذیرفته نمی‌شود.',
+
+    'image_hero' => 'تصویر هیرو',
+    'image_demo' => 'تصویر بخش دمو',
+    'image_why' => 'تصویر بخش «چرا»',
+    'image_help' => 'jpg، png، webp یا svg، حداکثر :kb کیلوبایت. نسبت پیشنهادی :ratio. خالی بگذارید تا تصویر پیش‌فرض نمایش داده شود — صفحه هیچ‌وقت کادر خالی نشان نمی‌دهد.',
+    'image_default' => 'تصویر فعلی: پیش‌فرض',
 ];
