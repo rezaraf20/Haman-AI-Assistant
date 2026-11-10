@@ -313,8 +313,10 @@ class LandingRedesignContentTest extends TestCase
         Storage::fake(Brand::DISK);
         $this->actingAs($this->admin(), 'web');
         $disk = Storage::disk(Brand::DISK);
-        $disk->putFileAs('landing/uploads', UploadedFile::fake()->image('a.png', 800, 800), 'aaaa1111.png');
-        $disk->putFileAs('landing/uploads', UploadedFile::fake()->image('b.jpg', 800, 600), 'bbbb2222.jpg');
+        // Fixed bytes, not UploadedFile::fake()->image(): that needs GD, which the shipped image (and so CI) does not have.
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
+        $disk->putFileAs('landing/uploads', UploadedFile::fake()->createWithContent('a.png', $png), 'aaaa1111.png');
+        $disk->putFileAs('landing/uploads', UploadedFile::fake()->createWithContent('b.png', $png . ' '), 'bbbb2222.jpg');
 
         $page = new SiteContent();
         $page->mount();
