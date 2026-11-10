@@ -149,6 +149,7 @@ class Haman_Public {
             'inStockLabel'         => 'موجود',
             'outOfStockLabel'      => 'ناموجود',
             'viewProductLabel'     => 'مشاهده محصول',
+            'showMoreProductsLabel' => 'نمایش :count محصول دیگر',
             // build_cart_url tool — see renderCartLinks() in haman-widget.js.
             'addToCartLabel'       => 'افزودن به سبد خرید',
             // add_to_cart tool (Store API, same-origin) — fires
@@ -199,6 +200,7 @@ class Haman_Public {
             'inStockLabel'         => 'In stock',
             'outOfStockLabel'      => 'Out of stock',
             'viewProductLabel'     => 'View product',
+            'showMoreProductsLabel' => 'Show :count more',
             'addToCartLabel'       => 'Add to cart',
             'addingToCartLabel'    => 'Adding...',
             'itemsInCartLabel'     => ':count item(s) in your cart',

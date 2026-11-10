@@ -141,10 +141,39 @@
         if (!rgb) return BRAND_GRADIENT;
         return 'linear-gradient(135deg, ' + primary + ', ' + lighten(rgb, .32) + ')';
     }
+    // Relative luminance and contrast against white (WCAG 2.x).
+    function luminance(rgb) {
+        function ch(v) { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
+        return 0.2126 * ch(rgb.r) + 0.7152 * ch(rgb.g) + 0.0722 * ch(rgb.b);
+    }
+    function contrastOnWhite(rgb) { return 1.05 / (luminance(rgb) + 0.05); }
+    function rgbHex(rgb) { return '#' + toHex(rgb.r) + toHex(rgb.g) + toHex(rgb.b); }
+    /** The brand colour darkened just enough that white text on it — and
+     *  it as text on white — reaches 4.5:1. A merchant's colour is theirs,
+     *  but a light one (yellow, mint, even Haman's own #0098F8 at 3:1)
+     *  used to put white text on it that failed to be readable. */
+    function strongFor(rgb) {
+        var c = { r: rgb.r, g: rgb.g, b: rgb.b };
+        for (var i = 0; i < 30 && contrastOnWhite(c) < 4.5; i++) {
+            c = { r: c.r * 0.92, g: c.g * 0.92, b: c.b * 0.92 };
+        }
+        return rgbHex(c);
+    }
     function setThemeVars(primaryColor) {
         var color = primaryColor || BRAND_PRIMARY;
         hostEl.style.setProperty('--hm-primary', color);
         hostEl.style.setProperty('--hm-gradient', gradientFor(color));
+        // The design system's brand-derived colours (haman-widget.css):
+        // strong = buttons, user bubbles, prices, headings; tint/tint-2 =
+        // the panel and chips; launcher = the floating button, the brand
+        // colour itself whenever its white mark stays visible (3:1).
+        var rgb = hexToRgb(color);
+        if (!rgb) return;   // not a #rrggbb value: the stylesheet's defaults stay
+        var strong = strongFor(rgb);
+        hostEl.style.setProperty('--hm-strong', strong);
+        hostEl.style.setProperty('--hm-tint', lighten(rgb, .93));
+        hostEl.style.setProperty('--hm-tint-2', lighten(rgb, .86));
+        hostEl.style.setProperty('--hm-launcher', contrastOnWhite(rgb) >= 3 ? color : strong);
     }
     setThemeVars(CFG.primaryColor);
 
@@ -1037,11 +1066,15 @@
             });
     }
 
+    // Products are a vertical list (image beside name and price); past
+    // three, the rest wait behind one button so a long answer does not
+    // push the conversation off a phone screen.
+    var PRODUCTS_SHOWN = 3;
     function renderProductCards(products) {
         if (!products || !products.length) return;
         var wrap = document.createElement('div');
         wrap.className = 'hm-product-cards';
-        products.forEach(function (p) {
+        products.forEach(function (p, i) {
             var card = document.createElement('a');
             card.className = 'hm-product-card';
             card.href = p.product_url || '#';
@@ -1063,8 +1096,22 @@
                     priceHtml +
                     stockHtml +
                 '</div>';
+            if (i >= PRODUCTS_SHOWN) card.hidden = true;
             wrap.appendChild(card);
         });
+        if (products.length > PRODUCTS_SHOWN) {
+            var more = document.createElement('button');
+            more.type = 'button';
+            more.className = 'hm-more-btn';
+            more.textContent = (CFG.i18n.showMoreProductsLabel || '+ :count').replace(':count', String(products.length - PRODUCTS_SHOWN));
+            more.addEventListener('click', function () {
+                Array.prototype.forEach.call(wrap.querySelectorAll('.hm-product-card[hidden]'), function (c) { c.hidden = false; });
+                var firstRevealed = wrap.querySelectorAll('.hm-product-card')[PRODUCTS_SHOWN];
+                more.remove();
+                if (firstRevealed) firstRevealed.focus();
+            });
+            wrap.appendChild(more);
+        }
         msgs.appendChild(wrap);
     }
 
