@@ -7,12 +7,6 @@ class Haman_Public {
         $chatbot_id = get_option('haman_chatbot_id','');
         if (empty($chatbot_id)) return;
 
-        wp_enqueue_style(
-            'haman-widget',
-            HAMAN_PLUGIN_URL . 'public/css/haman-widget.css',
-            [],
-            HAMAN_VERSION
-        );
         wp_enqueue_script(
             'haman-widget',
             HAMAN_PLUGIN_URL . 'public/js/haman-widget.js',
@@ -21,11 +15,12 @@ class Haman_Public {
             true
         );
 
-        // The script also loads this same stylesheet a second time, inside
-        // its own Shadow DOM root — see haman-widget.js. That's what
-        // actually isolates the widget's CSS from the host theme; this
-        // wp_enqueue_style() call is what makes it a real, versioned,
-        // cacheable WordPress asset in the first place.
+        // No wp_enqueue_style(): the widget's stylesheet is loaded only
+        // inside its own Shadow DOM root (haman-widget.js, CFG.cssUrl) —
+        // that is what isolates it from the theme. It used to be enqueued
+        // on every page as well, which loaded the same file twice and put
+        // it into the document for cache/minify plugins to rewrite, for no
+        // effect: nothing outside the shadow root uses it.
         wp_localize_script('haman-widget', 'HamanWidgetConfig', $this->build_config($chatbot_id));
     }
 
@@ -241,7 +236,9 @@ class Haman_Public {
         return [
             'chatbotId'   => $chatbot_id,
             'apiUrl'      => $api_url,
-            'cssUrl'      => HAMAN_PLUGIN_URL . 'public/css/haman-widget.css',
+            // Versioned, like the enqueued script: without ?ver= a browser
+            // kept the previous release's stylesheet after a plugin update.
+            'cssUrl'      => HAMAN_PLUGIN_URL . 'public/css/haman-widget.css?ver=' . rawurlencode( HAMAN_VERSION ),
             'dir'         => $dir,
             // Every field below this point is a generic first-paint-only
             // fallback — see the comment above. Must not derive `position`

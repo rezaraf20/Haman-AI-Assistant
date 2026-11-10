@@ -38,6 +38,9 @@ class Haman_Loader {
             add_action( "update_option_{$option}", [ 'Haman_Page_Cache', 'on_identity_changed' ] );
             add_action( "add_option_{$option}",    [ 'Haman_Page_Cache', 'on_identity_changed' ] );
         }
+        // …and once after the plugin itself is updated, since cached pages
+        // carry the widget's versioned asset URLs.
+        add_action( 'init', fn () => Haman_Page_Cache::on_version_seen( HAMAN_VERSION ) );
         $this->add_action( 'wp_enqueue_scripts',   $public, 'enqueue_assets' );
         // add_filter() and add_action() are the same WordPress hook
         // mechanism under the hood, so reusing this same helper is

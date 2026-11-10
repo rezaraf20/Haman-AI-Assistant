@@ -58,6 +58,34 @@
     }
     function genSessionId() { return 's_' + Math.random().toString(36).substr(2, 16); }
 
+    // ── The chatbot's own config, remembered for the next first paint ──
+    // Before /chat/session answers, the widget can only guess its language
+    // from the WordPress locale (CFG, built in PHP) — a Persian chatbot on
+    // an English site painted LTR/English first and flipped a moment later,
+    // and so did its title, colour and avatar. The last config the server
+    // sent is kept here and applied at boot instead; the server stays the
+    // source of truth — its answer overwrites this on every session.
+    var WCFG_STORAGE_KEY = 'haman_wcfg_v1';
+    var WCFG_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+    function loadCachedConfig() {
+        try {
+            var obj = JSON.parse(localStorage.getItem(WCFG_STORAGE_KEY) || 'null');
+            if (!obj || obj.chatbotId !== CFG.chatbotId || !obj.savedAt) return null;
+            if (Date.now() - obj.savedAt > WCFG_TTL_MS) return null;
+            return obj;
+        } catch (e) { return null; }
+    }
+    function cacheConfig(language, wc) {
+        try {
+            localStorage.setItem(WCFG_STORAGE_KEY, JSON.stringify({
+                chatbotId: CFG.chatbotId, language: language || null, wc: wc || null, savedAt: Date.now()
+            }));
+        } catch (e) { /* storage disabled — first paint just falls back to the WordPress locale */ }
+    }
+    var cachedConfig = loadCachedConfig();
+    // The direction the very first paint uses (applied to #hm-w below).
+    if (cachedConfig && cachedConfig.language) CFG.dir = cachedConfig.language === 'fa' ? 'rtl' : 'ltr';
+
     var persisted = loadPersistedConv();
     var H = {
         chatbotId: CFG.chatbotId,
@@ -262,7 +290,7 @@
     var avatarHtml = avatarSlotHtml(CFG.avatarUrl);
 
     w.innerHTML =
-        '<div id="hm-box" role="dialog" aria-modal="true" aria-label="' + esc(CFG.i18n.dialogLabel) + '" aria-hidden="true">' +
+        '<div id="hm-box" role="dialog" aria-modal="false" aria-label="' + esc(CFG.i18n.dialogLabel) + '" aria-hidden="true">' +
             '<div id="hm-hdr">' +
                 '<div id="hm-avatar-hdr">' + avatarHtml + '</div>' +
                 '<div id="hm-hdr-text"><h3>' + esc(CFG.chatTitle) + '</h3><span>' + esc(CFG.aiName) + '</span></div>' +
@@ -1195,6 +1223,8 @@
             // known for certain at this point (get_locale() on a
             // server-rendered page, not a guess), so it is also the
             // correct source for what to tell the server here.
+            // (CFG.dir is the chatbot's own last-known language when one is
+            // remembered — see loadCachedConfig() — else the WP locale.)
             body: JSON.stringify({ chatbot_id: H.chatbotId, session_id: H.sessionId, page_url: window.location.href, language: CFG.dir === 'rtl' ? 'fa' : 'en' }),
         })
             .then(function (r) { if (!r.ok) throw new Error('unavailable'); return r.json(); })
@@ -1203,6 +1233,7 @@
                 convId = d.conversation_id;
                 persistConv(H.sessionId, convId);
                 applyWidgetConfig(d.widget_config, d.language);
+                cacheConfig(d.language, d.widget_config);
 
                 var reusedExisting = persistedConvId && persistedConvId === convId;
                 if (reusedExisting && !historyLoaded) {
@@ -1417,6 +1448,34 @@
         window.visualViewport.addEventListener('scroll', handleViewportResize);
     }
 
+    // ── Modal on mobile, not on desktop ────────────────────────────────
+    // On a desktop the open panel floats beside the page and the page stays
+    // usable, so it is a non-modal dialog: no focus trap (trapping focus in
+    // something that does not block the page is itself an accessibility
+    // bug). Below 480px it covers the whole viewport and the page behind
+    // cannot be used, so there it IS modal: aria-modal="true" and Tab /
+    // Shift+Tab wrap inside the panel. Re-evaluated on open and on resize
+    // (rotating a phone, resizing a window).
+    function syncModal() {
+        box.setAttribute('aria-modal', isOpen && isMobileViewport() ? 'true' : 'false');
+    }
+    function focusables() {
+        return Array.prototype.filter.call(
+            box.querySelectorAll('button, [href], input, textarea, select, [tabindex]:not([tabindex="-1"])'),
+            function (el) { return !el.disabled && !el.hidden && el.getAttribute('aria-hidden') !== 'true'; }
+        );
+    }
+    box.addEventListener('keydown', function (e) {
+        if (e.key !== 'Tab' || box.getAttribute('aria-modal') !== 'true') return;
+        var list = focusables();
+        if (!list.length) return;
+        var first = list[0], last = list[list.length - 1];
+        var active = root.activeElement;
+        if (e.shiftKey && (active === first || !box.contains(active))) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && (active === last || !box.contains(active))) { e.preventDefault(); first.focus(); }
+    });
+    window.addEventListener('resize', syncModal);
+
     var bodyOverflowBackup = null;
     function lockBodyScroll(lock) {
         if (!isMobileViewport()) return;
@@ -1447,7 +1506,12 @@
         openBtn.setAttribute('aria-expanded', 'true');
         unreadDot.classList.remove('hm-visible');
         lockBodyScroll(true);
-        lastFocused = document.activeElement;
+        syncModal();
+        // Focus inside the widget reads as the shadow *host* from the
+        // document — a plain div, not focusable — so opening from the
+        // launcher used to "restore" focus onto nothing on close. Remember
+        // the real element inside the shadow root instead.
+        lastFocused = document.activeElement === hostEl ? (root.activeElement || openBtn) : document.activeElement;
         if (!sessionInitStarted && !unavailable) init();
         setTimeout(function () { inp.focus(); handleViewportResize(); }, 0);
     }
@@ -1460,6 +1524,7 @@
         hostEl.classList.remove('hm-mobile-open');
         openBtn.setAttribute('aria-expanded', 'false');
         lockBodyScroll(false);
+        syncModal();
         box.style.height = '';
         box.style.top = '';
         if (lastFocused && lastFocused.focus) lastFocused.focus();
@@ -1476,6 +1541,11 @@
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && isOpen) closeWidget();
     });
+
+    // The remembered config, before anything is painted: same function the
+    // live /chat/session answer goes through, so it can only set what the
+    // server itself sent last time.
+    if (cachedConfig) applyWidgetConfig(cachedConfig.wc, cachedConfig.language);
 
     if (loadPersistedOpen()) openWidget();
 })();

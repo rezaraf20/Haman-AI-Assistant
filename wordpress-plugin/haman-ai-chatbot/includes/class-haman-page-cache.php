@@ -25,6 +25,26 @@ class Haman_Page_Cache {
         add_action( 'shutdown', [ __CLASS__, 'purge_and_remember' ] );
     }
 
+    const VERSION_OPTION = 'haman_assets_version';
+
+    /**
+     * Hooked to `init`. Cached pages carry the widget's asset URLs with the
+     * plugin version in them (?ver=); after an update they would keep
+     * serving the old script and stylesheet until the cache expired. So the
+     * first request that runs a new version clears the page cache once.
+     *
+     * Not upgrader_process_complete: during an update the request still
+     * runs the OLD plugin code, so a hook added by the new version never
+     * fires for the update that installs it.
+     */
+    public static function on_version_seen( string $version ): void {
+        if ( get_option( self::VERSION_OPTION ) === $version ) return;
+        update_option( self::VERSION_OPTION, $version, false );
+        if ( self::$scheduled ) return;
+        self::$scheduled = true;
+        add_action( 'shutdown', [ __CLASS__, 'purge_and_remember' ] );
+    }
+
     public static function purge_and_remember(): void {
         $r = self::purge();
         update_option( self::NOTICE_OPTION, [

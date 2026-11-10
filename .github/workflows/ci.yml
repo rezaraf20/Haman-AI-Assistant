@@ -77,6 +77,7 @@ jobs:
         run: |
           php tests/php/sync-batcher-test.php
           php tests/php/page-cache-test.php
+          php tests/php/public-assets-test.php
 
       - name: Plugin PHP lint
         run: |
